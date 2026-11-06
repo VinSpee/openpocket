@@ -7,6 +7,7 @@
 #  - preset store: save / reload / power cut at every step of a save (firmware/px_store.h on a simulated flash)
 #  - packages: tools/pxpkg.py rebuilds the official PocketX_016 app area byte for byte (needs the official file)
 #  - installer: docs/pxota.js + docs/pxpkg.js against a simulated pedal running the real update code (ota.c, ldr_core.c)
+#  - flasher: tools/flash.mjs (node tools/op.mjs flash) against the same simulated pedal: update, dry run, wrong model, damaged package
 #  - page: docs/index.html in headless Chromium (needs Playwright: npm i playwright && npx playwright install chromium)
 set -e
 cd "$(dirname "$0")/.."
@@ -32,6 +33,8 @@ $CC -O1 -Wall -Wno-unused-function -o build/devsim tests/devsim.c
 if [ -n "$1" ]; then echo "== packages"; python3 tests/test_pxpkg.py "$1"; fi
 echo "== installer"
 node tests/test_installer.mjs "$1"
+echo "== flasher (tools/flash.mjs)"
+node tests/test_flash.mjs
 echo "== build entry point (tools/op.mjs)"
 node tests/test_op.mjs
 echo "== Bluetooth test image sources (third_party/jieli-ble)"
@@ -42,4 +45,7 @@ $CC -O1 -Wall -Wno-unused-function -o build/ble_vm tests/test_ble_vm.c && build/
 echo "== editor"
 $CC -O1 -Wall -Wno-unused-function -o build/edsim tests/edsim.c engine/px_dsp.c firmware/px_math.c -lm
 node tests/test_editor.mjs
+echo "== log channel (tools/op.mjs log)"
+$CC -O1 -Wall -Wno-unused-function -DOP_BLE_TEST=1 -o build/edsim_diag tests/edsim.c engine/px_dsp.c firmware/px_math.c -lm
+node tests/test_log.mjs
 if node -e "require('playwright')" 2>/dev/null; then echo "== page"; node tests/test_page.mjs build/page; echo "== editor page"; node tests/test_editor_page.mjs build/editor; else echo "(Playwright not installed: page tests skipped)"; fi
