@@ -3,7 +3,7 @@
 // The one host-side entry point of the OpenPocket build (macOS, Linux, Windows; Node 18+). The Makefile and the
 // .bat files only call this. Every Docker command line lives here.
 //   node tools/op.mjs doctor | build | test | package | clean | shell | image | serve [editor|build]
-//   node tools/op.mjs flash --dry-run | --confirm-flash [--package FILE]   (writes to a connected pedal: docs/BUILDING.md)
+//   node tools/op.mjs flash --dry-run | --confirm-flash [--rescue] [--package FILE]   (writes to a connected pedal: docs/BUILDING.md)
 //   node tools/op.mjs render in.wav [out.wav] [preset]   |   node tools/op.mjs appimage [fm1-1.bin]
 // NATIVE=1 runs the commands on this machine (toolchain from firmware/setup.sh) instead of in the container.
 import { spawnSync } from "node:child_process";
