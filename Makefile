@@ -9,11 +9,12 @@
 #   make image      (re)build the container image
 #   make serve      the installer and editor on http://localhost:8765/ (offline install)
 #   make sim [ARGS="--port 9000 --reset"]   the hosted simulated pedal on http://127.0.0.1:8766/ (docs/SIMULATOR.md)
+#   make wasm       the engine as WebAssembly for the simulator's sound (tools/sim/px_engine.wasm, committed)
 #   make render IN=guitar.wav [OUT=out.wav] [PRESET=1]   a WAV through the engine
 #   make appimage [DUMP=fm1-1.bin]   fm1-300.bin for the SD-card recovery
 # `make NATIVE=1 build` skips Docker (toolchain installed with firmware/setup.sh).
-.PHONY: doctor build test package clean shell image serve render appimage sim
-doctor build test package clean shell image serve:
+.PHONY: doctor build test package clean shell image serve wasm render appimage sim
+doctor build test package clean shell image serve wasm:
 	@node tools/op.mjs $@
 render:
 	@node tools/op.mjs render "$(IN)" "$(OUT)" "$(PRESET)"
