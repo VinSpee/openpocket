@@ -31,6 +31,7 @@ Apple silicon and other ARM machines Docker emulates it (Rosetta or QEMU); you c
 | `make ble` | the advertise-only Bluetooth test image (`OP_BLE=1 firmware/build.sh`): `firmware/openpocket-ble.bin`, `build/ble/*.fwsc`. Own target, own output folders; [BLE-TEST.md](BLE-TEST.md) |
 | `make serve-ble` | `make serve` with `build/ble/` as the installer's package folder, to flash the test image |
 | `make package` | `build`, then `build/SHA256SUMS` |
+| `make package-test` | the MIDI test channel (`OP_CHANNEL=midi-test`): `firmware/openpocket-midi-test.bin` and `docs/firmware/midi-test/` (v37 MIDI TEST, its own `manifest.json`), with `build/SHA256SUMS-midi-test`. The release files are not touched and the installer offers it only with `?channel=midi-test` |
 | `make test` | `tests/run_tests.sh` (engine, preset store, screen, simulated pedal, installer, editor; the browser page tests also run when Playwright is installed) |
 | `make clean` | remove every build output (on the host; needs neither Docker nor the image) |
 | `make shell` | a shell in the container (as your user) |

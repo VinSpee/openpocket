@@ -5,6 +5,7 @@
 #   make ble        the advertise-only Bluetooth test image: firmware/openpocket-ble.bin, build/ble/*.fwsc (docs/BLE-TEST.md)
 #   make test       the host tests (tests/run_tests.sh)
 #   make package    build + build/SHA256SUMS of the outputs
+#   make package-test   the MIDI test channel package (docs/firmware/midi-test/, never the installer default)
 #   make clean      remove every build output (needs no Docker)
 #   make shell      a shell in the build container
 #   make image      (re)build the container image
@@ -13,8 +14,8 @@
 #   make render IN=guitar.wav [OUT=out.wav] [PRESET=1]   a WAV through the engine
 #   make appimage [DUMP=fm1-1.bin]   fm1-300.bin for the SD-card recovery
 # `make NATIVE=1 build` skips Docker (toolchain installed with firmware/setup.sh).
-.PHONY: doctor build ble test package clean shell image serve serve-ble render appimage
-doctor build ble test package clean shell image serve:
+.PHONY: doctor build ble test package package-test clean shell image serve serve-ble render appimage
+doctor build ble test package package-test clean shell image serve:
 	@node tools/op.mjs $@
 serve-ble:
 	@node tools/op.mjs serve ble
