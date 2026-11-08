@@ -1,8 +1,8 @@
-# OpenPocket — sounds and controls (v36)
+# OpenPocket — sounds and controls (v37)
 
 ![OpenPocket screens](ui-v23.png)
 
-## The chain (12 blocks, 77 models)
+## The chain (12 blocks, 78 models)
 Default order: `GT → CMP → PIT → SFX → SYN → DRV → AMP → CAB → EQ → MOD → DLY → REV`
 
 Since v29 every preset has its own block order: **double-click PUSH** on the chain to grab the selected block, turn
@@ -18,6 +18,12 @@ The names refer to the famous units the sounds are inspired by. Amps, drives and
 captures of the real units (v34); the effects follow published circuit analyses (ElectroSmash, Electric Druid,
 R.G. Keen, Boss/Roland/EHX manuals). They are digital models, not copies. The product names are trademarks of their
 owners, used only to describe the sound.
+
+### AMP — NAM: neural amp models (v37; MODEL, GAIN, BASS, MID, TREBLE)
+The ninth AMP type plays Neural Amp Modeler A2 networks: 12 factory models (TWIN, AC15, SUPER 59, SHIRL CL, JCM900,
+SHIRLEY, JCM2000, MARK IV, JVM OD2, PRO MOD, 5150, 6505 RED) and 16 user slots filled from the web editor with A2
+captures. MODEL picks the network, GAIN sets the level into it (±12 dB), BASS / MID / TREBLE are an EQ after it. The
+models have no cabinet: keep a CAB after the AMP. All the factory presets use NAM. Details: [NAM.md](NAM.md).
 
 ### AMP — 8 amps, fitted to captures of the real ones (GAIN, BASS, MID, TREBLE, PRESENCE)
 Since v34 there are fewer amps, and each one is fitted by computer to a capture of the real amp (method and
@@ -106,8 +112,8 @@ plate). DECAY sets the real decay time (RT60) of the lows: ROOM 0.3–1.2 s, HAL
 PLATE 0.6–5 s, SPRING 1.5–4 s, SHIMMER 2–8 s, AMBIENT 6–20 s. They run at 22 kHz in 16 bits (like the classic
 studio units), in a quarter of v34's memory.
 
-## Factory presets (v36): 24 sounds, all at the same loudness, then 28 USER slots
-Built round the fitted amps and drives, which sound like their captures near noon. Every preset is levelled to the
+## Factory presets (v37): 24 sounds, all at the same loudness, then 28 USER slots
+Built round the NAM models (v37; v36's were built round the fitted amps) and the fitted drives. Every preset is levelled to the
 same loudness (-23 LUFS, EBU R128, measured on real DI guitar by `tools/level_presets.py`): going from a clean to a
 high-gain preset no longer jumps by 20 dB.
 
@@ -120,7 +126,7 @@ high-gain preset no longer jumps by 20 dB.
 | | 05 SURF SPRING | 11 70S ROCK | | 21 DOOM | |
 | | 06 AMBIENT SWELL | 12 BOUTIQUE | | | |
 
-25–52: **USER 25 … USER 52**, a clean TWIN + 1x12 + a little room, to build your own.
+25–52: **USER 25 … USER 52**, a clean NAM TWIN + 1x12 + a little room, to build your own.
 
 **Levels (v36)**: every amp plays at the same loudness at GAIN noon and moves only +-3 dB over the whole knob; every
 block type, with its knobs at noon, keeps the loudness when switched on; each preset has its own **PRESET LVL**
@@ -146,6 +152,28 @@ bar. `C1 xx%` (top right on PLAY, bottom right on EDIT) = DSP load on the second
 core, `BYP` = overload guard: turn a block off). `EDITED`: the sound differs from its saved slot.
 Top centre of PLAY: the **battery** (v36), from the chip's own VBAT/4 channel (green, amber below 30 %, red below 15 %;
 `USB` when the 5 V supply is there); the tuner page shows the same reading in volts.
+
+## MIDI over USB-C (test build v37; [MIDI.md](MIDI.md))
+**Hold FX** for 0.8 s: the MIDI page (CHANNEL OMNI or 1 to 16, SEND, CLOCK > DELAY). Program Change 0 to 51 loads slot 1 to 52;
+Control Change sets the sound; the pedal sends Program Change and Control Change for what you do on it.
+
+| Block | On / off | Model | Setting 1 | 2 | 3 | 4 | 5 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| GATE | 20 | 52 | 33 | 34 | 35 | 36 | 37 |
+| COMP | 21 | 53 | 39 | 40 | 41 | 42 | 43 |
+| PITCH | 22 | 54 | 44 | 45 | 46 | 47 | 48 |
+| SFX | 23 | 55 | 49 | 50 | 51 | 70 | 71 |
+| DRIVE | 24 | 56 | 72 | 73 | 74 | 75 | 76 |
+| AMP | 25 | 57 | 77 | 78 | 79 | 80 | 81 |
+| CAB | 26 | 58 | 82 | 83 | 84 | 85 | 86 |
+| EQ | 27 | 59 | 87 | 88 | 89 | 90 | 91 |
+| MOD | 28 | 60 | 92 | 93 | 94 | 95 | 96 |
+| DELAY | 29 | 61 | 97 | 102 | 103 | 104 | 105 |
+| REVERB | 30 | 62 | 106 | 107 | 108 | 109 | 110 |
+| SYN | 31 | 63 | 111 | 112 | 113 | 114 | 115 |
+
+On / off: 64 and up is on. Settings 0 to 127 are 0 to 100. Model: the whole 0 to 127 range is divided between the block's models.
+CC 7 is the MASTER volume. Details, the clock sync and the limits: [MIDI.md](MIDI.md).
 
 ## Saving your sounds (v25)
 - `EDITED` at the top of the PLAY screen means the sound has been edited since the preset was loaded.
