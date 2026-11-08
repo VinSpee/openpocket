@@ -17,14 +17,19 @@
 #define FELUCCA_USB_PRODUCT "OpenPocket"
 #define FELUCCA_USB_MANUFACTURER "OpenPocket"
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")
-/* the app may only write the OTA staging area (its loader + update record) and the preset store (px_store.h) */
-#define FL_RANGE_OK(off, n) (FL_IN(off, n, FL_OTA_LO, FL_OTA_HI) || FL_IN(off, n, 0xF0000u, 0xF4000u))
+/* the app may only write the OTA staging area (its loader + update record), the preset store (px_store.h) and,
+ * v37, the NAM user models (px_models.h) */
+#define FL_RANGE_OK(off, n) (FL_IN(off, n, FL_OTA_LO, FL_OTA_HI) || FL_IN(off, n, 0xF0000u, 0xF4000u) || \
+                             FL_IN(off, n, 0xC0000u, 0xE0000u))
 
 /* the package identity, patched by pxpkg.py ("OP-PRODUCT:" + identity, 32 bytes, exactly once in the app) */
 static const volatile char OP_PRODUCT[32] __attribute__((used, aligned(4))) = "OP-PRODUCT:PocketX_9" OP_VERSION_NUM;
 #define FELUCCA_ID_PTR ((const char *)OP_PRODUCT + 11)
 
 #include "fm1_timer.h"
+#if OP_BLE_TEST
+static int ble_stall_tick(void);                /* ble/ble_status.h, included after this file */
+#endif
 #include "fm1_flash.h"
 #include "fm1_cpu1_stop.h"
 #include "usb.c"
@@ -36,12 +41,20 @@ static volatile uint32_t px_t5_sub;
 void fm1_timer5_irq(void)                       /* 10 kHz; USB at 2 kHz */
 {
     fm1_timer5_ack();
+#if OP_BLE_TEST                                 /* a ble_poll that does not return: the crash screen says where (ble_status.h) */
+    if (ble_stall_tick())
+        FM1_VEC[FM1_IRQ_TIMER5] = (uint32_t)(uintptr_t)(fm1_fatal_stubs + 6u * FM1_IRQ_TIMER5);
+#endif
     if (++px_t5_sub >= 5u) {
         px_t5_sub = 0;
         usb_poll();
     }
 }
 extern void isr_timer5(void);
+
+#ifndef PX_LIGHTS_OFF                           /* the button lights off while an update runs (openpocket.c: px_lights.h) */
+#define PX_LIGHTS_OFF() ((void)0)
+#endif
 
 /* ---- ota.c hooks ---- */
 static uint32_t ota_now_ms(void) { return ms_now(); }
@@ -78,6 +91,7 @@ static int ota_fread(uint32_t off, void *p, uint32_t n)
 static void ota_show(uint32_t step, int32_t code)
 {
     static const char *const STEP[] = {"", "PACKAGE", "CHECK", "LOADER", "CONFIRM", "RESTART"};
+    PX_LIGHTS_OFF();
     lcd_rect(0, 0, 240, 240, UI_BG);
     ft_box(0, 92, 240, "UPDATE", &FT_MD, UI_ACC, UI_BG, 1);
     if (step < 9u) {
