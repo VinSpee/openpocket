@@ -672,7 +672,7 @@ static void app_main(void)
     }
 #endif
 #if DSP_CPU1
-    fm1_cpu1_bar_build(402u);            /* a new build gives the 2nd core another chance (v40.2: its NAM routines changed) */
+    fm1_cpu1_bar_build(403u);            /* a new build gives the 2nd core another chance (v40.4: its job and the blocks' loops changed) */
     fm1_cpu1_start();                    /* at boot, before audio and interrupts (Felucca) */
 #endif
     lcd_init();
