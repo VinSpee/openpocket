@@ -63,6 +63,9 @@ if [ -n "$OP_BLE" ]; then
   for b in "$HERE"/../third_party/jieli-ble/*/*.bc; do
     $CC -Os -c -x ir "$b" -o "$O/jl/$(basename "$(dirname "$b")")_$(basename "$b" .bc).o"
   done
+  # v40 made memcpy and memset RAM code, out of the call range of the library's code at the end of the flash: the
+  # library calls flash copies instead (ble/ble_libc.c)
+  for o in "$O"/jl/*.o; do python3 "$HERE/../tools/elfsym.py" "$o" memcpy=ble_memcpy memset=ble_memset; done
   rm -f "$O/libjl.a"; "$TC/pi32v2/bin/ar" rcs "$O/libjl.a" "$O"/jl/*.o   # an archive: the linker takes only the objects the image calls
   $CC -c "$HERE/ble/ble_ctx.S" -o "$O/ble_ctx.o"; $CC -c "$HERE/ble/ble_isr.S" -o "$O/ble_isr.o"; BLEOBJ="$O/ble_ctx.o $O/ble_isr.o $O/libjl.a"
 fi

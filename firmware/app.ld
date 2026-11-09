@@ -23,7 +23,10 @@ MEMORY
 }
 SECTIONS
 {
-    .text : { KEEP(*(.text.crt0)) *(.text*) *(.rodata*) *(.*_code) *(.*_const) . = ALIGN(4); _etext = .; } > XIP
+    .text : { KEEP(*(.text.crt0)) *(EXCLUDE_FILE(*libjl.a:*) .text*) *(EXCLUDE_FILE(*libjl.a:*) .rodata*) _etext_fw = .;
+              *libjl.a:*(.text* .rodata*) *(.*_code) *(.*_const) . = ALIGN(4); _etext = .; } > XIP
+    /* (_etext_fw: the end of the firmware's own flash code; the Bluetooth controller library's (libjl.a) comes after
+     * it and never calls the RAM code: firmware/build.sh sends its memcpy / memset to flash copies) */
     .ram_text : { _rt_start = .; KEEP(*(.ram_text*))
                   . = ALIGN(4); _c1_start = .; KEEP(*(.c1_text*)) . = ALIGN(4); _c1_end = .;   /* the second core's loop */
                   _rt_end = .; } > RAMTEXT AT > XIP
@@ -51,7 +54,7 @@ SECTIONS
            "BLE task stacks lie outside the stack-guard window while the stack guard is enabled")
     /* v40: the flash code and the RAM code must stay within the call instruction's reach of each other (+-4 MiB: the
      * linker would refuse a call out of it, naming one) */
-    ASSERT(_etext - ORIGIN(RAMTEXT) < 0x400000 && 0x02000120 - (ORIGIN(RAMTEXT) + LENGTH(RAMTEXT)) < 0x400000,
+    ASSERT(_etext_fw - ORIGIN(RAMTEXT) < 0x400000 && 0x02000120 - (ORIGIN(RAMTEXT) + LENGTH(RAMTEXT)) < 0x400000,
            "the flash code has grown out of the RAM code's call range: move RAMTEXT up (firmware/app.ld)")
     /DISCARD/ : { *(.comment) *(.note*) }
 }
