@@ -90,6 +90,9 @@ static int a_level_db(int ch)
 }
 static volatile float a_gain = 0.64f;                  /* MASTER volume (knob), applied at the output */
 static volatile uint32_t a_load, a_peak, a_blocks;     /* DSP load in % */
+/* v40.4: the smoothed loads' sums (the load x 8). Smoothed in whole per cent, (load * 7 + pct) / 8 rounded down at every
+ * block: a load reached from below stopped up to 7 short (79 % read 73), one reached from above read right */
+static uint32_t a_lds, a_cls[2];
 /* v37: what can be heard as a crackle. a_xrun: blocks that took longer than their 2.9 ms (the output then repeats or
  * misses part of a block), a_xrun_at the block of the last one; a_clip: blocks whose output reached the soft clipper's
  * knee (0.8 of full scale; it used to be a hard clip at full scale) */
@@ -190,7 +193,8 @@ static void dsp_out(void)                              /* a_out -> a_res: safety
 static void dsp_load(uint32_t t0, uint32_t lim)        /* the block's load, the safety bypass (over lim % 8 blocks running) */
 {
     uint32_t pct = (fm1_ticks() - t0) * 100u / A_BUDGET;
-    a_load = (a_load * 7u + pct) / 8u;
+    a_lds += pct - a_lds / 8u;
+    a_load = a_lds / 8u;
     if (pct > a_peak) a_peak = pct;
     if (pct > a_peak_all) a_peak_all = pct;
     if (pct >= 100u && !a_hold) { a_xrun++; a_xrun_at = a_blocks; }
@@ -360,7 +364,8 @@ static void dsp_pipe(uint32_t t_irq)
         t0 = fm1_ticks() - (c1 > c0 ? c1 : c0);         /* the busier core */
         for (int k = 0; k < 2; k++) {                   /* each core's own (PING's profile) */
             const uint32_t pc = (k ? c1 : c0) * 100u / A_BUDGET;
-            a_cl[k] = (a_cl[k] * 7u + pc) / 8u;
+            a_cls[k] += pc - a_cls[k] / 8u;
+            a_cl[k] = a_cls[k] / 8u;
             if (pc > a_cpk[k]) a_cpk[k] = pc;
         }
     } else dsp_pipe_run(!a_bypass && !a_hold);
