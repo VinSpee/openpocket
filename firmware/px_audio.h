@@ -302,16 +302,22 @@ static void tn_capture(const float *x, uint32_t n)
     }
     tn_w = w;
 }
-static float tn_lin[TN_N];
+#define TN_W 600u
+#define TN_TMAX 180u
+static float tn_lin[TN_W + TN_TMAX];   /* the newest W + TMAX samples in order: all the difference function reads */
 static float tn_d[200];
 static float tuner_estimate(void)      /* frequency in Hz, or 0 (silence / unclear). YIN algorithm. */
 {
-    const uint32_t W = 600u, TMIN = 10u, TMAX = 180u;  /* 61 Hz .. 1100 Hz at 11025 Hz */
+    const uint32_t W = TN_W, TMIN = 10u, TMAX = TN_TMAX;  /* 61 Hz .. 1100 Hz at 11025 Hz */
     uint32_t w = tn_w;
     float e = 0.0f;
-    for (uint32_t i = 0; i < TN_N; i++) { tn_lin[i] = tn_buf[(w + i) & (TN_N - 1u)]; e += tn_lin[i] * tn_lin[i]; }
+    for (uint32_t i = 0; i < TN_N; i++) {              /* the energy over all TN_N samples, the copy of the newest */
+        const float v = tn_buf[(w + i) & (TN_N - 1u)];
+        e += v * v;
+        if (i >= TN_N - W - TMAX) tn_lin[i - (TN_N - W - TMAX)] = v;
+    }
     if (e < (float)TN_N * 1.0e-6f) return 0.0f;        /* too weak: nothing to tune */
-    const float *x = tn_lin + (TN_N - W - TMAX);
+    const float *x = tn_lin;
     float run = 0.0f;
     tn_d[0] = 1.0f;
     for (uint32_t t = 1; t <= TMAX; t++) {
