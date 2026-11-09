@@ -215,7 +215,15 @@ static uint8_t a_job;                                  /* a block is in progress
 #endif
 #if DSP_CPU1
 #define A_WLAG (2 * (int)A_FR)
-static void a_c1_off(void) { a_c1 = 0; px_wet_mode(&g_eng, 0, 0); }   /* one core from now on: no lanes */
+#ifndef OP_NAM_LP
+#define OP_NAM_LP 1                                    /* v40.2: 0 = the network split between the cores by frames, as v40 */
+#endif
+static void a_c1_off(void)                             /* one core from now on: no lanes, no layer split */
+{
+    a_c1 = 0;
+    px_wet_mode(&g_eng, 0, 0);
+    if (g_eng.nam_lp) { px_nam_lp(&g_eng, 0); a_nan = 1; }   /* (a block CPU1 left half done: the engine is reset) */
+}
 static void dsp_job(uint32_t arg) { (void)arg; dsp_block(); }
 #endif
 #if DSP_CPU1
@@ -272,10 +280,79 @@ static void dsp_pipe_run(int run)                      /* run: the engine on (el
     a_nbv = (uint8_t)run;
     a_nbi = (uint8_t)prev;
 }
-static void dsp_pipe(void)
+/* v40.2: the network split between the cores by layers (engine/px_nam.c pxn_lp_*). In each block's interrupt CPU1 runs
+ * the blocks after the amp on the block before's network output as before, then finishes this block's 32-frame network
+ * blocks (their layers after CPU0's share, the head) as CPU0 hands them over, and goes on after the interrupt until all
+ * are done. a_dec waits only for the output (a_lppost: the blocks after the amp done), the next a_enc for the whole job.
+ * CPU0 runs the blocks before the amp and the network's first layers, and does not wait. Every layer runs on whole
+ * blocks: no per-layer waits, the head on CPU1; the output is the same (tests/engine/lp_test.c). The load shown is the
+ * busier core's: CPU0's (a_enc from its start, its wait for CPU1 included, and a_dec's wait) or CPU1's job. How many
+ * layers CPU0 takes follows the difference between the two. */
+static volatile uint8_t a_lpstop, a_lppost;
+static uint32_t a_lppend;
+static volatile uint32_t a_lpc1;                       /* (CPU1) its last job's own work, its waits taken out (ticks) */
+static uint32_t a_lpc0, a_decw;                        /* CPU0's own share last block; a_dec's wait for the output (ticks) */
+static int32_t a_lpbal;                                /* CPU1's job minus CPU0's share, smoothed */
+static void lp_job(uint32_t prev)
+{
+    const uint32_t t0 = fm1_ticks();
+    uint32_t idle = 0;
+    for (uint32_t k = a_lppend; k; k--) px_nam_lp_b(&g_eng);
+    post_job(prev);
+    fm1_cpu1_sync();
+    a_lppost = 1;                                      /* (the output is there: a_dec may send it) */
+    fm1_cpu1_sync();
+    for (;;) {
+        if (px_nam_lp_b(&g_eng)) continue;
+        if (a_lpstop) break;                           /* (stopped and none left: this block's are all done) */
+        const uint32_t ti = fm1_ticks();               /* (waiting for CPU0's next block: not CPU1's work) */
+        while (!px_nam_lp_queued() && !a_lpstop) fm1_cpu1_sync();
+        idle += fm1_ticks() - ti;
+    }
+    a_lpc1 = fm1_ticks() - t0 - idle;                  /* its own work (an overrun shows as CPU0's wait at a_enc) */
+}
+static void dsp_lp_run(int run)
+{
+    const uint32_t prev = a_nbi ^ 1u, t0 = fm1_ticks();
+    a_commit();                                        /* (before CPU1 starts: the engine is all ours here) */
+    if (run && a_lpc0) {                               /* the split: a layer's worth (both ways: twice) apart, moved */
+        const int32_t d = (int32_t)a_lpc1 - (int32_t)a_lpc0;
+        a_lpbal += (d - a_lpbal) / 4;
+        const int32_t thr = (int32_t)(pxn_frame_ticks() * 4u * PXN_N / PXN_NL);
+        if (a_lpbal > thr) { px_nam_lp_split(px_nam_lp_split_now() + 1); a_lpbal = 0; }
+        else if (a_lpbal < -thr) { px_nam_lp_split(px_nam_lp_split_now() - 1); a_lpbal = 0; }
+    }
+    a_prun = (uint8_t)run;
+    a_lppend = px_nam_lp_queued();
+    a_lpstop = 0;
+    a_lppost = 0;
+    fm1_cpu1_sync();
+    const int job = fm1_cpu1_run(lp_job, prev);
+    if (!job) { while (px_nam_lp_b(&g_eng)) { } post_job(prev); a_lpc1 = 0; }   /* (CPU1 off: here) */
+    if (run) {
+        for (uint32_t o = 0; o < A_FR; o += PX_MAX_BLOCK)
+            px_engine_part(&g_eng, a_in + o, a_nb[a_nbi] + o, PX_MAX_BLOCK, PX_PART_PRE);
+        for (uint32_t o = 0; o < A_FR; o += PX_MAX_BLOCK)
+            px_engine_part(&g_eng, a_nb[a_nbi] + o, a_nb[a_nbi] + o, PX_MAX_BLOCK, PX_PART_NAM);
+        if (!job) while (px_nam_lp_b(&g_eng)) { }
+    }
+    a_lpc0 = run && job ? fm1_ticks() - t0 : 0u;
+    fm1_cpu1_sync();
+    a_lpstop = 1;
+    fm1_cpu1_sync();
+    if (job) a_job = 1;                                /* (collected by the next a_dec or a_enc, or before a recompute) */
+    a_nbv = (uint8_t)run;
+    a_nbi = (uint8_t)prev;
+}
+static void dsp_pipe(uint32_t t_irq)
 {
     uint32_t t0 = fm1_ticks();
-    dsp_pipe_run(!a_bypass && !a_hold);
+    if (g_eng.nam_lp) {
+        const uint32_t c1 = a_lpc1;                    /* (CPU1's last job, collected by this a_enc) */
+        dsp_lp_run(!a_bypass && !a_hold);
+        const uint32_t c0 = fm1_ticks() - t_irq + a_decw;
+        t0 = fm1_ticks() - (c1 > c0 ? c1 : c0);         /* the busier core */
+    } else dsp_pipe_run(!a_bypass && !a_hold);
     dsp_load(t0, 93u);                                 /* (CPU0's whole block here, the UI gets the rest) */
 }
 #endif
@@ -388,7 +465,7 @@ static void a_enc(void *priv, uint8_t *data, int len, uint8_t ch)     /* guitar 
         }
         a_c1_off();
     }
-    if (a_c1) { dsp_pipe(); return; }                 /* (the lanes: in post_job) */
+    if (a_c1) { dsp_pipe(t_irq); return; }            /* (the lanes: in post_job) */
     a_nbv = 0;
 #endif
     dsp_block();
@@ -396,6 +473,15 @@ static void a_enc(void *priv, uint8_t *data, int len, uint8_t ch)     /* guitar 
 static void a_dec(void *priv, uint8_t *data, int len, uint8_t ch)     /* output block to fill */
 {
     (void)priv; (void)ch;
+#if DSP_CPU1
+    a_decw = 0;
+    if (a_job && g_eng.nam_lp) {                       /* v40.2: the layer split: only its output (the job goes on) */
+        const uint32_t t = fm1_ticks();
+        while (!a_lppost && fm1_cpu1_busy()) fm1_cpu1_sync();
+        if (!a_lppost) a_collect();                    /* (its job ended without it: dropped) */
+        a_decw = fm1_ticks() - t;
+    } else
+#endif
     a_collect();                                       /* the previous block must be finished */
     int32_t *d = (int32_t *)data;
     uint32_t n = (uint32_t)len / 8u;
@@ -442,7 +528,13 @@ static void audio_apply(void)                          /* the preset to the engi
     if (live) { a_xft = 0; for (uint32_t t = 0; a_xf != 0.0f && t < 400u; t++) fm1_delay_us(100); }   /* (40 ms at most) */
     if (a_running) fm1_irq_mask(FM1_IRQ_ALNK0);
     a_collect();                                       /* CPU1 must not process during the recompute */
+#if DSP_CPU1
+    while (px_nam_lp_b(&g_eng)) { }                    /* v40.2: the layer split's blocks in flight, finished */
+#endif
     px_engine_set(&g_eng, &pp);
+#if DSP_CPU1
+    px_nam_lp(&g_eng, a_c1 && OP_NAM_LP && px_nam_dual(&g_eng));
+#endif
     a_kpend = 0;
 #if DSP_CPU1
     a_nbv = 0;                                         /* (the pipeline restarts from silence) */
@@ -462,6 +554,9 @@ static void audio_reset(void)                          /* after a NaN: engine re
     px_wet_mode(&g_eng, a_c1 && OP_WET_LANES, A_WLAG);   /* (the init cleared it) */
 #endif
     px_engine_set(&g_eng, &pp);
+#if DSP_CPU1
+    px_nam_lp(&g_eng, a_c1 && OP_NAM_LP && px_nam_dual(&g_eng));   /* (the init cleared it; the network was reset) */
+#endif
     a_kpend = 0; a_xf = 0.0f; a_xft = 1;               /* (back from silence) */
     a_nan = 0; a_nan_count++;
     if (a_running) fm1_irq_unmask(FM1_IRQ_ALNK0);
@@ -657,6 +752,7 @@ static void audio_prof(uint32_t now)                    /* (main loop) once a se
     for (int i = 0; i <= PX_NBLK; i++) {
         uint32_t t = g_eng.pf[i];
         g_eng.pf[i] = 0;
+        if (i == PX_NBLK) { t += g_eng.nam_pfb; g_eng.nam_pfb = 0; }   /* v40.2: the layer split's other core */
         if (i == PX_B_DELAY || i == PX_B_REVERB) {     /* v39: with the lanes, their time beside the chain */
             const int L = i == PX_B_REVERB;
             t += g_eng.wl_pf[L]; g_eng.wl_pf[L] = 0;
