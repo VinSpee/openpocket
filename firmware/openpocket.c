@@ -553,10 +553,19 @@ static uint32_t stack_free(const char *lo, const char *hi)
     while ((const char *)p < hi && *p == OP_PAINT) p++;
     return (uint32_t)((const char *)p - lo);
 }
+#if OP_BLE_TEST
+uint32_t ble_heap_min_free(void);
+uint32_t ble_stack_min_free(void);
+#endif
 static uint32_t ed_stat(uint32_t k)                    /* PING, after the flags */
 {
     return k == 0u ? a_peak : k == 1u ? a_peak_all : k == 2u ? a_xrun : k == 3u ? a_clip
-         : k == 4u ? stack_free(_ustack_lo, _ustack_top) : stack_free(_sstack_lo, _sstack_top);
+         : k == 4u ? stack_free(_ustack_lo, _ustack_top) : k == 5u ? stack_free(_sstack_lo, _sstack_top)
+#if OP_BLE_TEST
+         : k == 6u ? ble_heap_min_free() : ble_stack_min_free();
+#else
+         : 0u;
+#endif
 }
 static void nm_changed(uint32_t s)   /* v37: a user model was written or erased: the engine reloads it if it plays it */
 {
@@ -571,6 +580,7 @@ static void ir_changed(uint32_t s)   /* v38: a user IR was written or erased: th
     audio_apply();
 }
 #if OP_BLE_TEST             /* the log channel (firmware/ble/ble_diag.h): only this image answers DIAG, the normal firmware does not change */
+#define ED_STATS 8u         /* PING also gives the Bluetooth heap's and tasks' lowest free bytes */
 #define ED_DIAG_LINES 5u
 #define ED_DIAG_LEN 224u
 static void ed_diag_line(uint32_t i, char *out);
