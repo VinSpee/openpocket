@@ -544,7 +544,20 @@ static const int8_t QDEC[16] = {0,-1,1,0, 1,0,0,-1, -1,0,0,1, 0,1,-1,0};
 #if !AUDIO_PROBE
 static uint32_t ed_load(void) { return a_bypass ? a_peak : a_load; }   /* PING: the DSP load, as at the bottom right */
 static uint32_t ed_flags(void) { return (a_bypass ? 1u : 0u) | (a_c1 ? 2u : 0u); }
-static uint32_t ed_stat(uint32_t k) { return k == 0u ? a_peak : k == 1u ? a_peak_all : k == 2u ? a_xrun : a_clip; }   /* PING, after the flags */
+/* v40.1: the stacks' deepest use since boot. fm1_cstart paints them; the bytes at the bottom never written since are free */
+#define OP_PAINT 0x5AA5C33Cu
+extern char _ustack_top[];
+static uint32_t stack_free(const char *lo, const char *hi)
+{
+    const uint32_t *p = (const uint32_t *)(const void *)lo;
+    while ((const char *)p < hi && *p == OP_PAINT) p++;
+    return (uint32_t)((const char *)p - lo);
+}
+static uint32_t ed_stat(uint32_t k)                    /* PING, after the flags */
+{
+    return k == 0u ? a_peak : k == 1u ? a_peak_all : k == 2u ? a_xrun : k == 3u ? a_clip
+         : k == 4u ? stack_free(_ustack_lo, _ustack_top) : stack_free(_sstack_lo, _sstack_top);
+}
 static void nm_changed(uint32_t s)   /* v37: a user model was written or erased: the engine reloads it if it plays it */
 {
     if (g_eng.nam_idx == (int)(PX_NAM_NFACT + s)) g_eng.nam_idx = -1;
@@ -920,6 +933,11 @@ void fm1_cstart(void)
 {
     uint32_t *s, *d;
     uint32_t vdc0, sys0, dcdc, rst0, pinr0;
+    {   /* v40.1: paint the stacks (interrupts are still off), for their deepest use (ed_stat) */
+        volatile uint32_t here;
+        for (d = (uint32_t *)(void *)_ustack_lo; (char *)d < (char *)&here - 256; d++) *d = OP_PAINT;
+        for (d = (uint32_t *)(void *)_sstack_lo; (char *)d < _sstack_top - 256; d++) *d = OP_PAINT;
+    }
     fm1_time_init();
     /* v31, issue #1: the stock firmware's first act is P3_PINR_CON = 0, the long-press reset off (BlackBox_020
      * f_0200698a). Left on, a pin held at its active level resets the chip every 4 s (the SDK offers 4 or 8 s):

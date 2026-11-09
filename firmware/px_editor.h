@@ -237,6 +237,7 @@ static void ed_handle(const uint8_t *a, uint32_t n)   /* a: the args, after the 
         ed_b(ed_load() > 127u ? 127u : ed_load()); ed_b(ed_flags());
         for (k = 0; k < 2u; k++) ed_b(ed_stat(k) > 127u ? 127u : ed_stat(k));   /* v40.1: the peaks, the late blocks, the clips */
         for (k = 2; k < 4u; k++) { ed_b(ed_stat(k)); ed_b(ed_stat(k) >> 7); }
+        for (k = 4; k < 6u; k++) { ed_b(ed_stat(k) >> 2); ed_b(ed_stat(k) >> 9); }   /* the stacks' free bytes / 4 */
         break;
     case ED_NAM_LIST: {                                /* v37: every model, factory first, then the user slots */
         char nm[12];
