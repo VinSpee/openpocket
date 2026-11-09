@@ -742,6 +742,7 @@ static void app_main(void)
     op_stage(ST_RUN, 0);
 #endif
 #if OP_BLE_TEST
+    ble_os_init();                       /* the task table, before the main loop polls it (ble_os.c: it lives in NOINIT) */
     if (!safe)                           /* after a failed boot Bluetooth stays off: the pedal runs, and can be re-flashed */
         ble_test_start();                /* radio on, controller and host up, advertising (the pedal keeps working) */
 #endif
