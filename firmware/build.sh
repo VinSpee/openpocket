@@ -99,6 +99,8 @@ def sym(n):
 load=sym("_data_load"); rt_load=sym("_rt_load"); start=sym("_start")
 be,cl,ch,nb=sym("_bss_end"),sym("_cram_lo"),sym("_cram_hi"),sym("_ble_stack_hi")
 re_,hs,he=sym("_rt_end"),sym("_bss_hi_start"),sym("_bss_hi_end")
+ls_,le=sym("_bss_lo_start"),sym("_bss_lo_end")
+if ls_ is not None and le and le > ls_: print(f"low RAM   : {le-ls_} of 24576 bytes (below the RAM)")
 ps_,pe=sym("_pool_tail_start"),sym("_pool_tail_end")
 if ps_ and pe: print(f"pool tail : {pe-ps_} bytes, {0x01C5E000-pe} left before the RAM code")
 if re_ and he: print(f"hi RAM    : RAM code {re_-0x01C5E000}, data {he-hs}, free {0x01C74000-he} of 90112 bytes (the RAM code window)")

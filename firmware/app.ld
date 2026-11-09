@@ -18,6 +18,7 @@ MEMORY
     POOL   (rw)  : ORIGIN = 0x01C20000, LENGTH = 0x3E000   /* free SRAM (like CLIPPER): DSP engine (v40: was 0x54000) */
     RAMTEXT (rwx): ORIGIN = 0x01C5E000, LENGTH = 0x16000   /* v40: the RAM code, audio path included (was 24 KB at 0x01C00000) */
     NOINIT (rw)  : ORIGIN = 0x01C7C000, LENGTH = 0x3D50
+    LOWRAM (rw)  : ORIGIN = 0x01C00000, LENGTH = 0x6000    /* v40.1: v37's RAM code window, free since v40 (see .bss_lo) */
     CRAM   (rw)  : ORIGIN = 0x01F28000, LENGTH = 0x7000    /* PXC_BEGIN..PXC_END (px_cacheram.h) */
 }
 SECTIONS
@@ -30,6 +31,10 @@ SECTIONS
     /* v40.1: data in the RAM code window's free end, after the code (the PC guard covers only _rt_start.._rt_end): buffers
      * the engine marks PX_HI (px_dsp.c), out of the 96 KB RAM. Zeroed by fm1_cstart like .bss. */
     .bss_hi (NOLOAD) : { . = ALIGN(8); _bss_hi_start = .; *(.bss.hi.*) . = ALIGN(4); _bss_hi_end = .; } > RAMTEXT
+    /* v40.1, the Bluetooth test image only: data in the first 24 KB of the SRAM below the RAM, which v37's RAM code used
+     * at run time and v40 leaves free (the boot ROM loads the boot loader there before the app runs). What goes there is
+     * a buffer whose contents are checked before use (nm_stage: CRC, read-back). Zeroed by fm1_cstart like .bss. */
+    .bss_lo (NOLOAD) : { . = ALIGN(8); _bss_lo_start = .; *(.bss.lo.*) . = ALIGN(4); _bss_lo_end = .; } > LOWRAM
     .data : { . = ALIGN(4); _data_start = .; *(.data*) *(.sdata*) *(.*_data) . = ALIGN(4); _data_end = .; } > RAM AT > XIP
     _data_load = LOADADDR(.data);
     .bss (NOLOAD) : { _bss_start = .; *(.bss*) *(.sbss*) *(.*_bss) *(COMMON) . = ALIGN(4); _bss_end = .; } > RAM

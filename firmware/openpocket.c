@@ -43,7 +43,8 @@
 enum { RED=0xF800, GRN=0x07E0, BLU=0x001F, WHT=0xFFFF, BLK=0x0000, CYN=0x07FF, YEL=0xFFE0, ORG=0xFD20 };
 
 extern uint32_t _data_start[], _data_end[], _data_load[], _bss_start[], _bss_end[];
-extern uint32_t _rt_start[], _rt_end[], _rt_load[], _bss_hi_start[], _bss_hi_end[], _pool_tail_start[], _pool_tail_end[];
+extern uint32_t _rt_start[], _rt_end[], _rt_load[], _bss_hi_start[], _bss_hi_end[], _pool_tail_start[], _pool_tail_end[],
+                _bss_lo_start[], _bss_lo_end[];
 static volatile struct { uint32_t magic, pending, failed; } guard __attribute__((section(".noinit")));
 
 static uint32_t ms_now(void) { return (uint32_t)(fm1_ticks() / (FM1_TICKS_PER_US * 1000u)); }
@@ -984,6 +985,7 @@ void fm1_cstart(void)
     for (d = _bss_start; d < _bss_end; d++) *d = 0;
     for (d = _bss_hi_start; d < _bss_hi_end; d++) *d = 0;
     for (d = _pool_tail_start; d < _pool_tail_end; d++) *d = 0;
+    for (d = _bss_lo_start; d < _bss_lo_end; d++) *d = 0;
     for (s = _data_load, d = _data_start; d < _data_end; s++, d++) *d = *s;
     for (s = _rt_load, d = _rt_start; d < _rt_end; s++, d++) *d = *s;
     op_pwr.vdc0 = (uint8_t)vdc0; op_pwr.vdc1 = (uint8_t)fm1_vdc14();
