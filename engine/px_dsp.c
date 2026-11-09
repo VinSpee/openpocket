@@ -23,6 +23,11 @@
 #include <math.h>
 #include <stddef.h>
 #include <string.h>
+#ifdef __PI32V2__   /* on the pedal: a buffer in the free end of the RAM code window (firmware/app.ld .bss_hi), out of the 96 KB RAM */
+#define PX_HI(name) __attribute__((section(".bss.hi." #name)))
+#else
+#define PX_HI(name)
+#endif
 
 #define PI_F 3.14159265f
 
@@ -1401,7 +1406,7 @@ static void cab_make(float sr, const px_preset_t *p, cab_set *o)
 #define IR_P (PX_IR_LEN / IR_B)
 typedef char ir_scratch_check[PX_IR_LEN <= (IR_P / 2) * IR_F ? 1 : -1];   /* the IR and ir_load_h's scratch both fit in ir_X */
 static float ir_H[IR_P][IR_F];                         /* the partitions' spectra (packed: [0] DC, [1] Nyquist, re/im) */
-static float ir_X[IR_P][IR_F];                         /* the last IR_P input blocks' spectra (a ring, newest at ir_pos) */
+static float ir_X[IR_P][IR_F] PX_HI(ir_X);                       /* the last IR_P input blocks' spectra (a ring, newest at ir_pos) */
 static float ir_in[IR_F], ir_Y[IR_F];                  /* the last two input blocks; the sum of the products */
 static int ir_pos, ir_ok;
 static float fft_w[64];                                /* e^(2 pi i m / 64), m = 0..31: cos, sin */
@@ -2297,7 +2302,8 @@ static void os_down(px_hb *st, const float *in, float *out, int n, int os)   /* 
 
 /* drive_run over n oversampled samples in place, stage by stage (the same operations as drive_run sample by sample);
  * the anti-denormal offset follows the base-rate sample (os samples each) */
-static float px_os_t[PX_OVERSAMPLE * PX_MAX_BLOCK], px_os_h[PX_OVERSAMPLE * PX_MAX_BLOCK], px_os_u[PX_OVERSAMPLE * PX_MAX_BLOCK];
+static float px_os_t[PX_OVERSAMPLE * PX_MAX_BLOCK] PX_HI(px_os_t), px_os_h[PX_OVERSAMPLE * PX_MAX_BLOCK] PX_HI(px_os_h),
+             px_os_u[PX_OVERSAMPLE * PX_MAX_BLOCK] PX_HI(px_os_u);
 static void drive_block(px_engine *e, float *u, int n, int os)   /* (static buffers: off the interrupt's stack) */
 {
     float *t = px_os_t, *h = px_os_h;
@@ -2919,7 +2925,7 @@ static void rv_block(px_engine *e, const float *xb, float *wo, int n)
 }
 
 /* ---- v39: the wet lanes (px_dsp.h). [lane][buffer][frame]: 2 KB of RAM ---- */
-static float px_wl[2][2][PX_WL_N];
+static float px_wl[2][2][PX_WL_N] PX_HI(px_wl);
 static void wl_clear(px_engine *e)
 {
     e->wl_b = 0;

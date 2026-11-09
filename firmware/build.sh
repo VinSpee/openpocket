@@ -98,6 +98,8 @@ def sym(n):
     m=re.search(rf"^([0-9a-f]+) .*\s{n}$",syms,re.M); return int(m.group(1),16) if m else None
 load=sym("_data_load"); rt_load=sym("_rt_load"); start=sym("_start")
 be,cl,ch,nb=sym("_bss_end"),sym("_cram_lo"),sym("_cram_hi"),sym("_ble_stack_hi")
+re_,hs,he=sym("_rt_end"),sym("_bss_hi_start"),sym("_bss_hi_end")
+if re_ and he: print(f"hi RAM    : RAM code {re_-0x01C5E000}, data {he-hs}, free {0x01C74000-he} of 90112 bytes (the RAM code window)")
 if be: print(f"RAM       : {be-0x01C08000} of 98304 bytes ({98304-(be-0x01C08000)} free)")
 if nb and nb >= 0x01C7C000: print(f"NOINIT    : {nb-0x01C7C000} of 15696 bytes up to the BLE task stacks' end")
 if cl is not None and ch is not None: print(f"cache RAM : {ch-cl} of 28672 bytes (the rest, {28672-(ch-cl)}, to the NAM network's vector unit)")

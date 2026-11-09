@@ -26,6 +26,9 @@ SECTIONS
                   . = ALIGN(4); _c1_start = .; KEEP(*(.c1_text*)) . = ALIGN(4); _c1_end = .;   /* the second core's loop */
                   _rt_end = .; } > RAMTEXT AT > XIP
     _rt_load = LOADADDR(.ram_text);
+    /* v40.1: data in the RAM code window's free end, after the code (the PC guard covers only _rt_start.._rt_end): buffers
+     * the engine marks PX_HI (px_dsp.c), out of the 96 KB RAM. Zeroed by fm1_cstart like .bss. */
+    .bss_hi (NOLOAD) : { . = ALIGN(8); _bss_hi_start = .; *(.bss.hi.*) . = ALIGN(4); _bss_hi_end = .; } > RAMTEXT
     .data : { . = ALIGN(4); _data_start = .; *(.data*) *(.sdata*) *(.*_data) . = ALIGN(4); _data_end = .; } > RAM AT > XIP
     _data_load = LOADADDR(.data);
     .bss (NOLOAD) : { _bss_start = .; _ble_stack_lo = .; *(.bss.ble_stack) _ble_stack_hi = .; *(.bss*) *(.sbss*) *(.*_bss) *(COMMON) . = ALIGN(4); _bss_end = .; } > RAM
