@@ -25,8 +25,10 @@
 #include <string.h>
 #ifdef __PI32V2__   /* on the pedal: a buffer in the free end of the RAM code window (firmware/app.ld .bss_hi), out of the 96 KB RAM */
 #define PX_HI(name) __attribute__((section(".bss.hi." #name)))
+#define PX_POOL_TAIL(name) __attribute__((section(".pool.tail." #name)))   /* after the pool's own buffers (app.ld) */
 #else
 #define PX_HI(name)
+#define PX_POOL_TAIL(name)
 #endif
 
 #define PI_F 3.14159265f
@@ -213,7 +215,7 @@ static void fq_block(const px_bq *f, px_fq *s, int32_t *b, int n)
     if (n & 1) fq_loop_c(b, n, c, &s->x1);              /* (the hand loop does 2 samples a turn) */
     else fq_loop(b, n, c, &s->x1);
 }
-static int32_t px_fqbuf[PX_OVERSAMPLE * PX_MAX_BLOCK];
+static int32_t px_fqbuf[PX_OVERSAMPLE * PX_MAX_BLOCK] PX_POOL_TAIL(px_fqbuf);
 static void fq_to(int32_t *q, const float *x, int n)
 {
     for (int k = 0; k < n; k++) {
@@ -2256,7 +2258,7 @@ static void hb_br1(float *xs, float *ys, float c0, const float *in, float *out, 
 /* x2 up: in[n] -> out[2n]: the even branch (coefficients 0, 2, 4) makes out[2i], the odd one out[2i + 1], both from in[i]
  * (state: s->x/y[0..2] the even branch, [3..5] the odd one); x2 down: in[2i + 1] through the even branch, in[2i] through
  * the odd one, out[i] = their mean. The stride-2 reads and writes go through px_os_d. */
-static float px_os_d[4 * PX_MAX_BLOCK];
+static float px_os_d[4 * PX_MAX_BLOCK] PX_POOL_TAIL(px_os_d);
 static void hb1_up(px_hb *s, const float *in, float *out, int n)
 {
     float *d = px_os_d;
@@ -2286,7 +2288,7 @@ static void hb2_down(px_hb *s, const float *in, float *out, int n)
     for (int i = 0; i < n; i++) out[i] = 0.5f * (d[2 * i] + d[2 * i + 1]);
 }
 #undef HB_SEC
-static float px_os_m[2 * PX_MAX_BLOCK];                /* (stage 1 <-> 2) */
+static float px_os_m[2 * PX_MAX_BLOCK] PX_HI(px_os_m);                /* (stage 1 <-> 2) */
 static void os_up(px_hb *st, const float *in, float *out, int n, int os)   /* os 2 or 4: st[0] stage 1, st[1] stage 2 */
 {
     if (os == 2) { hb1_up(&st[0], in, out, n); return; }

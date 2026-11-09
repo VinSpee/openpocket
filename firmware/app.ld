@@ -35,7 +35,8 @@ SECTIONS
     .bss (NOLOAD) : { _bss_start = .; *(.bss*) *(.sbss*) *(.*_bss) *(COMMON) . = ALIGN(4); _bss_end = .; } > RAM
     .noinit (NOLOAD) : { *(.noinit) *(.noinit.ble) . = ALIGN(8); _ble_stack_lo = .; *(.noinit.ble_stack) _ble_stack_hi = .; *(.noinit*) } > NOINIT
     .cram (NOLOAD) : { _cram_lo = .; *(.cram*) . = ALIGN(8); _cram_hi = .; } > CRAM   /* CPU-only data, zeroed by pxc_init */
-    .pool (NOLOAD) : { . = ALIGN(8); *(.pool*) } > POOL
+    .pool (NOLOAD) : { . = ALIGN(8); *(.pool) . = ALIGN(8); _pool_tail_start = .; *(.pool.tail.*) . = ALIGN(4); _pool_tail_end = .; } > POOL
+    /* (.pool.tail.*: engine buffers marked PX_POOL_TAIL in the pool's free end, zeroed by fm1_cstart like .bss) */
     _guard0 = 0x01C74000; _ustack_lo = 0x01C74100; _ustack_top = 0x01C7A000;
     _guard1 = 0x01C7A000; _sstack_lo = 0x01C7A100; _sstack_top = 0x01C7C000;
     /* The hardware stack guard (fm1_guard.h) faults any sp outside [_ustack_lo, _sstack_top]. The Bluetooth test image's task
