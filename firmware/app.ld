@@ -18,6 +18,7 @@ MEMORY
     POOL   (rw)  : ORIGIN = 0x01C20000, LENGTH = 0x3E000   /* free SRAM (like CLIPPER): DSP engine (v40: was 0x54000) */
     RAMTEXT (rwx): ORIGIN = 0x01C5E000, LENGTH = 0x16000   /* v40: the RAM code, audio path included (was 24 KB at 0x01C00000) */
     NOINIT (rw)  : ORIGIN = 0x01C7C000, LENGTH = 0x3D50
+    CRAM   (rw)  : ORIGIN = 0x01F28000, LENGTH = 0x7000    /* PXC_BEGIN..PXC_END (px_cacheram.h) */
 }
 SECTIONS
 {
@@ -33,6 +34,7 @@ SECTIONS
     _data_load = LOADADDR(.data);
     .bss (NOLOAD) : { _bss_start = .; *(.bss*) *(.sbss*) *(.*_bss) *(COMMON) . = ALIGN(4); _bss_end = .; } > RAM
     .noinit (NOLOAD) : { *(.noinit) *(.noinit.ble) . = ALIGN(8); _ble_stack_lo = .; *(.noinit.ble_stack) _ble_stack_hi = .; *(.noinit*) } > NOINIT
+    .cram (NOLOAD) : { _cram_lo = .; *(.cram*) . = ALIGN(8); _cram_hi = .; } > CRAM   /* CPU-only data, zeroed by pxc_init */
     .pool (NOLOAD) : { . = ALIGN(8); *(.pool*) } > POOL
     _guard0 = 0x01C74000; _ustack_lo = 0x01C74100; _ustack_top = 0x01C7A000;
     _guard1 = 0x01C7A000; _sstack_lo = 0x01C7A100; _sstack_top = 0x01C7C000;

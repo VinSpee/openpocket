@@ -741,7 +741,15 @@ static void app_main(void)
 #if DSP_CPU1
     px_nam_helper(a_hrun, a_hwait);      /* v37: CPU1 can take a part of the NAM network */
 #endif
+#if OP_BLE_TEST
+    {   /* the vector unit's inputs: what the cache RAM has left after the tuner's buffers (app.ld .cram) */
+        extern char _cram_hi[];
+        uint32_t lo = (uint32_t)(uintptr_t)_cram_hi;
+        if (pxc_status == PXC_READY && lo < PXC_END) px_nam_fast((void *)(uintptr_t)lo, PXC_END - lo);
+    }
+#else
     if (pxc_status == PXC_READY) px_nam_fast((void *)PXC_BEGIN, PXC_END - PXC_BEGIN);   /* the vector unit's inputs */
+#endif
     px_nam_check(b_ticks);               /* v37: the NAM routines by hand checked, its fastest way to run chosen */
     audio_start();                       /* guitar -> DSP engine -> output, amp enabled */
     leds_init();                         /* the button lights: all off loaded, then on (PC7 low), as stock */
