@@ -1399,6 +1399,7 @@ static void cab_make(float sr, const px_preset_t *p, cab_set *o)
 #define IR_B 64
 #define IR_F 128
 #define IR_P (PX_IR_LEN / IR_B)
+typedef char ir_scratch_check[PX_IR_LEN <= (IR_P / 2) * IR_F ? 1 : -1];   /* the IR and ir_load_h's scratch both fit in ir_X */
 static float ir_H[IR_P][IR_F];                         /* the partitions' spectra (packed: [0] DC, [1] Nyquist, re/im) */
 static float ir_X[IR_P][IR_F];                         /* the last IR_P input blocks' spectra (a ring, newest at ir_pos) */
 static float ir_in[IR_F], ir_Y[IR_F];                  /* the last two input blocks; the sum of the products */
@@ -1470,9 +1471,8 @@ static void irfft128(float *x)
     fft64(x, 1.0f);                                    /* z = 64 x IFFT(Z): x[2n] = Re, x[2n+1] = Im */
 }
 /* the spectra of an IR (PX_IR_LEN taps), its level set as the modelled cabinets' (energy 1/2) */
-static void ir_load_h(const float *h)
+static void ir_load_h(const float *h, float *b)       /* b: IR_F floats of scratch */
 {
-    static float b[IR_F];
     float en = 0.0f;
     if (!fft_ready) fft_init();
     for (int i = 0; i < PX_IR_LEN; i++) en += h[i] * h[i];
@@ -1554,10 +1554,10 @@ static void rc_cab_ir(px_engine *e)
     e->cab_n = 0; e->cab_firon = 0;
     if ((s != e->ir_slot || !ir_ok) && px_may_load) {  /* (a new slot is a full change: never on the audio side) */
         char nm[12];
-        float *h = &ir_X[0][0];                        /* (scratch: cleared after) */
+        float *h = &ir_X[0][0];                        /* (scratch: cleared after; the IR in the first half, ir_load_h's in the second) */
         if (!fft_ready) fft_init();
         ir_ok = px_ir_user(s, nm, h);
-        if (ir_ok) ir_load_h(h);
+        if (ir_ok) ir_load_h(h, &ir_X[IR_P / 2][0]);
         ir_clear();
         e->ir_slot = s;
     }
