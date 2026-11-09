@@ -571,14 +571,19 @@ static uint32_t ed_stat(uint32_t k)                    /* PING, after the flags 
 /* v40.2: PING's profile (14 bits each): each block's and the NAM network's share of an audio block's time over the last
  * second (%, a_pf), the network's way of running (pxn_mode), then from its start-up timing (0.1 % of real time, the
  * network alone): each way of running (px_nam_tuned), and where one core's time goes (pxn_prof_ticks); then the layer
- * split: 0 off, else 1 + the last layer CPU0 runs */
-#define ED_PROF (PX_NBLK + 2u + PXN_MODES + 9u + 1u)
+ * split: 0 off, else 1 + the last layer CPU0 runs; then with it CPU0's and CPU1's load and their peaks since the preset
+ * was set (%) */
+#define ED_PROF (PX_NBLK + 2u + PXN_MODES + 9u + 5u)
 static uint32_t ed_prof(uint32_t k)
 {
     if (k <= PX_NBLK) return a_pf[k];
     if (k == PX_NBLK + 1u) return (uint32_t)pxn_mode();
     k -= PX_NBLK + 2u;
     if (k == PXN_MODES + 9u) return g_eng.nam_lp ? 1u + (uint32_t)px_nam_lp_split_now() : 0u;   /* v40.2 */
+    if (k > PXN_MODES + 9u && k <= PXN_MODES + 13u) {  /* each core's load and peak (%), the layer split only */
+        const uint32_t j = k - PXN_MODES - 10u;
+        return g_eng.nam_lp ? (j < 2u ? a_cl[j] : a_cpk[j - 2u]) : 0u;
+    }
     const uint32_t t = k < PXN_MODES ? px_nam_tuned((int)k) : pxn_prof_ticks((int)(k - PXN_MODES));
     return t * 10u / (A_BUDGET * 2u / 100u);           /* (ticks for 256 frames: two audio blocks) */
 }

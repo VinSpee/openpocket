@@ -293,6 +293,7 @@ static uint32_t a_lppend;
 static volatile uint32_t a_lpc1;                       /* (CPU1) its last job's own work, its waits taken out (ticks) */
 static uint32_t a_lpc0, a_decw;                        /* CPU0's own share last block; a_dec's wait for the output (ticks) */
 static int32_t a_lpbal;                                /* CPU1's job minus CPU0's share, smoothed */
+static uint32_t a_cl[2], a_cpk[2];                     /* v40.2: each core's load (%, smoothed) and peak since the preset was set */
 static void lp_job(uint32_t prev)
 {
     const uint32_t t0 = fm1_ticks();
@@ -352,6 +353,11 @@ static void dsp_pipe(uint32_t t_irq)
         dsp_lp_run(!a_bypass && !a_hold);
         const uint32_t c0 = fm1_ticks() - t_irq + a_decw;
         t0 = fm1_ticks() - (c1 > c0 ? c1 : c0);         /* the busier core */
+        for (int k = 0; k < 2; k++) {                   /* each core's own (PING's profile) */
+            const uint32_t pc = (k ? c1 : c0) * 100u / A_BUDGET;
+            a_cl[k] = (a_cl[k] * 7u + pc) / 8u;
+            if (pc > a_cpk[k]) a_cpk[k] = pc;
+        }
     } else dsp_pipe_run(!a_bypass && !a_hold);
     dsp_load(t0, 93u);                                 /* (CPU0's whole block here, the UI gets the rest) */
 }
@@ -425,6 +431,28 @@ static float tuner_estimate(void)      /* frequency in Hz, or 0 (silence / uncle
     return 11025.0f / tf;
 }
 
+/* v40.2: OP_TESTSIG 1 (measurements only, never a release): a synthetic guitar replaces the input, so the effects that
+ * work only while something sounds (envelopes, pitch tracking, the synth's keys, tails) run as with a player: a note and
+ * its fifth, sawtooth, plucked every 0.4 s at about -12 dBFS and decaying, the notes walking two octaves up and down */
+#ifndef OP_TESTSIG
+#define OP_TESTSIG 0
+#endif
+#if OP_TESTSIG
+static void a_testsig(void)
+{
+    static const float HZ[8] = {82.4f, 110.0f, 146.8f, 196.0f, 246.9f, 329.6f, 196.0f, 110.0f};
+    static float ph[2], env;
+    static uint32_t n, k;
+    for (uint32_t i = 0; i < A_FR; i++, n++) {
+        if (n >= 17640u) { n = 0; k = (k + 1u) & 7u; env = 0.25f; }   /* a pluck every 0.4 s */
+        const float f = HZ[k] / 44100.0f;
+        ph[0] += f; if (ph[0] >= 1.0f) ph[0] -= 1.0f;
+        ph[1] += f * 1.4983f; if (ph[1] >= 1.0f) ph[1] -= 1.0f;
+        a_in[i] = env * ((2.0f * ph[0] - 1.0f) + 0.6f * (2.0f * ph[1] - 1.0f));
+        env *= 0.99995f;
+    }
+}
+#endif
 static void a_enc(void *priv, uint8_t *data, int len, uint8_t ch)     /* guitar block received */
 {
     (void)priv;
@@ -452,6 +480,9 @@ static void a_enc(void *priv, uint8_t *data, int len, uint8_t ch)     /* guitar 
         a_lvl[0] += (sl / (float)n - a_lvl[0]) * 0.0625f;
         a_lvl[1] += (sr / (float)n - a_lvl[1]) * 0.0625f;
     }
+#if OP_TESTSIG
+    a_testsig();
+#endif
     tn_capture(a_in, A_FR);
 #if DSP_CPU1
     /* a NAM amp on two cores (px_nam_dual): pipelined here (dsp_pipe), CPU1 its helper */
@@ -539,7 +570,7 @@ static void audio_apply(void)                          /* the preset to the engi
 #if DSP_CPU1
     a_nbv = 0;                                         /* (the pipeline restarts from silence) */
 #endif
-    a_bypass = 0; a_over = 0; a_peak = 0;
+    a_bypass = 0; a_over = 0; a_peak = 0; a_cpk[0] = a_cpk[1] = 0;
     if (a_running) fm1_irq_unmask(FM1_IRQ_ALNK0);
     a_xft = 1;
 }

@@ -42,7 +42,8 @@ export function parsePing(r) {
     p.namModes = f.slice(PROF.length + 1, PROF.length + 12).map((v) => v / 10);
     p.namParts = f.slice(PROF.length + 12, PROF.length + 21).map((v) => v / 10);
     if (f.length > PROF.length + 21) p.split = f[PROF.length + 21] ? f[PROF.length + 21] - 1 : null;   // v40.2: CPU0's last layer
-    p.extra = f.slice(PROF.length + 22);                 // (a development build's own figures)
+    if (f.length > PROF.length + 25) [p.cpu0, p.cpu1, p.cpu0Peak, p.cpu1Peak] = f.slice(PROF.length + 22, PROF.length + 26);
+    p.extra = f.slice(f.length > PROF.length + 25 ? PROF.length + 26 : PROF.length + 22);   // (a development build's own)
   }
   return p;
 }
@@ -75,7 +76,8 @@ export async function run(ed, args, sleep) {
                  stackFree: b.stackFree ?? null, irqStackFree: b.irqStackFree ?? null,
                  bleHeapFree: b.bleHeapFree ?? null, bleTaskStackFree: b.bleTaskStackFree ?? null,
                  prof: b.prof ?? null, namMode: b.namMode ?? null, namModes: b.namModes ?? null, namParts: b.namParts ?? null,
-                 split: b.split ?? null, extra: b.extra ?? null });
+                 split: b.split ?? null, cpu0: b.cpu0 ?? null, cpu1: b.cpu1 ?? null, cpu0Peak: b.cpu0Peak ?? null,
+                 cpu1Peak: b.cpu1Peak ?? null, extra: b.extra ?? null });
     }
   } finally { await ed.select(was).catch(() => {}); }
   return out;
@@ -107,7 +109,8 @@ export async function main(argv, { access, say = console.log } = {}) {
         say("where the time goes (% of a block, last second):");
         for (const r of rows) if (r.prof) {
           const parts = r.prof.map((v, i) => [PROF[i] ?? `#${i}`, v]).filter(([, v]) => v);
-          say(`${String(r.slot).padStart(4)} ${r.name.padEnd(14)} ${parts.map(([n, v]) => `${n} ${v}`).join("  ")}  (mode ${r.namMode})`);
+          say(`${String(r.slot).padStart(4)} ${r.name.padEnd(14)} ${parts.map(([n, v]) => `${n} ${v}`).join("  ")}  (mode ${r.namMode})` +
+              `${r.split === null ? "" : `  CPU0 ${r.cpu0}/${r.cpu0Peak} %, CPU1 ${r.cpu1}/${r.cpu1Peak} % (layers 0..${r.split} on CPU0)`}`);
         }
       }
       const last = rows[rows.length - 1];
