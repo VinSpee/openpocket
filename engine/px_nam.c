@@ -4414,6 +4414,7 @@ int pxn_asm_in_use(void)
 }
 
 /* ---- measurements for the firmware's bench screen (BENCH_AT_BOOT) ---- */
+#if !PXN_LEAN   /* v40.4: nothing calls them in a shipped image (the linker keeps every function): out of the Bluetooth test image, whose flash is full */
 /* ticks for `reps` runs of the work of one kernel-6 layer over 32 frames (gather 6 taps, 3 dot rows of 20, post with
  * the residual): 1,920 multiply-adds a run. hand: the hand routines (if any), else C. scratch: PXN_TEST_WORDS */
 uint32_t pxn_bench_layer(int32_t *scratch, uint32_t (*ticks)(void), int hand, int reps)
@@ -4630,6 +4631,8 @@ uint32_t pxn_bench_ops(int kind, int32_t *buf, int reps, int *n, uint32_t (*tick
     return 0;
 #endif
 }
+
+#endif
 
 /* ---- loading ---- */
 static int pxn_finite(float x)
@@ -5226,6 +5229,8 @@ typedef char pxn_lp_size_check[sizeof(pxn_lpm) <= PXN_LP_BYTES ? 1 : -1];
 static pxn_lpm *pxn_lp;
 static volatile uint32_t pxn_lp_in, pxn_lp_out;        /* blocks handed over, finished */
 static volatile int32_t pxn_lp_s = PXN_NL / 2;
+static volatile int32_t pxn_lp_se = PXN_NL / 2;        /* v40.4: the s of the last block handed over */
+static volatile uint8_t pxn_lp_hard;                   /* its next rise may wait for the other core (pxn_lp_force) */
 void pxn_set_lp(void *base, unsigned bytes) { pxn_lp = bytes >= sizeof(pxn_lpm) ? (pxn_lpm *)base : 0; }
 /* the layer split can run: its memory, the network read straight from the rings (no X rows, which the cores would
  * share), two cores without the vector unit */
@@ -5233,12 +5238,31 @@ int pxn_lp_ok(void) { return pxn_lp && pxn_rd && PXN_MC[pxn_mode_v].h && !PXN_MC
 void pxn_lp_reset(void)                                  /* (no block in progress: the network was reset or loaded) */
 {
     pxn_lp_in = pxn_lp_out = 0;
+    pxn_lp_hard = 0;
+    pxn_lp_se = pxn_lp_s;
     if (pxn_lp) for (int i = 0; i < PXN_NL; i++) pxn_lp->ld[i] = 0;
     PXN_SYNC();
 }
 void pxn_lp_split(int s) { pxn_lp_s = s < 0 ? 0 : s > PXN_NL - 1 ? PXN_NL - 1 : s; }
 int pxn_lp_split_now(void) { return pxn_lp_s; }
+int pxn_lp_split_used(void) { return pxn_lp_se; }
+void pxn_lp_force(void) { pxn_lp_hard = 1; }
 uint32_t pxn_lp_queued(void) { return pxn_lp_in - pxn_lp_out; }
+/* v40.4: the blocks handed over so far; 1 while one handed over before `upto` is not finished (the caller's own count) */
+uint32_t pxn_lp_handed(void) { return pxn_lp_in; }
+int pxn_lp_before(uint32_t upto) { return (int32_t)(upto - pxn_lp_out) > 0; }
+/* the network's work in layers 0..s, in 1/1024 of the whole (the 15-tap layers weigh 1.9 six-tap ones, the head 0.7;
+ * measured: tools/dsp.mjs prints the parts), for sharing it between the cores */
+uint32_t pxn_lp_share(int s)
+{
+    uint32_t a = 0, t = 11;                              /* (the head, in 1/16 of a six-tap layer) */
+    for (int i = 0; i < PXN_NL; i++) {
+        const uint32_t w = pxn_k[i] > 6 ? 30u : 16u;
+        t += w;
+        if (i <= s) a += w;
+    }
+    return a * 1024u / t;
+}
 #ifdef PXN_EMUVEC
 static pxn_model *pxn_lp_em;                             /* PC: the other core's work, done while this one waits */
 #define PXN_LSTEP() (pxn_lp_em ? (void)pxn_lp_b(pxn_lp_em) : (void)0)
@@ -5264,8 +5288,20 @@ void pxn_lp_a(pxn_model *m, const float *in, float *out)
 #endif
     while (b - pxn_lp_out >= PXN_LPQ) { PXN_SYNC(); PXN_LSTEP(); }   /* (the queue full: CPU1 far behind) */
     pxn_lpe *e = &pxn_lp->e[b % PXN_LPQ];
-    const int s = pxn_lp_s;
-    pxn_lp_wait(b, 0, s);                                /* (s moved up: CPU1 had layers up to s of the block before) */
+    /* v40.4: layers 0..s here: as far as asked (pxn_lp_s), and no further than the other core has finished the block
+     * before's (it ran those the block before's s left it). Where s moves up, this core does not wait for it: it
+     * takes the layers once they are free (with the other core up to date at the start of an audio block: at once).
+     * Unless told to (pxn_lp_force: the other core is the one behind, and stays so until this core takes them): then
+     * it waits, once, as before */
+    int s = 0;
+    PXN_SYNC();
+    while (s < pxn_lp_s && (int32_t)(pxn_lp->ld[s + 1] - b) >= 0) s++;
+    if (s < pxn_lp_s && pxn_lp_hard) {
+        s = pxn_lp_s;
+        pxn_lp_wait(b, 0, s);
+    }
+    pxn_lp_hard = 0;
+    pxn_lp_se = s;
     e->out = out;
     e->s = s;
     pxn_layer *L0 = &m->L[0];
@@ -5425,6 +5461,7 @@ int pxn_tune(pxn_model *m, uint32_t (*ticks)(void), uint32_t t[PXN_MODES])
         t[mode] = dt;
         if (dt < t[best]) best = mode;
     }
+    if (t[0]) pxn_sv_c = (int32_t)(t[0] / (8u * PXN_N));  /* v40.4: one frame, one core, with the routines chosen above */
     pxn_mode_v = best;
     pxn_reset(m);
     return best;

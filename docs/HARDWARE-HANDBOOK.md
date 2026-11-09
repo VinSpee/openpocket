@@ -74,6 +74,13 @@ firmware read in three passes), `docs/NAM.md` (the fixed-point network), `docs/B
      on this block, then both share the network. This costs one extra block of latency (`tests/engine/pipe_test.c`: same
      output, one block later).
   4. **v39 "wet lanes"**: delay and reverb run beside the chain, two blocks late (section 8).
+- **Lesson from v40.4 (measured):** a job per interrupt that must end before the next one puts the two cores' work in
+  series. With the network split by layers, CPU1's last network block could only start when CPU0 had finished its own
+  share, so a block needed CPU0's share plus one network block on CPU1 (12 % of the block) within 2.9 ms: loads above
+  about 88 % a core made the interrupt wait. After the interrupt has been held off (a preset change holds it off for
+  10 ms), it runs block after block until it has caught up with the converters, and every such wait then counts as
+  load. Let CPU1 run one worker across the interrupts, ask it for the output-critical work by a counter, and wait only
+  for that.
 - **Lesson from v39 (measured as a defect):** with pattern 3 we gave CPU1 the delay and reverb as a job in the gap
   after the block, before the next interrupt. The gap was too short, because the network shares its work between the
   cores and only half of the freed time came back to the gap. The job was cut every block and the wet sound came out

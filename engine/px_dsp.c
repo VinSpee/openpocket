@@ -1240,6 +1240,11 @@ int px_nam_lp_b(px_engine *e)
     return r;
 }
 uint32_t px_nam_lp_queued(void) { return pxn_lp_queued(); }
+int px_nam_lp_split_used(void) { return pxn_lp_split_used(); }
+void px_nam_lp_force(void) { pxn_lp_force(); }
+uint32_t px_nam_lp_handed(void) { return pxn_lp_handed(); }
+int px_nam_lp_before(uint32_t upto) { return pxn_lp_before(upto); }
+uint32_t px_nam_lp_share(int s) { return pxn_lp_share(s); }
 void px_nam_lp_split(int s) { pxn_lp_split(s); }
 int px_nam_lp_split_now(void) { return pxn_lp_split_now(); }
 void px_nam_helper(int (*run)(void (*fn)(uint32_t), uint32_t arg), int (*wait)(void)) { pxn_set_helper(run, wait); }

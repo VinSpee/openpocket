@@ -123,6 +123,11 @@ void pxn_lp_reset(void);
 void pxn_lp_split(int s);
 int pxn_lp_split_now(void);
 uint32_t pxn_lp_queued(void);
+int pxn_lp_split_used(void);             /* v40.4: the s of the last block handed over (it follows the s asked: px_nam.c) */
+void pxn_lp_force(void);                 /* the next block takes the s asked, waiting for the other core if it must */
+uint32_t pxn_lp_handed(void);            /* v40.4: blocks handed over so far */
+int pxn_lp_before(uint32_t upto);        /* 1 = a block handed over before that count is not finished */
+uint32_t pxn_lp_share(int s);            /* the network's work in layers 0..s, in 1/1024 of the whole */
 void pxn_lp_a(pxn_model *m, const float *in, float *out);
 int pxn_lp_b(pxn_model *m);
 int pxn_lp_equiv(pxn_model *m);          /* against one core, the other core serving: blocks that differ */
