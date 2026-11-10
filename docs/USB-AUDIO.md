@@ -165,8 +165,8 @@ on, every knob at 100) and over the 23 factory presets with an amp. It also hold
 | --- | --- | --- | --- |
 | Setting off | one flag tested | 0.0 to +0.6 (mean +0.2), the spread between two runs | -1 to +1 (mean 0.0) |
 | On, no program using the device | 0.01 % | not measured apart | not measured apart |
-| The computer records | 0.38 % | -0.5 to +1.0 (mean +0.6) | 0 to +2 (mean +0.4) |
-| The computer records and plays | 1.13 % (playing alone: 0.75 %) | -0.4 to +2.0 (mean +1.3) | 0 to +2 (mean +1.2) |
+| The computer records | 0.42 % | -0.5 to +1.0 (mean +0.6) | 0 to +2 (mean +0.4) |
+| The computer records and plays | 1.16 % (playing alone: about 0.75 %) | -0.4 to +2.0 (mean +1.3) | 0 to +2 (mean +1.2) |
 
 No chain engaged the safety bypass (above 93 % for 8 blocks) and no block was late, also with a synthetic guitar at
 the input, which costs more than a quiet one. The heaviest chain, W4, went from 82.4 % to 83.4 % with both streams
