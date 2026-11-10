@@ -94,6 +94,8 @@ await page.waitForFunction(() => /PocketX_924/.test(document.getElementById("msg
   document.getElementById("msg").classList.contains("err"), null, { timeout: 240000 });
 const msg = await page.textContent("#msg");
 ok(/PocketX_924/.test(msg), `result: ${msg}`);
+ok(/OpenPocket v24/.test(msg) && await page.isVisible("#next") && /WHATS-NEW-v24\.md$/.test(await page.getAttribute("#notes", "href")), "the result names the version and links the editor and the release notes");
+ok(await page.$$eval("#steps span", (s) => s.length > 0 && s.every((e) => e.className === "done")), "every stage shows done, none still lit");
 await page.waitForTimeout(1500);
 ok(/OpenPocket v24/.test(await page.textContent("#d-fw")), "the page now sees OpenPocket v24");
 await page.screenshot({ path: join(OUT, "page_3_done.png"), fullPage: true });
@@ -103,6 +105,8 @@ ok(simLog.some((l) => /step2 rc=0/.test(l)), "the simulated pedal wrote the new 
 sim.stdin.end(); sim = null; simLog.length = 0; buf = "";
 await page.reload();
 await page.waitForTimeout(300);
+ok(!(await page.isVisible("#rescueOn")), "rescue mode sits in the advanced section, folded");
+await page.click("details summary[data-t=rescue]");
 await page.check("#rescueOn");
 await page.waitForFunction(() => /rescue mode armed/.test(document.getElementById("log").textContent), null, { timeout: 15000 });
 await page.click("#connect");
