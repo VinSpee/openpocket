@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // OpenPocket web editor: the MIDI section. What is connected; the pedal's own Control Change numbers, named for the
 // current preset; controls learned from another MIDI device (a foot controller on this computer), which this page
-// passes on to the pedal as editor commands while it is open; and a monitor of what arrives. docs/MIDI.md, docs/pxmidi.js.
+// passes on to the pedal as editor commands while it is open; a monitor of what arrives; and the USB AUDIO setting
+// (docs/USB-AUDIO.md). docs/MIDI.md, docs/pxmidi.js.
 
-import { app, $, h, icon, on, emit, blk, typeOf, slotName } from "./edcore.js";
+import { app, $, h, icon, on, emit, blk, typeOf, slotName, say, busy, confirmDialog } from "./edcore.js";
 import { sendParam, setOn, setType } from "./edsound.js";
 import { selectPreset, stepPreset } from "./edpresets.js";
 import { decode, ccParam, ccOn, ccToggle, ccType, ccTarget, resolve, action, learn, cleanMappings, sameTgt, NPAR } from "./pxmidi.js";
@@ -15,6 +16,7 @@ let learnt = "";                      // what the last learning ended with, said
 let scope = "all";                    // new controls work in every preset ("all") or only in the current one ("preset")
 const log = [];                       // the monitor's lines, newest first
 const heard = new Map();              // controller input id -> its name
+let ua = null;                        // the pedal's USB AUDIO reply (protocol 4), null when it has none
 
 function loadCfg() {
   try { const j = JSON.parse(localStorage.getItem(KEY) || "{}"); cfg = { mappings: cleanMappings(j.mappings), pc: j.pc !== false }; } catch (_) { }
@@ -132,7 +134,37 @@ function renderConn() {
       h("dt", { text: "Controllers" }), h("dd", { id: "midictl" }, others.length ? others.map((n) => h("span", { class: "chip ok", text: n })) : h("span", { class: "dim", text: "None. Plug a MIDI controller into this computer and it shows up here." }))),
     h("p", { class: "dim" }, "The pedal's own MIDI settings are on the pedal: ", h("b", { text: "hold FX for 0.8 s" }),
       " for CHANNEL (OMNI or 1 to 16), SEND and CLOCK > DELAY. The editor cannot read or change them. ",
-      h("a", { href: "https://github.com/isod89/openpocket/blob/main/docs/MIDI.md", target: "_blank", rel: "noopener" }, "The MIDI reference ", icon("ext"))));
+      h("a", { href: "https://github.com/isod89/openpocket/blob/main/docs/MIDI.md", target: "_blank", rel: "noopener" }, "The MIDI reference ", icon("ext"))),
+    ua && [
+      h("h3", { id: "uah", text: "USB audio" }),
+      h("p", { class: "dim", text: "With USB audio on, the pedal is also a USB sound card, with no driver to install (stereo, 16 bit, 44.1 kHz). " +
+        "The computer records the pedal's sound, and what the computer plays comes out of the pedal's output. A change takes the pedal off USB " +
+        "for a second; the editor connects again by itself." }),
+      h("div", { class: "learnbar" },
+        h("span", { id: "uastate", text: !ua.on ? "Off" : ua.recording && ua.playing ? "On: the computer records and plays"
+          : ua.recording ? "On: the computer records" : ua.playing ? "On: the computer plays" : "On" }),
+        h("span", { class: "grow" }),
+        h("button", { type: "button", class: "btn small", id: "uabtn", text: ua.on ? "Turn off" : "Turn on", onclick: toggleUsbAudio }))]);
+}
+
+// ---- USB audio (v40.6, protocol 4; docs/USB-AUDIO.md) ----
+async function loadUsbAudio() {
+  ua = null;
+  if (!app.ed || !app.ed.hasUsbAudio) return;
+  try { const r = await app.ed.usbAudio(); ua = r.rc === 1 ? null : r; } catch (_) { }   // (rc 1: this firmware has no USB audio)
+}
+async function toggleUsbAudio() {
+  if (!app.ed || busy() || !ua) return;
+  const on_ = !ua.on;
+  if (!await confirmDialog({ title: `Turn USB audio ${on_ ? "on" : "off"}?`, confirm: on_ ? "Turn on" : "Turn off",
+    body: "The sound stops for a moment while the pedal saves the setting, then the pedal leaves USB for a second and the editor connects again." })) return;
+  try {
+    const r = await app.ed.usbAudio(on_);
+    if (r.rc) { say("The pedal could not save the setting.", "err"); return; }
+  } catch (e) { say(`Not changed: ${e.message}`, "err"); return; }
+  // the pedal leaves USB 150 ms after its reply and is back about 3 s later, as another USB device
+  say(`USB audio is ${on_ ? "on" : "off"}. Waiting for the pedal to come back on USB…`, "ok");
+  emit("replug", 3500);
 }
 
 // ---- the map ----
@@ -216,7 +248,11 @@ const renderAll = () => { renderConn(); renderMap(); renderMonitor(); };
 
 export function initMidi() {
   loadCfg();
-  on("conn", () => { learning = null; if (app.conn === "ready") { listen(); app.ed.onMidi = fromPedal; } renderAll(); });
+  on("conn", async () => {
+    learning = null;
+    if (app.conn === "ready") { listen(); app.ed.onMidi = fromPedal; await loadUsbAudio(); }
+    renderAll();
+  });
   on("ports", () => { listen(); if (app.view === "midi") { renderConn(); renderMap(); } });
   on("state", () => { if (app.view === "midi" && app.st) renderMap(); });
   on("view", () => { if (app.view === "midi") renderAll(); else { learning = null; learnt = ""; } });

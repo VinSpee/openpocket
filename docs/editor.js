@@ -2,7 +2,7 @@
 // OpenPocket web editor: the start. Finding the pedal and every way that can fail, the sections and the way between
 // them, the DSP load, the keyboard. The sections themselves: edsound.js, edpresets.js, edmodels.js, edmidi.js.
 
-import { app, $, h, icon, on, emit, say, busy } from "./edcore.js";
+import { app, $, h, icon, on, emit, say, busy, sleep } from "./edcore.js";
 import { Editor } from "./pxedit.js";
 import { initPresets, loadBank, refreshSlots, refreshBank, stepPreset, save, comparing, compareSlotChanged, compareBeforeUnload } from "./edpresets.js";
 import { initSound } from "./edsound.js";
@@ -21,6 +21,7 @@ function setConn(c) {
   $("lostbar").hidden = c !== "lost";
   $("shell").inert = c === "lost";
   if (c === "lost") $("status").textContent = "Disconnected";
+  else $("lostmsg").textContent = LOST;
   renderGate();
   emit("conn");
 }
@@ -62,6 +63,16 @@ async function connect() {
     setConn(was === "lost" ? "lost" : "notfound");
     if (was !== "lost") say(`The pedal stopped answering while it was read (${e.message}). Check the cable and try again.`, "err");
   } finally { connecting = false; }
+}
+const LOST = "The pedal stopped answering. Plug it back in: the editor reconnects by itself.";
+// the pedal leaves USB on purpose (a USB AUDIO change) and comes back as another USB device about 3 s later
+async function replug(ms) {
+  if (app.conn !== "ready") return;
+  lost();
+  $("lostmsg").textContent = "The pedal is restarting its USB connection: the editor reconnects by itself.";
+  $("status").textContent = "Reconnecting…";
+  await sleep(ms);
+  connect();
 }
 function lost() {
   if (app.conn !== "ready") return;
@@ -216,6 +227,7 @@ function renderConnPop() {
 initPresets(); initSound(); initMidi();
 await initModels();
 on("view-go", (v) => setView(v));
+on("replug", replug);
 $("reconnect").onclick = connect;
 $("tabs").onclick = (e) => { const b = e.target.closest("button"); if (b) setView(b.dataset.go); };
 $("loadpop").addEventListener("beforetoggle", (e) => { if (e.newState === "open") renderLoadPop(); });

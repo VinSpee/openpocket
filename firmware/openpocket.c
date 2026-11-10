@@ -752,8 +752,9 @@ static void app_main(void)
     op_stage(ST_PRESET, "PRESET...");
     load_preset(cur_preset);
 #if LED_PROBE
-    px_usb_start();                      /* USB-MIDI + update entry: the web installer is the way back */
+    px_flash_boot();
     px_store_boot();
+    px_usb_start();                      /* USB-MIDI + update entry: the web installer is the way back */
     fm1_irq_enable_all();                /* audio_start does it in the normal build; here no audio is started */
     led_probe_run();                     /* never returns */
 #endif
@@ -761,8 +762,9 @@ static void app_main(void)
     audio_probe_run();
 #else
     a_hold = 1;                          /* DSP bypassed until the UI is up and 1.5 s have passed */
-    px_usb_start();                      /* USB-MIDI device + update entry (web installer) */
-    px_store_boot();                     /* the saved presets; start on the last one saved */
+    px_flash_boot();                     /* the flash's size; a staging area an update left */
+    px_store_boot();                     /* the saved presets and the settings; start on the last one saved */
+    px_usb_start();                      /* USB-MIDI device + update entry (web installer); v40.6: USB audio when set */
     nm_scan();                           /* v37: the NAM user models (names, levels) */
     ir_scan();                           /* v38: the user cabinet IRs (names) */
 #if DSP_CPU1

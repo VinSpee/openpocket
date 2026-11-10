@@ -645,6 +645,31 @@ const free = (kind, slot) => page.locator(`#${kind}list .free [data-slot="${slot
   ok((await srow("nam", 0).textContent()).includes("PLEXI LEAD") && /T3K/.test(await srow("nam", 0).textContent()), "after the reconnection the slots still know where their captures came from");
 }
 
+// ---- v40.6: USB audio (MIDI section): off by default; the button asks, sets it, and the editor connects again by itself ----
+{
+  await go("midi");
+  await page.waitForSelector("#uabtn", { timeout: 4000 });
+  ok(await page.isVisible("#uah") && await text("#uastate") === "Off" && await text("#uabtn") === "Turn on",
+    "USB audio: shown in the MIDI section, off by default");
+  await page.click("#uabtn");
+  await dialog();
+  ok(/Turn USB audio on\?/.test(await text("#dlg")) && /leaves USB/.test(await text("#dlg")), "USB audio: asks first, and says the pedal leaves USB");
+  await page.click("#dlg-ok");
+  await page.waitForSelector('body[data-conn="lost"]', { timeout: 4000 });
+  ok(/restarting its USB connection/.test(await text("#lostmsg")), "USB audio: while the pedal is off USB, the bar says why");
+  const back = (state) => page.waitForFunction((t) => document.body.dataset.conn === "ready" && document.getElementById("uastate") &&
+    document.getElementById("uastate").textContent === t, state, { timeout: 20000 });
+  await back("On");
+  ok(await text("#uabtn") === "Turn off" && await page.isHidden("#lostbar"), "USB audio: on, and the editor connected again");
+  await shot("editor_9_usb_audio.png");
+  await page.click("#uabtn");
+  await dialog();
+  await page.click("#dlg-ok");
+  await page.waitForSelector('body[data-conn="lost"]', { timeout: 4000 });
+  await back("Off");
+  ok(await text("#uabtn") === "Turn on", "USB audio: off again");
+}
+
 // ---- phone width ----
 await page.setViewportSize({ width: 390, height: 844 });
 await sleep(300);

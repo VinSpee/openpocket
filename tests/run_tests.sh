@@ -13,6 +13,9 @@
 #  - NAM: engine/px_nam.c against tools/nam_a2.py with every factory model (needs numpy)
 #  - MIDI: the musical-MIDI code (firmware/px_midi.h) on a PC: decoder, CC map, messages sent, settings byte, clock
 #  - preset store: save / reload / power cut at every step of a save (firmware/px_store.h on a simulated flash)
+#  - USB audio (v40.6): the USB device code and the audio glue (bsp/chip/usb.c, firmware/px_uaudio.h) against a model of
+#    the controller and a computer: with the setting off the descriptors are the earlier device's byte for byte; with
+#    it on, the descriptors, the requests, 10 minutes of each stream with the clocks apart (no gap, no repeat)
 #  - LED map + lights driver (led_probe.h, px_leds.h): PC7 enable after the first byte, the 595 timing, the table
 #  - button lights (px_lights.h): each block lights its button, FX for its group, HOME blinks in the tuner
 #  - packages: tools/pxpkg.py rebuilds the official PocketX_016 app area byte for byte (needs the official file)
@@ -53,6 +56,16 @@ $CC -O2 -DPXN_EMUVEC -Iengine tests/engine/nam_test.c engine/px_nam.c -o build/n
 if python3 -c "import numpy" 2>/dev/null; then mkdir -p build/nam; python3 tests/test_nam.py build/nam_test > build/nam/log.txt || { cat build/nam/log.txt; exit 1; }; tail -1 build/nam/log.txt; else echo "(numpy not installed: NAM comparison skipped)"; fi
 echo "== preset store"
 $CC -O1 -Iengine tests/test_store.c engine/px_dsp.c firmware/px_math.c -lm -o build/test_store && build/test_store | tail -2
+echo "== USB audio (the device code and the audio glue against a model of the controller and a computer)"
+UAF="-O1 -Wall -Wno-unused-function -Wno-int-to-pointer-cast -Iengine -Ifirmware -Ifirmware/bsp/chip"
+$CC $UAF tests/test_usb_audio.c -lm -o build/test_usb_audio
+$CC $UAF -DT_REF tests/test_usb_audio.c -lm -o build/test_usb_audio_ref      # the USB device as it was before v40.6
+build/test_usb_audio desc > build/usb_desc_off.txt
+build/test_usb_audio_ref > build/usb_desc_ref.txt
+if cmp -s build/usb_desc_off.txt build/usb_desc_ref.txt; then echo "USB AUDIO off: the descriptors are the earlier device's, byte for byte"
+else echo "USB AUDIO off: the descriptors differ from the earlier device's"; diff build/usb_desc_ref.txt build/usb_desc_off.txt; exit 1; fi
+build/test_usb_audio > build/usb_audio.log || { cat build/usb_audio.log; exit 1; }
+tail -1 build/usb_audio.log
 echo "== screen (every page fully drawn)"
 mkdir -p build/ui && $CC -O1 -Wall -Wno-unused-function -Iengine -Ifirmware -o build/uisim tests/uisim.c engine/px_dsp.c firmware/px_math.c -lm
 build/uisim build/ui > build/ui/log.txt

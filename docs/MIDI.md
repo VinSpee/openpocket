@@ -116,10 +116,15 @@ follow a tempo with another note value, set the delay's own TIME; this is not a 
 | CHANNEL | OMNI, 1 to 16 | OMNI |
 | SEND | ON, OFF | ON |
 | CLOCK > DELAY | ON, OFF | OFF |
+| USB AUDIO | ON, OFF | OFF |
 
 The knob changes the row, PUSH goes to the next one (after the last it leaves), HOME leaves. The page also shows whether a
 host is connected and the last Program or Control Change received ("LAST: CC 25 = 127"), which is what to look at first when
 nothing happens. Leaving saves the settings only if you changed something (one flash write, about 0.3 s of silence, like SAVE).
+
+**USB AUDIO** (v40.6) is not a MIDI setting; it lives on this page because it changes what the pedal is on USB. ON makes
+the pedal a USB sound card as well as a MIDI device: see [USB-AUDIO.md](USB-AUDIO.md). The change is made when you leave
+the page, and the pedal then leaves USB for a second. MIDI works the same with it on or off.
 
 The settings are one byte in the header of the preset store (`firmware/px_store.h`). Older copies have 0 there, which means the
 defaults. A power cut while saving leaves the old or the new settings, never a broken store (tested).

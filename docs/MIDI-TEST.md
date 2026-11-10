@@ -31,7 +31,7 @@ tested (issue #1: a restart loop after power cycles in some versions, rescue mod
 
 ## 2. The MIDI page
 
-- [ ] Hold FX for about a second: the **MIDI** page opens. Rows: CHANNEL OMNI, SEND ON, CLOCK > DELAY OFF. "USB: NO HOST"
+- [ ] Hold FX for about a second: the **MIDI** page opens. Rows: CHANNEL OMNI, SEND ON, CLOCK > DELAY OFF, USB AUDIO OFF. "USB: NO HOST"
       or "HOST CONNECTED" is right.
 - [ ] A short press of FX (not held) still cycles the effects (DRV, SFX, SYN...). It acts when you let go.
 - [ ] Knob changes the row, PUSH goes to the next row, after the last row it leaves. HOME leaves too.
