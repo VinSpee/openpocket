@@ -6,6 +6,7 @@
 #  - the two-core pipeline (PRE / NAM / POST stages) gives the plain engine's output one block later
 #  - NAM hand routines: their start-up check and dispatch with C stand-ins under the sanitizers; post5's assembly text
 #    against the C post through a model of its instructions (tests/test_post5.py)
+#  - (not run here, it needs the git history: tests/equiv.sh REF, this tree's engine against commit REF's, bit for bit)
 #  - changes without clicks (v38): knob changes glide to exactly where a full set goes, blocks on / off fade, fewer clicks
 #  - USER IR (v38): the partitioned FFT convolution against the direct FIR, slots, names
 #  - wet lanes (v39): the delay through its lane as inline bit for bit, the reverb's tail lag frames later, the pipeline
