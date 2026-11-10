@@ -23,6 +23,8 @@
 #  - pedal skin: its input mapping (tools/sim/pedal-input.js)
 #  - sound: the WebAssembly engine on known signals, against the native build; the bundled loops against their manifest
 #  - Chocolate Plus files: tools/chocolate/fcp.py against a made-up export
+#  - editor: docs/pxedit.js against the simulated pedal (tests/edsim.c), PING's figures, and the editor's own logic
+#    (docs/pxmidi.js: the Control Change map against docs/MIDI.md, learned controls; docs/pxlib.js: the model library)
 #  - pages: docs/index.html, docs/editor.html and the pedal skin in headless Chromium (needs Playwright: npm i playwright
 #    && npx playwright install chromium)
 set -e
@@ -96,6 +98,7 @@ echo "== editor"
 $CC -O1 -Wall -Wno-unused-function -o build/edsim tests/edsim.c engine/px_dsp.c firmware/px_math.c -lm
 node tests/test_editor.mjs
 node tests/test_ping.mjs
+node tests/test_editor_logic.mjs
 echo "== log channel (tools/op.mjs log)"
 $CC -O1 -Wall -Wno-unused-function -DOP_BLE_TEST=1 -o build/edsim_diag tests/edsim.c engine/px_dsp.c firmware/px_math.c -lm
 node tests/test_log.mjs
