@@ -132,6 +132,7 @@ static int dsp_bypass;
 static uint32_t ed_load(void) { return dsp_load; }
 static uint32_t ed_flags(void) { return (dsp_bypass ? 1u : 0u) | 2u; }
 static uint32_t ed_stat(uint32_t k) { return k < 2u ? dsp_load : k < 4u ? 0u : 4096u; }
+static uint32_t ed_ua_stat(uint32_t k) { (void)k; return 0u; }   /* v40.6: USB audio's figures: no computer records here */
 
 /* ---- SysEx in/out ---- */
 static uint8_t frame[2048];
@@ -451,12 +452,9 @@ int main(int argc, char **argv)
             fclose(f);
         }
     }
-    st_ok = 1;
-    st_load();
+    px_store_boot();                                    /* the slots, the last one saved, the settings (as the pedal boots) */
     nm_scan();
     ir_scan();
-    cur_preset = st_last;
-    load_preset(cur_preset);
     uc.screen = -1;
     ui_invalidate();
     printf("#port OpenPocket\n");
