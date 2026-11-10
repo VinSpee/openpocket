@@ -83,6 +83,15 @@ async function leave(kind, slot) {
 }
 const freeSlot = (kind, taken = new Set()) => { const s = BANKS[kind].slots().find((x) => !x.used && !taken.has(x.slot)); return s ? s.slot : -1; };
 const usedBy = (kind) => (app.refs[kind] ? usage(app.bank, app.refs[kind]) : new Map());
+// the presets using each slot, once every preset has been read: null (with the reason shown) when one cannot be read
+async function knownUse(kind) {
+  const n = app.slots.length;
+  if (app.bank.filter(Boolean).length < n) {
+    const read = await task("Reading the presets", async (progress) => { for (let i = 0; i < n; i++) { progress(i / n); await entry(i); } return ""; });
+    if (read === undefined) return null;
+  }
+  return usedBy(kind);
+}
 const presetNames = (list) => list.map((s) => `${slotName(s)} ${app.slots[s].name}`).join(", ");
 
 // files into the library, and onto the pedal while it has room (or into `into`, one file, replacing what is there)
@@ -118,7 +127,8 @@ function sendToPedal(kind, e) {
   return replaceWith(kind, e);
 }
 async function replaceWith(kind, e) {
-  const K = KINDS[kind], use = usedBy(kind);
+  const K = KINDS[kind], use = await knownUse(kind);
+  if (!use) return;
   const to = await pickDialog({
     title: `Put ${e.name} in which slot?`, intro: `Every slot is taken: ${e.name} takes the place of the ${K.thing} you choose.`, searchable: false,
     items: BANKS[kind].slots().map((s) => ({ value: s.slot, n: tag(kind, s.slot), name: s.used ? s.name : "Empty", tag: use.get(s.slot) ? plural(use.get(s.slot).length, "preset") : "" })),
@@ -137,7 +147,9 @@ function install(kind, e, slot) {
   });
 }
 async function removeFromPedal(kind, s) {
-  const K = KINDS[kind], u = usedBy(kind).get(s.slot) || [], kept = app.held[kind].has(s.slot);
+  const K = KINDS[kind], use = await knownUse(kind);
+  if (!use) return;
+  const u = use.get(s.slot) || [], kept = app.held[kind].has(s.slot);
   const body = h("div", {},
     u.length ? h("p", { class: "warn", text: `${plural(u.length, "preset")} ${u.length === 1 ? "uses" : "use"} it: ${presetNames(u)}. ${u.length === 1 ? "It plays" : "They play"} without ${K.without} until another ${K.thing} is in ${tag(kind, s.slot)}.` }) : h("p", { text: "No saved preset uses it." }),
     h("p", { class: "dim", text: kept ? "It stays in the library on this computer: you can send it back later." : `It is not in this browser's library: to get it back you need its file again.` }));
@@ -158,7 +170,8 @@ async function renameSlot(kind, s) {
 }
 // a slot's file to another slot (or the two change places); the presets that play them follow
 async function moveSlot(kind, s) {
-  const held = app.held[kind], slots = BANKS[kind].slots(), use = usedBy(kind), ref = app.refs[kind];
+  const held = app.held[kind], slots = BANKS[kind].slots(), use = await knownUse(kind), ref = app.refs[kind];
+  if (!use) return;
   const to = await pickDialog({
     title: `Move ${s.name} to…`, intro: "Presets that use it follow it to its new slot.", searchable: false,
     items: slots.map((x) => ({ value: x.slot, n: tag(kind, x.slot), name: x.used ? x.name : "Empty", tag: x.used ? "changes places" : "",
