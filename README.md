@@ -32,6 +32,9 @@ Written from scratch for the pedal's own chip (JieLi AC791N, two cores), install
 - **MIDI over USB-C (v37)**: Program Change selects a preset, Control Change switches blocks and sets their models and
   settings, the pedal tells the computer when you change the sound, MIDI clock sets the delay time. Class-compliant, no driver;
   Bluetooth MIDI is only in the test image ([docs/BLE-TEST.md](docs/BLE-TEST.md)). Reference: [docs/MIDI.md](docs/MIDI.md), hardware test: [docs/MIDI-TEST.md](docs/MIDI-TEST.md)
+- **USB audio over USB-C (v40.6)**: with the USB AUDIO setting on (off by default: the MIDI page's fourth row, or the web
+  editor), the pedal is also a class-compliant USB sound card, 16-bit stereo at 44.1 kHz, no driver: the computer records
+  the pedal's sound and plays through its output, beside MIDI. [docs/USB-AUDIO.md](docs/USB-AUDIO.md)
 - What changed: [v40](docs/WHATS-NEW-v40.md), [v39](docs/WHATS-NEW-v39.md), [v38](docs/WHATS-NEW-v38.md), [v37](docs/WHATS-NEW-v37.md), [since v33](docs/WHATS-NEW-v34-v36.md)
 - **New screen (v36)**: a PLAY page readable from a distance (preset number and name, amp, chain in colour) and an EDIT
   page with big values and bars
@@ -84,10 +87,20 @@ builds the packages first when `docs\firmware` has none (`INSTALL-OFFLINE.bat bu
 ## Preset editor
 
 From OpenPocket **v32**, the **Preset editor** page (`editor.html`, linked from the installer) edits the pedal live over
-USB, in Chrome or Edge: the 52 presets (load, save, save as, move up / down, back to factory), the current sound (every
-block, type and setting, on / off, the block order by dragging the tiles, the name), and preset files (export one or
-all 52 as JSON, import one to try it or many back into their slots). What you change on the page plays at once, and
-what you change on the pedal shows on the page. The protocol: [`docs/EDITOR-PROTOCOL.md`](docs/EDITOR-PROTOCOL.md).
+USB, in Chrome or Edge. It has four sections:
+
+- **Presets:** the 52 presets with what each is made of, search, load, rename, copy, move (the others shift), back to
+  factory, export one or back up all 52 as JSON, import one to try it or many back into their slots. Anything that
+  replaces a preset says so first and has an Undo.
+- **Sound:** the current sound: every block, type and setting, on / off, the block order by dragging or from the
+  keyboard, the name, Compare with the saved preset, and the DSP load with its peaks.
+- **Models:** the 16 NAM user slots and the 8 cabinet IR slots: add files, see which presets use a slot, rename, move
+  (the presets follow), remove; TONE3000's catalogue for A2 captures. The files you add are also kept in the browser,
+  because the pedal cannot send one back ([docs/NAM.md](docs/NAM.md)).
+- **MIDI:** the pedal's Control Change numbers named for the current preset, and controls learned from a controller
+  plugged into the computer ([docs/MIDI.md](docs/MIDI.md)).
+
+What you change on the page plays at once, and what you change on the pedal shows on the page. The protocol: [`docs/EDITOR-PROTOCOL.md`](docs/EDITOR-PROTOCOL.md).
 
 ## Build
 
@@ -120,8 +133,9 @@ replaces the files with this folder's.
   refused before anything is erased, way back to the official firmware (its loader staged and checked);
 - the page itself in headless Chromium (Playwright), clicking Connect and Install.
 - the preset editor against a simulated pedal that runs the pedal's real editor code (`px_editor.h`) and preset store
-  on a simulated flash: every command, pushes both ways, a power cycle; then the editor page in Chromium (sliders,
-  drag and drop, save, move, export / import).
+  on a simulated flash: every command, pushes both ways, a power cycle; then the editor page in Chromium (every
+  section: settings, drag and drop, save and undo, move, export / import, models and their library, TONE3000
+  simulated, learned MIDI controls, a pedal unplugged and back, phone width).
 
 To play with the simulated pedal yourself (screen, footswitches, knob, the installer and editor pages, and its sound,
 with bundled guitar loops, a file or an input of your computer), run `make sim` and open `http://127.0.0.1:8766/`; see [`docs/SIMULATOR.md`](docs/SIMULATOR.md).
