@@ -280,7 +280,7 @@ export class Editor {
     return rc;
   }
   async irErase(slot) { return (await this.request(C.IR_ERASE, [slot], 6000))[1]; }
-  // v40.6 (protocol 4): USB AUDIO, the pedal as a USB sound card (docs/USB-AUDIO.md). usbAudio() reads the setting and
+  // v42 (protocol 4): USB AUDIO, the pedal as a USB sound card (docs/USB-AUDIO.md). usbAudio() reads the setting and
   // the streams; usbAudio(true / false) sets it first: the pedal then leaves USB for a second and comes back as a
   // device with or without the audio streams, so this connection ends (connect again after about 3 s).
   // -> { on, rc (0 ok, 1 not in this firmware, 2 flash), recording, flowing, playing, sounding, counts: {...} }

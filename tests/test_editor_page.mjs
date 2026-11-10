@@ -283,7 +283,7 @@ await shot("editor_5_imported.png");
   await shot("editor_7_tone3000.png");
 }
 
-// ---- v40.6: USB audio: off by default; the button asks, sets it, and the editor connects again by itself ----
+// ---- v42: USB audio: off by default; the button asks, sets it, and the editor connects again by itself ----
 {
   ok(await page.isVisible("#uah") && await page.textContent("#uastate") === "Off" && await page.textContent("#uabtn") === "Turn on",
     "USB audio: shown, off by default");

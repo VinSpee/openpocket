@@ -1,7 +1,7 @@
 # OpenPocket editor protocol (SysEx over USB-MIDI)
 
 The web editor (`docs/editor.html`, `docs/pxedit.js`) talks to the pedal with this protocol. The firmware side is
-`firmware/px_editor.h`; `tests/edsim.c` runs the same code on a PC for the tests. Protocol version 4 (OpenPocket v40.6: `USB_AUDIO`, command 28; version 3: v38, the cabinet IR commands 24..27; version 2: v37, without them;
+`firmware/px_editor.h`; `tests/edsim.c` runs the same code on a PC for the tests. Protocol version 4 (OpenPocket v42: `USB_AUDIO`, command 28; version 3: v38, the cabinet IR commands 24..27; version 2: v37, without them;
 version 1: v32 to v36, also without the NAM commands 19..22). A later version only adds commands: an editor written for
 an earlier one works unchanged.
 

@@ -13,7 +13,7 @@
 #  - NAM: engine/px_nam.c against tools/nam_a2.py with every factory model (needs numpy)
 #  - MIDI: the musical-MIDI code (firmware/px_midi.h) on a PC: decoder, CC map, messages sent, settings byte, clock
 #  - preset store: save / reload / power cut at every step of a save (firmware/px_store.h on a simulated flash)
-#  - USB audio (v40.6): the USB device code and the audio glue (bsp/chip/usb.c, firmware/px_uaudio.h) against a model of
+#  - USB audio (v42): the USB device code and the audio glue (bsp/chip/usb.c, firmware/px_uaudio.h) against a model of
 #    the controller and a computer: with the setting off the descriptors are the earlier device's byte for byte; with
 #    it on, the descriptors, the requests, 10 minutes of each stream with the clocks apart (no gap, no repeat)
 #  - LED map + lights driver (led_probe.h, px_leds.h): PC7 enable after the first byte, the 595 timing, the table
@@ -59,7 +59,7 @@ $CC -O1 -Iengine tests/test_store.c engine/px_dsp.c firmware/px_math.c -lm -o bu
 echo "== USB audio (the device code and the audio glue against a model of the controller and a computer)"
 UAF="-O1 -Wall -Wno-unused-function -Wno-int-to-pointer-cast -Iengine -Ifirmware -Ifirmware/bsp/chip"
 $CC $UAF tests/test_usb_audio.c -lm -o build/test_usb_audio
-$CC $UAF -DT_REF tests/test_usb_audio.c -lm -o build/test_usb_audio_ref      # the USB device as it was before v40.6
+$CC $UAF -DT_REF tests/test_usb_audio.c -lm -o build/test_usb_audio_ref      # the USB device as it was before v42
 build/test_usb_audio desc > build/usb_desc_off.txt
 build/test_usb_audio_ref > build/usb_desc_ref.txt
 if cmp -s build/usb_desc_off.txt build/usb_desc_ref.txt; then echo "USB AUDIO off: the descriptors are the earlier device's, byte for byte"

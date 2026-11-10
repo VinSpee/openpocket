@@ -4,7 +4,7 @@
  *   cc -O1 -Wall -Wno-unused-function -Iengine -Ifirmware -Ifirmware/bsp/chip tests/test_usb_audio.c -lm -o build/test_usb_audio
  *   build/test_usb_audio            the tests
  *   build/test_usb_audio desc       the device and configuration descriptors with USB AUDIO off, as hex
- * Built with -DT_REF (FELUCCA_UAC 0: the USB device every OpenPocket before v40.6 was), `desc` prints that device's;
+ * Built with -DT_REF (FELUCCA_UAC 0: the USB device every OpenPocket before v42 was), `desc` prints that device's;
  * tests/run_tests.sh compares the two, byte for byte.
  * Checked here:
  *   - USB AUDIO off: the descriptors a computer reads, and what it gets when it asks for the streams (refused);

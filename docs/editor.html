@@ -498,7 +498,7 @@ async function namClear(m) {
   finally { busy = false; }
 }
 
-// ---- v40.6: USB audio (protocol 4; docs/USB-AUDIO.md) ----
+// ---- v42: USB audio (protocol 4; docs/USB-AUDIO.md) ----
 let ua = null;
 async function loadUa() {
   let on = !!(ed && ed.hasUsbAudio);

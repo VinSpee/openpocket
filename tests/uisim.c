@@ -182,7 +182,7 @@ int main(int argc, char **argv)
     midi_push(); midi_knob(1); mid_usb_up = 1; mid_last[0] = PXM_CC; mid_last[1] = 25; mid_last[2] = 127; midi_draw(); shot(d, "midi_send_off_host_cc");
     midi_push(); midi_knob(1); mid_last[0] = PXM_PC; mid_last[1] = 11; midi_draw(); shot(d, "midi_clock_on_pc");
     mid_c1_off = 2; midi_draw(); shot(d, "midi_core2_off_late"); mid_c1_off = 0; midi_draw();   /* v41: the 2nd core retired */
-    /* v40.6: the fourth row, USB AUDIO: the setting follows the row only when the page is left */
+    /* v42: the fourth row, USB AUDIO: the setting follows the row only when the page is left */
     midi_push(); midi_knob(1); midi_draw(); shot(d, "midi_usb_audio_on");
     if (px_ua_on) { printf("midi: USB AUDIO must not change while the page is open\n"); return 1; }
     midi_push(); poison(); uc.screen = -1; ui_invalidate(); ui_render(); status();

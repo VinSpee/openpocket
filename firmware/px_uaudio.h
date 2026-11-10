@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * OpenPocket — USB audio (v40.6, docs/USB-AUDIO.md): the pedal as a class-compliant USB sound card.
+ * OpenPocket — USB audio (v42, docs/USB-AUDIO.md): the pedal as a class-compliant USB sound card.
  *
  * The USB side is felucca-bsp's (bsp/chip/usb.c, FELUCCA_UAC and FELUCCA_UAC_OUT: USB Audio Class 1, both streams on
  * endpoint 4, isochronous, 16-bit stereo at 44.1 kHz; its descriptors, its rings and their pacing). This file is the

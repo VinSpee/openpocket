@@ -18,7 +18,7 @@ static px_midi_clock_t mid_clk;
 static void midi_persist(void)                  /* the page's HOME: save the settings (the sound is not touched) */
 {
     st_midi = px_midi_cfg_pack(&mid_cfg);
-    st_usb = (uint8_t)((st_usb & ~1u) | (px_ua_on & 1u));   /* v40.6: USB AUDIO (px_usb.h then presents the device anew) */
+    st_usb = (uint8_t)((st_usb & ~1u) | (px_ua_on & 1u));   /* v42: USB AUDIO (px_usb.h then presents the device anew) */
     ft_box(0, 186, 240, "SAVING...", &FT_MD, UI_ACC, UI_BG, 1);
     if (st_ok) (void)st_commit();
 }

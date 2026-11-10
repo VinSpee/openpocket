@@ -137,7 +137,7 @@ const oldDly = presetFromJSON({ name: "ECHO", blocks: [{ block: "DLY", on: true,
 const newDly = presetFromJSON(presetToJSON(oldDly.preset, cat), cat, q);
 ok(oldDly.preset.p[dl][0] === 40 && oldDly.warn.length === 1 && newDly.preset.p[dl][0] === 40 && newDly.warn.length === 0,
    "file: a delay TIME from before v35 keeps its time (50 -> 40 = 510 ms); a v35 file is taken as is");
-// ---- v40.6: USB AUDIO (protocol 4): off until asked for; kept in the store ----
+// ---- v42: USB AUDIO (protocol 4): off until asked for; kept in the store ----
 {
   const u0 = await ed.usbAudio();
   const u1 = await ed.usbAudio(true);

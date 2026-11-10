@@ -32,7 +32,7 @@ static void px_midi_cfg_unpack(px_midi_cfg_t *c, uint8_t b)
     c->send = (b & PXM_CFG_NOSEND) ? 0u : 1u;
     c->clock = (b & PXM_CFG_CLOCK) ? 1u : 0u;
 }
-/* v40.6: USB AUDIO (docs/USB-AUDIO.md): 1 = the pedal is a USB sound card too. The MIDI page's fourth row and the editor
+/* v42: USB AUDIO (docs/USB-AUDIO.md): 1 = the pedal is a USB sound card too. The MIDI page's fourth row and the editor
  * (USB_AUDIO) set it, the store keeps it (px_store.h, st_usb), px_usb.h presents the USB device with or without the
  * audio streams. Not in the Bluetooth test image, whose RAM is full: OP_UAUDIO 0 leaves the row and the streams out. */
 #if OP_BLE_TEST

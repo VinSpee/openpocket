@@ -10,7 +10,7 @@
  * The identity the pedal reports ("PocketX_924", "BlackBox_924") is OP_PRODUCT, which tools/pxpkg.py writes into the
  * app of each package; an image not made by pxpkg (the SD-card image) reports the default below.
  *
- * v40.6: USB audio (docs/USB-AUDIO.md), while the USB AUDIO setting is on (px_midi.h px_ua_on, off by default). The
+ * v42: USB audio (docs/USB-AUDIO.md), while the USB AUDIO setting is on (px_midi.h px_ua_on, off by default). The
  * pedal is then a class-compliant USB sound card as well (USB Audio Class 1, felucca-bsp's streams in usb.c, both on
  * endpoint 4, isochronous): the computer records the pedal's sound and plays through its output. 16-bit stereo at
  * 44.1 kHz. With the setting off the USB device is the same as before, byte for byte (tests/test_usb_audio.c).
@@ -136,7 +136,7 @@ static void ota_commit(const uint8_t *parm)
 }
 
 #if OP_UAUDIO
-#include "px_uaudio.h"         /* v40.6: the blocks to and from the computer, the setting, the figures */
+#include "px_uaudio.h"         /* v42: the blocks to and from the computer, the setting, the figures */
 #endif
 
 /* ---- boot / main loop ---- */
@@ -149,7 +149,7 @@ static void px_flash_boot(void)                 /* interrupts still off (before 
     if (px_flash_ok)
         ota_boot_cleanup();                     /* a staging area left by an update: the SPL must not re-enter it */
 }
-/* after px_store_boot (v40.6): the computer must find the audio streams, or not, from its first question on */
+/* after px_store_boot (v42): the computer must find the audio streams, or not, from its first question on */
 static void px_usb_start(void)                  /* interrupts still off */
 {
 #if OP_UAUDIO

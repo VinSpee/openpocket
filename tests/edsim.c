@@ -132,7 +132,7 @@ static int dsp_bypass;
 static uint32_t ed_load(void) { return dsp_load; }
 static uint32_t ed_flags(void) { return (dsp_bypass ? 1u : 0u) | 2u; }
 static uint32_t ed_stat(uint32_t k) { return k < 2u ? dsp_load : k < 4u ? 0u : 4096u; }
-static uint32_t ed_ua_stat(uint32_t k) { (void)k; return 0u; }   /* v40.6: USB audio's figures: no computer records here */
+static uint32_t ed_ua_stat(uint32_t k) { (void)k; return 0u; }   /* v42: USB audio's figures: no computer records here */
 
 /* ---- SysEx in/out ---- */
 static uint8_t frame[2048];

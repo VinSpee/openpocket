@@ -34,7 +34,7 @@ typedef char st_size_check[(sizeof(px_preset_t) < ST_SLOT && ST_NSLOT == 52u) ? 
 #endif
 
 /* pad[0]: the MIDI settings (px_midi.h, px_midi_cfg_pack); 0 = the defaults, which is what every earlier save wrote.
- * pad[1] (v40.6): bit 0 = USB AUDIO on (px_midi.h, px_ua_on); the other bits 0. 0 = off, as every earlier save wrote */
+ * pad[1] (v42): bit 0 = USB AUDIO on (px_midi.h, px_ua_on); the other bits 0. 0 = off, as every earlier save wrote */
 typedef struct { uint32_t magic, seq; uint16_t crc; uint8_t ver, nslot, last, pad[3]; } st_hdr_t;   /* 16 B */
 static uint8_t st_slot[ST_NSLOT][ST_SLOT] __attribute__((aligned(4)));
 static uint32_t st_seq, st_cur;                 /* sequence of the copy in use, its base (0: none yet) */

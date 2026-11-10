@@ -522,7 +522,7 @@ static void save_confirm(void)
 /* ===================================================== MIDI page ======== */
 /* hold FX: the MIDI settings (docs/MIDI.md). KNOB changes the selected row, PUSH moves to the next row and, after the
  * last one, leaves; HOME leaves. The settings are saved (a flash write, as SAVE) only if something changed.
- * v40.6: a fourth row, USB AUDIO (docs/USB-AUDIO.md): the row shows mi_ua, and the setting (px_ua_on) follows only on
+ * v42: a fourth row, USB AUDIO (docs/USB-AUDIO.md): the row shows mi_ua, and the setting (px_ua_on) follows only on
  * leaving, because a change takes the pedal off USB for a second. */
 #if OP_UAUDIO
 enum { MI_CHAN, MI_SEND, MI_CLOCK, MI_UAUDIO, MI_ROWS };
@@ -563,7 +563,7 @@ static void midi_draw(void)
     v[MI_UAUDIO][0] = 0;
     b_str(v[MI_UAUDIO], mi_ua ? "ON" : "OFF");
 #endif
-    for (uint32_t r = 0; r < MI_ROWS; r++) {       /* (v40.6: four rows of 30 px; three of 36 before) */
+    for (uint32_t r = 0; r < MI_ROWS; r++) {       /* (v42: four rows of 30 px; three of 36 before) */
         uint32_t y = 36u + r * 30u;
         uint16_t bg = r == mi_row ? C_CARD : UI_BG;
         lcd_rect(0, y, 240, 28, bg);

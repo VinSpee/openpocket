@@ -264,7 +264,7 @@ int main(void)
             CHECK(bad == 0 && olds > 0 && news > 0, "settings: a power cut during a settings save leaves the old or the new, never a broken store");
         }
     }
-    /* v40.6: the USB AUDIO setting rides in the header too (its second spare byte) */
+    /* v42: the USB AUDIO setting rides in the header too (its second spare byte) */
     {
         px_preset_t q;
         px_preset_factory(&q, 5);

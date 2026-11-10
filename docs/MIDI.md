@@ -105,7 +105,7 @@ The knob changes the row, PUSH goes to the next one (after the last it leaves), 
 host is connected and the last Program or Control Change received ("LAST: CC 25 = 127"), which is what to look at first when
 nothing happens. Leaving saves the settings only if you changed something (one flash write, about 0.3 s of silence, like SAVE).
 
-**USB AUDIO** (v40.6) is not a MIDI setting; it lives on this page because it changes what the pedal is on USB. ON makes
+**USB AUDIO** (v42) is not a MIDI setting; it lives on this page because it changes what the pedal is on USB. ON makes
 the pedal a USB sound card as well as a MIDI device: see [USB-AUDIO.md](USB-AUDIO.md). The change is made when you leave
 the page, and the pedal then leaves USB for a second. MIDI works the same with it on or off.
 

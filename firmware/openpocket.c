@@ -765,7 +765,7 @@ static void app_main(void)
     a_hold = 1;                          /* DSP bypassed until the UI is up and 1.5 s have passed */
     px_flash_boot();                     /* the flash's size; a staging area an update left */
     px_store_boot();                     /* the saved presets and the settings; start on the last one saved */
-    px_usb_start();                      /* USB-MIDI device + update entry (web installer); v40.6: USB audio when set */
+    px_usb_start();                      /* USB-MIDI device + update entry (web installer); v42: USB audio when set */
     nm_scan();                           /* v37: the NAM user models (names, levels) */
     ir_scan();                           /* v38: the user cabinet IRs (names) */
 #if DSP_CPU1

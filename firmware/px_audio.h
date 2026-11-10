@@ -120,7 +120,7 @@ static void a_commit(void) { if (a_kpend) { px_engine_knobs(&g_eng, &a_kp); a_kp
 static uint8_t a_pf[PX_NBLK + 1];
 static uint32_t a_wcut;                                /* v39: wet blocks cut short so far (the footer, when not 0) */
 static volatile uint8_t a_nan;                         /* engine output a NaN/Inf: needs a reset */
-/* v40.6: USB audio (px_usb.h, docs/USB-AUDIO.md). While the USB AUDIO setting is on, each output block goes through
+/* v42: USB audio (px_usb.h, docs/USB-AUDIO.md). While the USB AUDIO setting is on, each output block goes through
  * px_ua_block in a_dec (CPU0, the I2S interrupt): the block to the computer, the computer's playback into the output.
  * a_uat: the ticks it took, part of CPU0's work in a block (0 while the setting is off: the loads are then as before) */
 static volatile uint8_t a_ua;
@@ -639,7 +639,7 @@ static void a_dec(void *priv, uint8_t *data, int len, uint8_t ch)     /* output 
     if (n > A_FR) n = A_FR;
     for (uint32_t i = 0; i < n; i++) d[2u * i] = d[2u * i + 1u] = a_res[i];
 #if OP_UAUDIO
-    if (a_ua) {                                        /* v40.6: USB audio */
+    if (a_ua) {                                        /* v42: USB audio */
         const uint32_t t = fm1_ticks();
         px_ua_block(d, n);
         a_uat = fm1_ticks() - t;

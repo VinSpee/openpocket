@@ -1,4 +1,4 @@
-# USB audio: the pedal as a sound card (v40.6)
+# USB audio: the pedal as a sound card (v42)
 
 With the **USB AUDIO** setting on, the pedal is a USB sound card as well as a USB-MIDI device. A computer records the
 pedal's sound over the USB-C cable, and what the computer plays comes out of the pedal's output and headphones. The

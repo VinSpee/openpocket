@@ -10,7 +10,7 @@
  * The including file provides: PRESET, cur_preset, load_preset, ui_blk / ui_mode / ui_item (ui.h), st_gen, the
  * store (px_store.h), BLK_COL (ui_colors.h), ota_frame_get / ota_frame_done / ota_wire_send, ms_now, OP_VERSION,
  * FELUCCA_ID_PTR, ed_load / ed_flags (the DSP load for PING), and (v37) the NAM user models (px_models.h) with
- * nm_changed(slot), called after a slot was written or erased; (v40.6) px_ua_on (px_midi.h), st_usb, and with
+ * nm_changed(slot), called after a slot was written or erased; (v42) px_ua_on (px_midi.h), st_usb, and with
  * OP_UAUDIO ed_ua_stat(k), USB audio's state (k = 0) and its ED_UA_STATS counts (px_uaudio.h).
  * An image with a log channel also defines ED_DIAG_LINES
  * and ed_diag_line(i, out), which writes line i (at most ED_DIAG_LEN - 1 characters); without them DIAG gets no reply.
@@ -20,7 +20,7 @@
 #define ED_H0 0x7Du
 #define ED_H1 0x4Fu
 #define ED_H2 0x50u
-#define ED_PROTO 4u                             /* 4: v40.6, USB_AUDIO; 3: v38, cabinet IRs (IR_LIST .. IR_ERASE); 2: v37, NAM models */
+#define ED_PROTO 4u                             /* 4: v42, USB_AUDIO; 3: v38, cabinet IRs (IR_LIST .. IR_ERASE); 2: v37, NAM models */
 #define ED_NAME_MAX 13u
 #define ED_P_SIZE 110u
 #define ED_UA_STATS 17u                         /* USB_AUDIO's counts after the state (ed_ua_stat 1..17) */
@@ -32,7 +32,7 @@ enum { ED_INFO = 1, ED_CAT_BLOCK, ED_CAT_TYPE, ED_TEXTS, ED_STATE, ED_SET, ED_OR
        ED_FOCUS, ED_LIST, ED_SLOT_GET, ED_SLOT_PUT, ED_COMMIT, ED_SAVE, ED_WATCH, ED_PING,
        ED_NAM_LIST, ED_NAM_WRITE, ED_NAM_COMMIT, ED_NAM_ERASE, ED_DIAG,
        ED_IR_LIST, ED_IR_WRITE, ED_IR_COMMIT, ED_IR_ERASE,     /* v38: 24..27 */
-       ED_USB_AUDIO };                                         /* v40.6: 28 */
+       ED_USB_AUDIO };                                         /* v42: 28 */
 
 static uint8_t ed_out[1024];
 static uint32_t ed_n;
@@ -287,7 +287,7 @@ static void ed_handle(const uint8_t *a, uint32_t n)   /* a: the args, after the 
         ir_changed(a[0]);                              /* a sound playing that slot reloads it */
         ed_b(a[0]); ed_b((uint32_t)rc);
         break;
-    case ED_USB_AUDIO:                                 /* v40.6: the USB AUDIO setting (no argument: read), its streams */
+    case ED_USB_AUDIO:                                 /* v42: the USB AUDIO setting (no argument: read), its streams */
 #if OP_UAUDIO
         rc = 0;
         if (n >= 1u && (a[0] ? 1u : 0u) != px_ua_on) {
