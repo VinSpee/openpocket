@@ -161,7 +161,7 @@ Top centre of PLAY: the **battery** (v36), from the chip's own VBAT/4 channel (g
 `USB` when the 5 V supply is there); the tuner page shows the same reading in volts.
 
 ## MIDI over USB-C (test build v37; [MIDI.md](MIDI.md))
-**Hold FX** for 0.8 s: the MIDI page (CHANNEL OMNI or 1 to 16, SEND, CLOCK > DELAY). Program Change 0 to 51 loads slot 1 to 52;
+**Hold FX** for 0.8 s: the MIDI page (CHANNEL OMNI or 1 to 16, SEND, CLOCK > DELAY, USB AUDIO: [USB-AUDIO.md](USB-AUDIO.md)). Program Change 0 to 51 loads slot 1 to 52;
 Control Change sets the sound; the pedal sends Program Change and Control Change for what you do on it.
 
 | Block | On / off | Model | Setting 1 | 2 | 3 | 4 | 5 |
@@ -218,7 +218,7 @@ high-gain amps turned it into a constant hiss, even with nothing plugged in.
   over v24 (BYP guard at 85 %).
 
 ## USB update (v24)
-Over USB the pedal shows up as a MIDI device named "OpenPocket". The installer page (`docs/index.html`, published
+Over USB the pedal shows up as a MIDI device named "OpenPocket" (and, with the USB AUDIO setting on, a sound card: [USB-AUDIO.md](USB-AUDIO.md)). The installer page (`docs/index.html`, published
 on GitHub Pages) recognises it, installs a new version or takes the pedal back to the official firmware. During an
 update the screen shows `UPDATE` and the current step; if it fails, `FAILED -N`, then the pedal restarts on the
 previous version (nothing is written before the pedal has checked the package).
