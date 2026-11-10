@@ -56,6 +56,7 @@ export class Editor {
     this.timeout = opts.timeout || 1500;
     this.onState = null;          // (state) => {}: pushed by the pedal
     this.onLost = null;           // () => {}: the pedal stopped answering
+    this.onMidi = null;           // (bytes) => {}: a musical message the pedal sent (docs/MIDI.md), not SysEx
     this.link = null;
     this.queue = Promise.resolve();
     this.waiting = null;          // { cmd, resolve, reject, timer }
@@ -66,6 +67,7 @@ export class Editor {
   // ---- transport ----
   _onMessage(data) {
     const d = data instanceof Uint8Array ? data : Uint8Array.from(data);
+    if (d.length && d[0] !== 0xF0) { if (this.onMidi) { try { this.onMidi(d); } catch (_) { } } return; }
     if (d.length < 6 || d[0] !== 0xF0 || d[1] !== H[0] || d[2] !== H[1] || d[3] !== H[2] || d[d.length - 1] !== 0xF7) return;
     const cmd = d[4], args = d.slice(5, d.length - 1);
     if (this.waiting && this.waiting.cmd === cmd) {
@@ -229,6 +231,11 @@ export class Editor {
     // v40.2: then a count and that many 2-byte figures (the DSP profile, tools/dsp.mjs): the stack figures end before it
     const base = [12, 16].find((b) => r.length > b && r.length === b + 1 + 2 * r[b]);
     if ((base ?? r.length) >= 16) Object.assign(p, { bleHeapFree: (r[12] | r[13] << 7) * 4, bleTaskStackFree: (r[14] | r[15] << 7) * 4 });
+    if (base) {                   // each block's share of an audio block's time (%), in the block order, then the NAM network's
+      const f = [], n = this.info ? this.info.nblk : 12;
+      for (let i = base + 1; i + 1 < r.length; i += 2) f.push(r[i] | r[i + 1] << 7);
+      p.prof = f.slice(0, n); p.profNam = f[n];
+    }
     return p;
   }
   // v37 (protocol 2): NAM models. list -> { nfact, nuser, models: [{ index, user, slot, used, name }] }
