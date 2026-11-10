@@ -204,7 +204,7 @@ static void ui_status(const char *s, int kind)
     uc.status[11] = 0;
     uc.status_kind = kind;
     if ((was == UI_ST_BYPASS) != (kind == UI_ST_BYPASS)) { uc.full = 1; return; }   /* the banner comes or goes: redraw the page */
-    if (kind == UI_ST_BYPASS) { uc.hint = -1; return; }                              /* (the footer shows the peak) */
+    if (kind == UI_ST_BYPASS) { uc.hint = -1; return; }                              /* (on PLAY the footer shows the peak; a block page's red footer has the instruction alone) */
     int ld = kind == UI_ST_LOADING && uc.screen == 0;     /* on a block page the MODEL row says it instead */
     ft_box(ST_X, uc.screen ? F_Y + 3u : 3u, ST_W, ld ? "LOADING" : s, &FT_SM, kind == UI_ST_LATE ? RED : ld || kind == UI_ST_HIGH ? UI_ACC : UI_DIM, UI_PANEL, 2);
 }
