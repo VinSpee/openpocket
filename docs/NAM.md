@@ -46,20 +46,30 @@ The factory presets use them; the fitted amps of v34 are still there as the othe
 1. Get a capture in the **A2** format: on [TONE3000](https://www.tone3000.com/) and in NAM's own trainer, A2 files
    are offered beside the older formats. The pedal reads the A2-Lite part of an A2 file. The older A1 files
    ("standard", "lite", "feather", "nano") do not run on the pedal and are refused with that reason.
-2. Open the web editor (`editor.html`), connect the pedal, and under **NAM models** pick a free slot and the `.nam` file.
-   The editor checks it, measures its level and sends it to the pedal (about 2 seconds; the sound mutes a moment
-   while the flash is written).
-3. In a preset, set the AMP type to **NAM** and turn **MODEL** to that slot.
+2. Open the web editor (`editor.html`), connect the pedal, and in **Models** press **Add .nam files** (several at once,
+   or drop them on the panel). The editor checks each file, measures its level and sends it to the next free slot
+   (about 2 seconds each; the sound mutes a moment while the flash is written). A file the pedal cannot play is listed
+   with the reason. An empty slot's own button loads a file into that slot.
+3. In a preset, set the AMP type to **NAM** and choose the capture in **MODEL** (your captures are listed by slot).
 
-Or press **Browse TONE3000** in the same panel: TONE3000's own tone browser opens in a pop-up (sign in there; it shows
-A2 captures only), and the chosen tone comes back with its creator and its A2 models; **Load** puts one into the
-user slot chosen beside it. This uses TONE3000's public API ([tone3000.com/api](https://www.tone3000.com/api)), its
-"Select" flow: OAuth 2.0 with PKCE and OpenPocket's publishable key (`T3K_CLIENT_ID` in `docs/pxt3k.js`), the sign-in
-coming back through `docs/t3k.html`. The access token lives in the page only while it is open. It needs that key and
+Or press **Browse TONE3000** in the same section: TONE3000's own tone browser opens in a pop-up (sign in there; it shows
+A2 captures only), and the chosen tone comes back with its creator, its description and its A2 models; **Get** puts one
+into the slot chosen beside it. While signed in, the editor also lists your TONE3000 favorites and downloads, and the
+trending and latest tones. This uses TONE3000's public API ([tone3000.com/api](https://www.tone3000.com/api)), its
+"Select" flow and the lists a free application may read (not its search, which stays in TONE3000's own browser):
+OAuth 2.0 with PKCE and OpenPocket's publishable key (`T3K_CLIENT_ID` in `docs/pxt3k.js`), the sign-in coming back
+through `docs/t3k.html`. The access token lives in the page only while it is open. It needs that key and
 `https://isod89.github.io/openpocket/t3k.html` registered as a redirect URI in TONE3000's settings.
 
+**The library.** The pedal stores a capture but cannot send it back. So the editor keeps every capture you add in the
+browser (IndexedDB, on that computer only), with where it came from. That is what lets it rename a capture, move it to
+another slot or swap two (the presets that use them are rewritten to follow), and keep more captures than the pedal has
+slots: **Remove from the pedal** leaves the capture in the library, **Send to the pedal** brings it back. A capture
+loaded from another browser shows as "not in this browser's library": load its file again to rename or move it.
+Each slot shows how many saved presets use it, and removing a capture names them first.
+
 The 16 user slots are in the pedal's flash at 0xC0000..0xE0000, outside the area a firmware update rewrites: your
-models stay through updates. Clear a slot from the same panel.
+models stay through updates.
 
 Most captures are made at 48 kHz. The pedal runs at 44.1 kHz, so such a model plays with its tone about 1.5
 semitones lower (the amp's filters sit 8% lower). The editor says so when it loads one. The factory models are
