@@ -135,7 +135,7 @@ function renderConn() {
     h("p", { class: "dim" }, "The pedal's own MIDI settings are on the pedal: ", h("b", { text: "hold FX for 0.8 s" }),
       " for CHANNEL (OMNI or 1 to 16), SEND and CLOCK > DELAY. The editor cannot read or change them. ",
       h("a", { href: "https://github.com/isod89/openpocket/blob/main/docs/MIDI.md", target: "_blank", rel: "noopener" }, "The MIDI reference ", icon("ext"))),
-    ua && [
+    ...(ua ? [
       h("h3", { id: "uah", text: "USB audio" }),
       h("p", { class: "dim", text: "With USB audio on, the pedal is also a USB sound card, with no driver to install (stereo, 16 bit, 44.1 kHz). " +
         "The computer records the pedal's sound, and what the computer plays comes out of the pedal's output. A change takes the pedal off USB " +
@@ -144,7 +144,7 @@ function renderConn() {
         h("span", { id: "uastate", text: !ua.on ? "Off" : ua.recording && ua.playing ? "On: the computer records and plays"
           : ua.recording ? "On: the computer records" : ua.playing ? "On: the computer plays" : "On" }),
         h("span", { class: "grow" }),
-        h("button", { type: "button", class: "btn small", id: "uabtn", text: ua.on ? "Turn off" : "Turn on", onclick: toggleUsbAudio }))]);
+        h("button", { type: "button", class: "btn small", id: "uabtn", text: ua.on ? "Turn off" : "Turn on", onclick: toggleUsbAudio }))] : []));
 }
 
 // ---- USB audio (v40.6, protocol 4; docs/USB-AUDIO.md) ----
