@@ -104,6 +104,7 @@ int pxn_rdm_state(void);              /* rdm (rdl two rows at a time): 0 failed 
 uint32_t pxn_post_ticks(int v);        /* mode 0 timed with post2 (0) and post3 (1) */
 int pxn_post3_state(void);             /* 0 post3 failed its check, 1 slower than post2, 2 in use */        /* where mode 0's time goes (pxn_tune): see px_nam.c */
 int pxn_post4_state(void);             /* 0 post4 failed its check, 1 slower, 2 in use (layers read from their rings) */
+int pxn_post5_state(void);             /* 0 post5 failed its check, 1 slower, 2 in use (post4's frames two at a time) */
 int pxn_rdq_in_use(void);
 int pxn_rdq_checked(void);              /* all three passed the start-up check */
 uint32_t pxn_bench_part(int32_t *scratch, uint32_t (*ticks)(void), int part, int reps);
