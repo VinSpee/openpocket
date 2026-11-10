@@ -23,7 +23,11 @@
 #define ED_PROTO 4u                             /* 4: v42, USB_AUDIO; 3: v38, cabinet IRs (IR_LIST .. IR_ERASE); 2: v37, NAM models */
 #define ED_NAME_MAX 13u
 #define ED_P_SIZE 110u
-#define ED_UA_STATS 17u                         /* USB_AUDIO's counts after the state (ed_ua_stat 1..17) */
+#if OP_UADEV
+#define ED_UA_STATS 40u                         /* (the measurement option's figures after the 20, px_uaudio.h) */
+#else
+#define ED_UA_STATS 20u                         /* USB_AUDIO's counts after the state (ed_ua_stat 1..20) */
+#endif
 #ifndef ED_STATS
 #define ED_STATS 6u                             /* PING's figures after the flags (ed_stat): the Bluetooth test image has 8 */
 #endif
@@ -290,8 +294,12 @@ static void ed_handle(const uint8_t *a, uint32_t n)   /* a: the args, after the 
     case ED_USB_AUDIO:                                 /* v42: the USB AUDIO setting (no argument: read), its streams */
 #if OP_UAUDIO
         rc = 0;
-        if (n >= 1u && (a[0] ? 1u : 0u) != px_ua_on) {
-            px_ua_on = a[0] ? 1u : 0u;                 /* (px_usb.h presents the USB device anew, after this reply) */
+        i = n >= 1u && a[0] ? 1u : 0u;
+#if OP_UADEV
+        if (n >= 1u) i = uad_set(a, n);                /* the measurement option's modes (px_uaudio.h) */
+#endif
+        if (n >= 1u && i != px_ua_on) {
+            px_ua_on = (uint8_t)i;                     /* (px_usb.h presents the USB device anew, after this reply) */
             st_usb = (uint8_t)((st_usb & ~1u) | px_ua_on);
             rc = st_commit() ? 2 : 0;
         }

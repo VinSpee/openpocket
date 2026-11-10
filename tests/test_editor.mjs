@@ -154,7 +154,7 @@ list = await ed.list();
 {
   let u = await ed.usbAudio();
   ok(u.on && u.rc === 0, "USB audio: still on after a power cycle");
-  ok(!u.recording && !u.playing && Object.keys(u.counts).length === 17, "USB audio: the streams' state and 17 counts");
+  ok(!u.recording && !u.playing && Object.keys(u.counts).length === 20, "USB audio: the streams' state and 20 counts");
   u = await ed.usbAudio(false);
   ok(!u.on && u.rc === 0 && !(await ed.usbAudio()).on, "USB audio: switched off again");
 }

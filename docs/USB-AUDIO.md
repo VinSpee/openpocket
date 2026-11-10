@@ -33,8 +33,8 @@ is not in the recording.
 | | |
 | --- | --- |
 | Format | 2 channels, 16 bit, 44.1 kHz, both ways. Only this rate: set the project or the device to 44.1 kHz |
-| Record | the pedal's sound on both channels; delay from the output to the cable about 2 to 6 ms |
-| Playback | stereo; delay from the cable to the output about 6 ms |
+| Record | the pedal's sound on both channels; delay from the output block to the cable about 1 to 5.5 ms |
+| Playback | stereo; delay from the cable to the output block about 5 ms |
 | USB | full speed (USB 1.1 rates), one isochronous endpoint each way, beside the MIDI endpoints |
 
 **What to expect.**
@@ -99,12 +99,54 @@ computer. They are not locked, so neither side may assume 44.1 frames a millisec
 - **Record (asynchronous endpoint):** the pedal is the clock. Each packet carries the frames the pedal's clock made in
   that millisecond: 44, and 45 every 8.5th packet. A ring of 512 frames lies between the audio interrupt, which writes
   128 frames every 2.9 ms, and the USB poll, which reads a packet a millisecond. What is left of the difference between
-  the two crystals is steered by the ring's fill: when the fill at a block's start leaves the band of 80 to 128 frames,
+  the two crystals is steered by the ring's fill: when the fill at a block's write leaves the band of 52 to 108 frames,
   one packet is made a frame longer or shorter, at most once a block. The computer measures the rate it receives and
   follows it.
 - **Playback (adaptive endpoint):** the computer is the clock. Its packets go into a ring of 1,024 frames, and the audio
-  interrupt reads them resampled to the pedal's clock (linear interpolation). The ring's fill, aimed at 256 frames,
-  steers the ratio by at most 0.6 %.
+  interrupt reads them resampled to the pedal's clock (linear interpolation). The ring's fill at a block's read, aimed
+  at 208 frames, steers the ratio by at most 0.6 %.
+- **The figures** are in `firmware/px_uaconf.h`. A block is written and read at the moment its sound is ready, 0.3 to
+  2.5 ms after the audio interrupt starts, by the preset. Within a preset that moment is steady (within 0.06 ms over the
+  52 presets with a guitar playing, 0.2 ms on ORGAN), so the rings need to hold a packet's worth of phase and a margin,
+  and no more: the record ring's fill at a write measures 38 to 121 frames, the playback ring's at a read 167 to 251 (it
+  needs 130). The margin left is 0.6 ms and more with the two clocks 300 ppm apart either way.
+
+### The order of the audio callbacks
+
+The first USB audio builds clicked while a computer had a stream open: about once or twice a second, at the pedal's
+output as well as in the recording. The streams were not the cause; they made an older fault frequent. It is mended
+in v42, for every use of the pedal.
+
+- **What happened.** Each audio interrupt has two callbacks of JieLi's I2S driver: one hands over the guitar's block,
+  the other asks for the output block. The output block must be the sound made from that guitar block, so the first
+  must run first, and normally it does: the input's block ends a few microseconds before the output's, the interrupt
+  enters with the input alone pending, and enters again for the output. The driver serves the output's channel before
+  the input's, though. When the interrupt enters a little late, both are pending, the output is asked for first, and
+  the pedal sent the block before once more; the block made right after was never sent. One block of 2.9 ms twice and
+  one lost: a click.
+- **Why with USB audio.** The interrupt enters late when the USB poll's, which has priority, runs at that moment. With
+  no stream the poll is short. With a stream it builds or takes a packet every millisecond (up to 40 us), and the order
+  turned about 1.7 times a second with one stream and 3.4 times with both. MIDI and the editor's messages lengthen the
+  poll as well, so the same click could come without USB audio, far less often.
+- **The fix** (`firmware/px_aorder.h`): an output block asked for before its guitar block is only noted; the guitar
+  block's callback, which follows within microseconds, fills it once the sound is started. The sound is then the same
+  as in the usual order. `USB_AUDIO`'s count 20 says how often it happened.
+- **Measured** on a BlackBox, a synthetic guitar playing, the computer recording the pedal's sound: a block of the
+  recording that equals the 128 frames before it, sample for sample, is a block sent twice.
+
+| | Blocks sent twice, before | After | Orders turned and put right, after |
+| --- | --- | --- | --- |
+| AC15 CHIME (factory preset 1, load 68 %) | 199 in 120 s (99 a minute) | 0 in 300 s | 494 |
+| Worst-case chain (a NAM amp, all 12 blocks on, load 83 %) | 147 in 120 s (74 a minute) | 0 in 300 s | 511 |
+
+  The streams themselves were whole before and after: a sine played by the computer came back from the pedal without
+  a break (120 s, each preset) and no ring ran empty or full; on a v40 build with the same change, a counter in the
+  record stream arrived without a break (7.9 million frames, each preset).
+- **The rings after it.** With the order kept the rings hold less than felucca-bsp's own figures (a band of 80 to 128
+  and a target of 256, for a render that may start late): the way from the computer through the pedal and back, the
+  pedal handing the playback straight to the record stream, measured 12.7 ms with those and 11.1 ms with the pedal's,
+  by the computer's time stamps. A playback stream opened again starts empty, not with the last 5 ms of the stream
+  before, which the ring still held.
 
 ### With USB AUDIO off
 
@@ -125,8 +167,8 @@ on, every knob at 100) and over the 23 factory presets with an amp. It also hold
 | --- | --- | --- | --- |
 | Setting off | one flag tested | 0.0 to +0.6 (mean +0.2), the spread between two runs | -1 to +1 (mean 0.0) |
 | On, no program using the device | 0.01 % | not measured apart | not measured apart |
-| The computer records | 0.38 % | -0.5 to +1.0 (mean +0.6) | 0 to +2 (mean +0.4) |
-| The computer records and plays | 1.13 % (playing alone: 0.75 %) | -0.4 to +2.0 (mean +1.3) | 0 to +2 (mean +1.2) |
+| The computer records | 0.42 % | -0.5 to +1.0 (mean +0.6) | 0 to +2 (mean +0.4) |
+| The computer records and plays | 1.16 % (playing alone: about 0.75 %) | -0.4 to +2.0 (mean +1.3) | 0 to +2 (mean +1.2) |
 
 No chain engaged the safety bypass (above 93 % for 8 blocks) and no block was late, also with a synthetic guitar at
 the input, which costs more than a quiet one. The heaviest chain, W4, went from 82.4 % to 83.4 % with both streams
@@ -148,15 +190,28 @@ code.
   again after it (about 2 ms of extra silence).
 - A recording program that stops reading without closing the stream makes the pedal drop blocks for 20 ms before it
   stops feeding the ring. Nothing is heard: nobody is reading.
+- An effect switched on or off moves the moment a block is ready. Up to 0.6 ms the rings take it; beyond that the
+  record stream holds a few frames or the playback is primed again (a few milliseconds of it missing), once.
+- macOS, about a second after a program has opened both streams, sometimes leaves one USB frame without asking for a
+  record packet (the pedal counts it, `USB_AUDIO`'s count 18). For about half a second its recording then holds short
+  pieces of what it recorded a quarter second earlier (up to 65 frames in every 512; measured: each piece is an exact
+  copy of the recording 11,025 frames before it). They are made in the computer, not in the pedal's packets.
 
 ## Tests
 
 - `tests/test_usb_audio.c` (in `tests/run_tests.sh`): `usb.c` and `px_uaudio.h` on a PC against a model of the USB
   controller and of a computer. It checks the descriptors and the requests with the setting off and on, the switch,
-  the recording's level and soft knee, the playback's level, clipping and mute, and 10 minutes of each stream with the
-  pedal's clock 300 ppm fast and slow against the computer's: every frame arrives once and in order.
+  the recording's level and soft knee, the playback's level, clipping and mute, a playback stream opened again, and
+  10 minutes of each stream with the pedal's clock 300 ppm fast and slow against the computer's: every frame arrives
+  once and in order, and the rings keep 0.6 ms in hand.
+- `tests/test_aorder.c`: the audio callbacks in either order (`firmware/px_aorder.h`): every output block is the sound
+  of its own interrupt's guitar block.
 - `tests/test_store.c`: the setting survives a power cycle and a preset save; an older store reads as off.
 - `tests/test_editor.mjs`, `tests/test_editor_page.mjs`: `USB_AUDIO` on the simulated pedal, the editor's button.
 - `tests/uisim.c`: the MIDI page's fourth row.
 - On a pedal: the editor's `USB_AUDIO` command gives the streams' counts ([EDITOR-PROTOCOL.md](EDITOR-PROTOCOL.md));
   the record ring's "empty" and "no packet ready" counts must not rise while a preset simply plays.
+- Measurements on a pedal: a build with `OP_UADEV 1` (`firmware/px_audio.h`, never a release) adds the timing of the
+  audio callbacks and the rings' fills to `USB_AUDIO`'s reply, and can put a counter or the computer's playback in the
+  record stream, a steady tone at the input, and the callbacks' old order back, each switched by `USB_AUDIO`'s argument
+  (`firmware/px_uaudio.h`). The figures of "The order of the audio callbacks" were taken with it.
