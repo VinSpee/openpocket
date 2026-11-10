@@ -821,10 +821,13 @@ static void app_main(void)
                 mid_c1_off = a_c1 ? 0u : (fm1_cpu1_gave_up ? fm1_cpu1_gave_up : 0xFFu);   /* v41: why the 2nd core stopped (MIDI page) */
                 char c[16];
                 int late = a_xrun && a_blocks - a_xrun_at < 700u;   /* a block ran late in the last 2 s: "DSP 88%!" in red */
-                ui_load = a_bypass ? a_peak : a_load;
-                ui_cores = (uint8_t)(a_c1 ? (px_nam_dual(&g_eng) ? 2u : 1u) : 0u);   /* (v41: on the diagnostics page) */
-                ui_load_text(c, ui_load, safe, a_bypass, late);
-                int kind = ui_load_kind(ui_load, safe, a_bypass, late, a_ld);   /* v40.3: LOADING a NAM model; v41: amber when high */
+                uint32_t ld = a_bypass ? a_peak : a_load;
+                ui_dg.load = ld; ui_dg.peak = a_peak; ui_dg.cl[0] = a_cl[0]; ui_dg.cl[1] = a_cl[1];   /* (v41: the diagnostics page) */
+                ui_dg.cores = (uint8_t)(a_c1 ? (px_nam_dual(&g_eng) ? 2u : 1u) : 0u);
+                ui_dg.split = (uint8_t)(g_eng.nam_lp != 0); ui_dg.guard = (uint8_t)(a_c1 ? 93u : 85u);   /* (px_audio.h's dsp_load limits) */
+                ui_dg.late = (uint8_t)late; ui_dg.bypass = a_bypass;
+                ui_load_text(c, ld, safe, a_bypass, late);
+                int kind = ui_load_kind(ld, safe, a_bypass, late, a_ld);   /* v40.3: LOADING a NAM model; v41: amber when high */
                 bat_raw[2] = (int32_t)a_xrun; bat_raw[3] = (int32_t)a_clip; bat_raw[4] = (int32_t)a_peak_all;   /* diagnostics page */
 #if OP_BLE_TEST
                 {   /* "STARTING 4 C1 42%": the Bluetooth state first; FAILED and ADVERTISING scroll their long lines instead (ble_status.h) */

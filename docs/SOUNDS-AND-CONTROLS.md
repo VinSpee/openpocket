@@ -202,12 +202,19 @@ Both footswitches, or a long press on HOME. The output is muted while the tuner 
 is in cents, and an amber arrow on the side of the note that points toward in tune. Any switch leaves it.
 
 ## Diagnostics
-Keep holding HOME past the tuner (1.4 s in all), or hold HOME again on the tuner. The page bug reports ask for a photo of
-(the tuner page showed these before): the DSP load and which cores ran (`C1` the second core, `C0` the fallback on the
-main core, `2C` both); the `IN L … R … dB` level of each input channel (dB below full scale: with nothing plugged in, the
-pedal's own noise floor; while playing, your guitar's level) and the battery in volts; the raw counters (`C9` the
-battery's reading, `LATE` blocks that ran late, `CLIP` blocks at the soft clipper, `PK` the highest load); and the CPU
-per block (`CUT n` once the delay or the reverb had to cut a wet block short). The sound plays; any control leaves.
+Keep holding HOME past the tuner (1.4 s in all), or hold HOME again on the tuner. The pages bug reports ask for a photo of
+(the tuner page showed these before); the knob turns between them, any control leaves, and the sound plays. Every figure is
+written beside its picture. Green is fine, amber is above 80 %, red is a late block or the effects bypassed.
+
+- **Page 1, the DSP:** the load as a bar with the safety bypass's limit marked (`GUARD 93%` with both cores, 85 % on one)
+  and the peak since the preset was set; which cores ran (`C1` the second core, `C0` the fallback on the main core, `2C`
+  both) and `PK`, the highest block load since boot; a bar for each core while the NAM network is split between them;
+  `LATE` (blocks that ran late), `CLIP` (blocks at the soft clipper) and `BYPASS`; the four costliest blocks as bars, the
+  heaviest in amber, and `CUT n` once the delay or the reverb had to cut a wet block short.
+- **Page 2, input and power:** a meter for each input channel (`L -62 DB`, dB below full scale; with nothing plugged in,
+  the pedal's own noise floor), with the last 3 dB marked as the clip zone; a marker that lights for 2 s when the output
+  reaches the soft clipper, with the count; the battery as a cell with its volts and percent (`USB` on the 5 V supply);
+  the raw battery readings (`C9`, `CH`).
 
 ## Audio input (v26–v28)
 Like the official firmware: input and output in 24 bits (v26), and the guitar read from the left channel only (v28).

@@ -251,7 +251,8 @@ static void frame_draw(void)                           /* what the main loop doe
 {
     ui_render();
     char c[12];
-    ui_load = dsp_load; ui_cores = 1;
+    ui_dg.load = ui_dg.peak = dsp_load; ui_dg.cores = 2; ui_dg.split = 1; ui_dg.guard = 93; ui_dg.bypass = (uint8_t)dsp_bypass;
+    ui_dg.cl[0] = dsp_load; ui_dg.cl[1] = dsp_load * 9u / 10u;
     ui_load_text(c, dsp_load, 0, dsp_bypass, 0);
     ui_status(c, ui_load_kind(dsp_load, 0, dsp_bypass, 0, 0));
     if (ui_mode == M_TUNER) tuner_draw(tuner_hz);

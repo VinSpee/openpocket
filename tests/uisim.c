@@ -153,6 +153,52 @@ static uint32_t T = 100000u;                            /* the simulated clock (
 static void hold(uint32_t mask, uint32_t ms) { for (uint32_t t = 0; t < ms; t += 5u) { ui_buttons(T, mask); T += 5u; } }
 static void tap(int b) { hold(1u << b, 40); hold(0, 5); }
 #define CHECK(c, m) do { if (!(c)) { printf("%s\n", m); return 1; } } while (0)
+/* the diagnostics as pictures (v41): each figure beside its graphic, colours by state, two pages turned by the knob */
+static int px_at(uint32_t x, uint32_t y, uint16_t c) { return fb[y * 240u + x] == c; }
+static int diagnostics(const char *d)
+{
+    char b[48];
+    ui_dg.load = 61; ui_dg.peak = 70; ui_dg.cores = 2; ui_dg.split = 1; ui_dg.guard = 93; ui_dg.cl[0] = 52; ui_dg.cl[1] = 56;
+    ui_dg.late = 0; ui_dg.bypass = 0;
+    diag_draw(); shot(d, "diagnostics");
+    CHECK(dg_page == 0 && count_col(10, 60, 220, 6, GRN) && !count_col(10, 60, 220, 6, UI_ACC), "diag: a load of 61 % is a green bar");
+    CHECK(px_at(10 + dg_w(93, 100, 220) - 1, 58, WHT) && px_at(10 + dg_w(93, 100, 220) - 1, 67, WHT), "diag: the guard's tick at 93 %");
+    CHECK(count_col(88, 93, 144, 6, GRN) && count_col(88, 109, 144, 6, GRN), "diag: a bar for each core");
+    {
+        uint8_t top[DG_BLK];
+        int n = dg_top(top, DG_BLK);
+        CHECK(n == 4 && top[0] == PX_NBLK && top[1] == PX_B_REVERB && top[2] == PX_B_DELAY && top[3] == PX_B_CAB, "diag: CPU per block, costliest first");
+        CHECK(count_col(52, 165, 148, 5, UI_ACC) && !count_col(52, 180, 148, 5, UI_ACC), "diag: the heaviest block highlighted, the others not");
+    }
+    CHECK(count_col(2, 122, 76, 18, GRN) && !count_col(2, 122, 76, 18, RED), "diag: no late block: a green chip");
+    ui_dg.load = 86; diag_draw();
+    CHECK(count_col(10, 60, 220, 6, UI_ACC) && !count_col(10, 60, 220, 6, GRN), "diag: above 80 % the load turns amber");
+    ui_dg.late = 1; bat_raw[2] = 3; diag_draw(); shot(d, "diagnostics_late");
+    CHECK(count_col(10, 60, 220, 6, RED) && count_col(2, 122, 76, 18, RED), "diag: a late block: the load and its chip in red");
+    ui_dg.late = 0; bat_raw[2] = 0; ui_dg.load = 61; ui_dg.split = 0; diag_draw();
+    CHECK(!count_col(88, 93, 144, 6, GRN), "diag: no layer split: no core bars (CPU0 --)");
+    ui_dg.split = 1;
+    /* every figure fits its box at its widest */
+    dg_pct(b, "DSP ", 999); CHECK(ft_width(&FT_MD, b) <= 120u, "diag: DSP 999% fits");
+    dg_pct(b, "PEAK ", 999); CHECK(ft_width(&FT_SM, b) <= 104u, "diag: PEAK 999% fits");
+    CHECK(ft_width(&FT_SM, "CPU1 100%") <= 78u && ft_width(&FT_SM, "LATE 9999") <= 70u && ft_width(&FT_SM, "CLIP 9999") <= 70u
+          && ft_width(&FT_SM, "BYPASS OFF") <= 76u && ft_width(&FT_SM, "PK 999%") <= 64u && ft_width(&FT_SM, "CORES 2C") <= 80u
+          && ft_width(&FT_SM, "GUARD 93%") <= 80u, "diag: the chips and core figures fit");
+    CHECK(ft_width(&FT_SM, "SOFT CLIP: 99999 BLOCKS") <= 204u && ft_width(&FT_SM, "RAW  C9 4095  CH 1") <= DG_W
+          && ft_width(&FT_SM, "R -199 DB") <= 74u && ft_width(&FT_SM, "CUT 9999") <= 84u, "diag: page 2's figures fit");
+    /* the knob turns the page; both pages are drawn whole */
+    poison(); ui_turn(1, 0); CHECK(dg_page == 1, "diag: the knob turns to page 2");
+    diag_draw(); shot(d, "diagnostics_2");
+    CHECK(count_col(82, 58, 150, 8, GRN) && count_col(82, 58, 150, 8, ui_dark(RED)), "diag: an input meter, green, with its clip zone");
+    CHECK(!px_at(DG_X, 112, RED), "diag: no recent soft clip: the marker is dark");
+    bat_raw[3]++; diag_draw(); CHECK(px_at(DG_X + 2, 114, RED), "diag: a new soft clip lights the marker");
+    for (int i = 0; i < 25; i++) diag_draw();
+    CHECK(!px_at(DG_X + 2, 114, RED), "diag: the marker goes dark again");
+    CHECK(count_col(DG_X + 3, 159, 40, 16, GRN), "diag: the battery's cell is filled");
+    poison(); ui_turn(-1, 0); diag_draw(); shot(d, "diagnostics_1_again");
+    CHECK(dg_page == 0, "diag: and back to page 1");
+    return 0;
+}
 static int overhaul(const char *d)
 {
     char c[16];
@@ -193,7 +239,7 @@ static int overhaul(const char *d)
     poison();
     hold(1u << UB_HOME, 700); CHECK(ui_mode == M_DIAG && !a_tmute, "F12: HOME held on: the diagnostics, the sound on");
     hold(0, 5); CHECK(ui_mode == M_DIAG, "the release leaves the diagnostics open");
-    ui_load = 61; ui_cores = 2; diag_draw(); shot(d, "diagnostics");
+    if (diagnostics(d)) return 1;
     tap(UB_FX); CHECK(ui_mode == M_CHAIN, "any control leaves the diagnostics");
     full();
     /* F11: the load figure in plain words, amber when high, red when a block ran late */

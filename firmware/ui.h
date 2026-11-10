@@ -178,9 +178,11 @@ static void draw_status(int force)
     draw_battery(force);
 }
 /* the DSP load, from the main loop: "DSP 42%", "DSP 88%!" (a block ran late), "SAFE 42%", "PEAK 150%" (bypassed). v41: which
- * cores ran is on the diagnostics page (ui_cores). Every text fits ST_W (tests/uisim.c checks the worst ones). */
-static uint32_t ui_load;               /* the main loop's last figure and cores (0 C0, 1 C1, 2 both: "2C"), for the diagnostics */
-static uint8_t ui_cores;
+ * cores ran is on the diagnostics page (ui_dg). Every text fits ST_W (tests/uisim.c checks the worst ones). */
+static struct {                        /* the main loop's last DSP figures, for the diagnostics page */
+    uint32_t load, peak, cl[2];        /* the load (the peak while bypassed), the peak since the preset, each core's (layer split) */
+    uint8_t cores, split, guard, late, bypass;   /* cores: 0 C0, 1 C1, 2 both ("2C"); guard: the safety bypass's limit, % */
+} ui_dg = {.guard = 85};
 static void ui_load_text(char *c, uint32_t l, int safe, int bypass, int late)
 {
     if (l > 999u) l = 999u;
@@ -815,117 +817,191 @@ static void tuner_draw(float hz)       /* hz <= 0: no note */
 }
 
 /* ===================================================== diagnostics ======== */
-/* v41 (on the tuner page before): what a bug report needs a photo of. HOME held on past the tuner; any control leaves. The
- * sound plays. */
-#define DG_X 8u
-#define DG_W 228u
-static uint32_t dg_last_ld = ~0u;
-static void diag_load(void)            /* "DSP 42%  CORES 2C": the load figure and which cores ran (the status corner's before v41) */
+/* v41 (on the tuner page before): what a bug report needs a photo of, as pictures with every figure written beside them.
+ * HOME held on past the tuner; the knob turns the page (1: the DSP, 2: input and power); any control leaves. The sound
+ * plays. Colours: green, amber above UI_LOAD_HIGH, red when a block ran late or the effects are bypassed. */
+#define DG_X   8u
+#define DG_W   228u
+#define DG_BLK 4                       /* the blocks shown in "CPU PER BLOCK": the costliest, the first one highlighted */
+static uint32_t dg_page, dg_hash[4], dg_clip_seen, dg_clip_hold;
+static uint16_t dg_col(uint32_t pct, int bad) { return bad ? RED : pct > UI_LOAD_HIGH ? UI_ACC : GRN; }
+static uint32_t dg_w(uint32_t v, uint32_t full, uint32_t w) { return v >= full ? w : v * w / full; }
+/* a bar of w px for v of full, and a white tick at tick (0: none) with 2 px above and below it */
+static void dg_bar(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t v, uint32_t full, uint16_t col, uint32_t tick)
 {
-    if ((ui_load | (uint32_t)ui_cores << 16) == dg_last_ld) return;
-    dg_last_ld = ui_load | (uint32_t)ui_cores << 16;
-    static const char *const CORES[3] = {"C0", "C1", "2C"};
-    char b[24]; b[0] = 0;
-    b_str(b, "DSP "); b_num(b, ui_load > 999u ? 999u : ui_load); b_str(b, "%   CORES "); b_str(b, CORES[ui_cores < 3u ? ui_cores : 0u]);
-    ft_box(DG_X, 40, DG_W, b, &FT_MD, UI_TXT, UI_BG, 0);
+    uint32_t f = dg_w(v, full, w);
+    lcd_rect(x, y - 2u, w, 2, UI_BG); lcd_rect(x, y + h, w, 2, UI_BG);
+    if (f) lcd_rect(x, y, f, h, col);
+    if (f < w) lcd_rect(x + f, y, w - f, h, C_BAR);
+    if (tick) { uint32_t t = dg_w(tick, full, w); lcd_rect(x + (t ? t - 1u : 0u), y - 2u, 2, h + 4u, WHT); }
 }
-/* "IN L -82  R -84 dB": input level of each I2S channel, dB below full scale (24-bit, v26 diagnostic) */
-static int tn_last_lv = 0x7FFF;
-static int lv_str(char *b, int v)
+static void dg_chip(uint32_t x, uint32_t y, uint32_t w, const char *s, uint16_t col)   /* a counter: its text on a dark chip */
 {
-    int i = 0;
-    if (v <= -199) { b[0] = '-'; b[1] = '-'; b[2] = '-'; return 3; }
-    if (v < 0) { b[i++] = '-'; v = -v; }
-    char t[4]; num3(t, (uint32_t)v);
-    for (int k = 0; t[k]; k++) b[i++] = t[k];
-    return i;
+    ui_rbox(x, y, w, 18, 4, C_CARD, UI_BG);
+    ft_box(x + 3u, y + 2u, w - 6u, s, &FT_SM, col, C_CARD, 1);
 }
-static void diag_level(void)
+static int dg_top(uint8_t *idx, int n)  /* the costliest blocks (a_pf; PX_NBLK = the NAM network), most first: how many */
 {
-    int l = a_level_db(0), r = a_level_db(1);
-    if ((((l & 0xFF) | ((r & 0xFF) << 8)) ^ (bat_mv << 16)) == tn_last_lv) return;
-    tn_last_lv = ((l & 0xFF) | ((r & 0xFF) << 8)) ^ (bat_mv << 16);
-    char b[40]; int i = 0;
-    b[i++] = 'I'; b[i++] = 'N'; b[i++] = ' '; b[i++] = ' '; b[i++] = 'L'; b[i++] = ' '; i += lv_str(b + i, l);
-    b[i++] = ' '; b[i++] = ' '; b[i++] = ' '; b[i++] = 'R'; b[i++] = ' '; i += lv_str(b + i, r);
-    b[i++] = ' '; b[i++] = 'd'; b[i++] = 'B';
-    if (bat_mv) {                                             /* + the battery in volts (v36: to check the gauge) */
-        b[i++] = ' '; b[i++] = ' '; b[i++] = 'B'; b[i++] = 'A'; b[i++] = 'T'; b[i++] = ' ';
-        b[i++] = (char)('0' + bat_mv / 1000); b[i++] = '.'; b[i++] = (char)('0' + bat_mv / 100 % 10); b[i++] = (char)('0' + bat_mv / 10 % 10);
-        b[i++] = 'V';
-    }
-    b[i] = 0;
-    ft_box(DG_X, 76, DG_W, b, &FT_SM, UI_TXT, UI_BG, 0);
-}
-/* v37: the battery's raw reading (PC9, the cell's divider; -1 = no conversion), a status bit the stock firmware reads beside
- * it, the audio blocks that ran late and that reached the output's soft clipper since the start, and the highest block load
- * seen (%) */
-static uint32_t tn_last_raw = ~0u;
-static int r_str(char *b, int32_t v) { if (v < 0) { b[0] = '-'; b[1] = '-'; return 2; } char t[8]; t[0] = 0; b_num(t, (uint32_t)v); int i = 0; while (t[i]) { b[i] = t[i]; i++; } return i; }
-static void diag_raw(void)
-{
-    uint32_t h = 0;
-    for (int k = 0; k < 5; k++) h = h * 0x9E3779B1u + (uint32_t)bat_raw[k];
-    if (h == tn_last_raw) return;
-    tn_last_raw = h;
-    static const char *const N[5] = {"C9 ", " CH ", " LATE ", " CLIP ", " PK "};
-    char b[48]; int i = 0;
-    for (int k = 0; k < 5; k++) { for (const char *p = N[k]; *p; p++) b[i++] = *p; i += r_str(b + i, bat_raw[k]); }
-    b[i] = 0;
-    ft_box(DG_X, 100, DG_W, b, &FT_SM, UI_TXT, UI_BG, 0);
-}
-/* v38: where the CPU goes (px_audio.h a_pf): the 4 costliest blocks, % of an audio block's time; v39: then "CUT n" once the
- * delay or the reverb has had to cut a wet block short (out of time) */
-static uint32_t tn_last_pf = ~0u;
-static void diag_prof(void)
-{
-    uint32_t h = 0;
-    for (int k = 0; k <= PX_NBLK; k++) h = h * 0x9E3779B1u + a_pf[k];
-    h = h * 0x9E3779B1u + a_wcut;
-    if (h == tn_last_pf) return;
-    tn_last_pf = h;
     uint8_t used[PX_NBLK + 1] = {0};
-    char b[48]; int i = 0;
-    for (int n = 0; n < 4; n++) {
+    int c = 0;
+    for (; c < n; c++) {
         int best = -1;
         for (int k = 0; k <= PX_NBLK; k++) if (!used[k] && a_pf[k] && (best < 0 || a_pf[k] > a_pf[best])) best = k;
         if (best < 0) break;
-        used[best] = 1;
-        const char *l = best == PX_NBLK ? "NAM" : px_block_label(best);
-        if (i) b[i++] = ' ';
-        while (*l && i < 40) b[i++] = *l++;
-        b[i++] = ' ';
-        char t[8]; t[0] = 0; b_num(t, a_pf[best]);
-        for (int j = 0; t[j] && i < 44; j++) b[i++] = t[j];
+        used[best] = 1; idx[c] = (uint8_t)best;
     }
-    if (i) { b[i++] = ' '; b[i++] = '%'; } else { const char *z = "CPU: --"; while (*z) b[i++] = *z++; }
-    if (a_wcut) {                                      /* v39: wet blocks cut short (the delay / reverb out of time) */
-        const char *z = " CUT ";
-        while (*z && i < 44) b[i++] = *z++;
-        char t[12]; t[0] = 0; b_num(t, a_wcut > 9999u ? 9999u : a_wcut);
-        for (int j = 0; t[j] && i < 47; j++) b[i++] = t[j];
+    return c;
+}
+static void dg_pct(char *b, const char *label, uint32_t v) { b[0] = 0; b_str(b, label); b_num(b, v > 999u ? 999u : v); b_str(b, "%"); }
+static int dg_changed(int k, uint32_t h) { if (h == dg_hash[k]) return 0; dg_hash[k] = h; return 1; }
+static uint32_t dg_mix(uint32_t h, uint32_t v) { return (h ^ v) * 16777619u; }
+static void diag_dsp(void)             /* page 1: the load against the guard, each core, the counters, the CPU per block */
+{
+    static const char *const CORES[3] = {"C0", "C1", "2C"};
+    uint32_t late = (uint32_t)bat_raw[2], clip = (uint32_t)bat_raw[3], pk = (uint32_t)bat_raw[4];
+    int bad = ui_dg.late || ui_dg.bypass;
+    uint16_t c = dg_col(ui_dg.load, bad);
+    char b[32];
+    uint32_t h = 2166136261u;
+    h = dg_mix(h, ui_dg.load); h = dg_mix(h, ui_dg.peak); h = dg_mix(h, ui_dg.cores); h = dg_mix(h, ui_dg.guard); h = dg_mix(h, (uint32_t)bad);
+    if (dg_changed(0, h)) {
+        dg_pct(b, "DSP ", ui_dg.load);
+        ft_box(DG_X, 34, 120, b, &FT_MD, c, UI_BG, 0);
+        dg_pct(b, "PEAK ", ui_dg.peak);
+        ft_box(128, 38, 104, b, &FT_SM, UI_TXT, UI_BG, 2);
+        dg_bar(10, 60, 220, 6, ui_dg.load, 100, c, ui_dg.guard);
+        b[0] = 0; b_str(b, "CORES "); b_str(b, CORES[ui_dg.cores < 3u ? ui_dg.cores : 0u]);
+        ft_box(DG_X, 70, 80, b, &FT_SM, UI_TXT, UI_BG, 0);
+        dg_pct(b, "GUARD ", ui_dg.guard);
+        ft_box(152, 70, 80, b, &FT_SM, UI_DIM, UI_BG, 2);
     }
-    b[i] = 0;
-    ft_box(DG_X, 142, DG_W, b, &FT_SM, UI_TXT, UI_BG, 0);
+    h = 2166136261u;
+    for (int k = 0; k < 2; k++) h = dg_mix(h, ui_dg.cl[k]);
+    h = dg_mix(h, ui_dg.split); h = dg_mix(h, ui_dg.guard);
+    if (dg_changed(1, h)) {
+        for (uint32_t k = 0; k < 2u; k++) {                  /* each core (with the layer split; else "--") */
+            uint32_t y = 88u + k * 16u;
+            b[0] = 0; b_str(b, k ? "CPU1 " : "CPU0 ");
+            if (ui_dg.split) { b_num(b, ui_dg.cl[k]); b_str(b, "%"); } else b_str(b, "--");
+            ft_box(DG_X, y, 78, b, &FT_SM, ui_dg.split ? UI_TXT : UI_DIM, UI_BG, 0);
+            dg_bar(88, y + 5u, 144, 6, ui_dg.split ? ui_dg.cl[k] : 0u, 100, dg_col(ui_dg.cl[k], 0), ui_dg.guard);
+        }
+    }
+    h = dg_mix(dg_mix(dg_mix(dg_mix(2166136261u, late), clip), pk), ui_dg.bypass);
+    if (dg_changed(2, h)) {                                /* the counters since boot, red (or amber) once not zero */
+        dg_pct(b, "PK ", pk);                              /* (the highest block load since boot) */
+        ft_box(88, 70, 64, b, &FT_SM, dg_col(pk, pk >= 100u), UI_BG, 1);
+        b[0] = 0; b_str(b, "LATE "); b_num(b, late > 9999u ? 9999u : late); dg_chip(2, 122, 76, b, late ? RED : GRN);
+        b[0] = 0; b_str(b, "CLIP "); b_num(b, clip > 9999u ? 9999u : clip); dg_chip(79, 122, 76, b, clip ? UI_ACC : GRN);
+        dg_chip(156, 122, 82, ui_dg.bypass ? "BYPASS ON" : "BYPASS OFF", ui_dg.bypass ? RED : GRN);
+    }
+    uint8_t top[DG_BLK];
+    int n = dg_top(top, DG_BLK);
+    h = dg_mix(2166136261u, a_wcut);
+    for (int i = 0; i < n; i++) h = dg_mix(dg_mix(h, top[i]), a_pf[top[i]]);
+    if (dg_changed(3, dg_mix(h, (uint32_t)n))) {
+        ft_box(DG_X, 143, 140, "CPU PER BLOCK %", &FT_SM, UI_DIM, UI_BG, 0);
+        b[0] = 0;
+        if (a_wcut) { b_str(b, "CUT "); b_num(b, a_wcut > 9999u ? 9999u : a_wcut); }   /* v39: wet blocks cut short */
+        ft_box(148, 143, 84, b, &FT_SM, RED, UI_BG, 2);
+        for (int i = 0; i < DG_BLK; i++) {                   /* sorted, the heaviest in amber */
+            uint32_t y = 160u + (uint32_t)i * 15u;
+            if (i >= n) { lcd_rect(0, y, 240, 15, UI_BG); continue; }
+            const char *l = top[i] == PX_NBLK ? "NAM" : px_block_label(top[i]);
+            ft_box(DG_X, y, 42, l, &FT_SM, i ? UI_TXT : WHT, UI_BG, 0);
+            dg_bar(52, y + 5u, 148, 5, a_pf[top[i]], 100, i ? UI_DIM : UI_ACC, 0);
+            b[0] = 0; b_num(b, a_pf[top[i]]);
+            ft_box(202, y, 34, b, &FT_SM, i ? UI_TXT : UI_ACC, UI_BG, 2);
+        }
+    }
+}
+#define DG_DB_MIN 90                    /* the input meters: -90 dB to full scale; the last 3 dB are the clip zone */
+static int r_str(char *b, int32_t v) { if (v < 0) { b[0] = '-'; b[1] = '-'; return 2; } char t[8]; t[0] = 0; b_num(t, (uint32_t)v); int i = 0; while (t[i]) { b[i] = t[i]; i++; } return i; }
+static void diag_power(void)           /* page 2: the input levels, the output's soft clip, the battery, the raw readings */
+{
+    char b[40];
+    int lv[2] = {a_level_db(0), a_level_db(1)};
+    uint32_t clip = (uint32_t)bat_raw[3];
+    if (clip != dg_clip_seen) { dg_clip_seen = clip; dg_clip_hold = 20u; }   /* lit for 20 draws (2 s) after a clip */
+    else if (dg_clip_hold) dg_clip_hold--;
+    uint32_t h = dg_mix(dg_mix(2166136261u, (uint32_t)lv[0]), (uint32_t)lv[1]);
+    if (dg_changed(0, h)) {
+        for (int ch = 0; ch < 2; ch++) {                     /* "L -62 DB" and a meter: green, amber above -18, red above -6 */
+            uint32_t y = 54u + (uint32_t)ch * 18u;
+            int v = lv[ch] < -DG_DB_MIN ? -DG_DB_MIN : lv[ch] > 0 ? 0 : lv[ch];
+            b[0] = 0; b_str(b, ch ? "R " : "L ");
+            if (lv[ch] <= -199) b_str(b, "---"); else { if (lv[ch] < 0) b_str(b, "-"); b_num(b, (uint32_t)(lv[ch] < 0 ? -lv[ch] : lv[ch])); }
+            b_str(b, " DB");
+            ft_box(DG_X, y, 74, b, &FT_SM, UI_TXT, UI_BG, 0);
+            uint32_t w = 150u, zone = w * 3u / DG_DB_MIN, f = dg_w((uint32_t)(v + DG_DB_MIN), DG_DB_MIN, w);
+            lcd_rect(82, y + 2u, w, 2, UI_BG); lcd_rect(82, y + 12u, w, 2, UI_BG);
+            if (f) lcd_rect(82, y + 4u, f, 8, v > -6 ? RED : v > -18 ? UI_ACC : GRN);
+            if (f < w - zone) lcd_rect(82 + f, y + 4u, w - zone - f, 8, C_BAR);
+            if (f < w) { uint32_t s = f > w - zone ? f : w - zone; lcd_rect(82 + s, y + 4u, w - s, 8, ui_dark(RED)); }   /* the clip zone */
+        }
+    }
+    h = dg_mix(dg_mix(2166136261u, clip), dg_clip_hold ? 1u : 0u);
+    if (dg_changed(1, h)) {                                  /* the output: a marker lit while it reaches the soft clipper */
+        lcd_rect(DG_X, 112, 14, 14, dg_clip_hold ? RED : C_BAR);
+        b[0] = 0; b_str(b, "SOFT CLIP: "); b_num(b, clip); b_str(b, " BLOCKS");
+        ft_box(28, 111, 204, b, &FT_SM, dg_clip_hold ? RED : UI_TXT, UI_BG, 0);
+    }
+    int usb = bat_usb_mv > 4300, pct = bat_pct >= 0 ? bat_pct : bat_mv ? bat_percent(bat_mv) : -1;
+    h = dg_mix(dg_mix(dg_mix(2166136261u, (uint32_t)bat_mv), (uint32_t)usb), (uint32_t)pct);
+    if (dg_changed(2, h)) {                                  /* the battery: a cell, its volts, its percent (or USB) */
+        uint16_t c = usb ? GRN : pct <= 15 ? RED : pct <= 30 ? UI_ACC : GRN;
+        uint32_t f = pct < 0 ? 0u : (uint32_t)pct * 40u / 100u;
+        lcd_rect(DG_X, 156, 46, 22, UI_TXT); lcd_rect(DG_X + 2u, 158, 42, 18, UI_BG); lcd_rect(DG_X + 46u, 162, 3, 10, UI_TXT);
+        if (f) lcd_rect(DG_X + 3u, 159, f, 16, c);
+        if (f < 40u) lcd_rect(DG_X + 3u + f, 159, 40u - f, 16, UI_BG);
+        b[0] = 0;
+        if (bat_mv) { b_num(b, (uint32_t)bat_mv / 1000u); b_str(b, "."); b_num(b, (uint32_t)bat_mv / 100u % 10u); b_num(b, (uint32_t)bat_mv / 10u % 10u); b_str(b, " V"); }
+        else b_str(b, "-- V");
+        ft_box(62, 156, 96, b, &FT_MD, UI_TXT, UI_BG, 0);
+        b[0] = 0;
+        if (usb) b_str(b, "USB"); else if (pct >= 0) { b_num(b, (uint32_t)pct); b_str(b, "%"); } else b_str(b, "--");
+        ft_box(158, 160, 74, b, &FT_SM, c, UI_BG, 2);
+    }
+    h = dg_mix(dg_mix(2166136261u, (uint32_t)bat_raw[0]), (uint32_t)bat_raw[1]);
+    if (dg_changed(3, h)) {                                  /* the battery's raw reading (PC9) and the status bit beside it */
+        int i = 0; b[0] = 0; b_str(b, "RAW  C9 "); while (b[i]) i++;
+        i += r_str(b + i, bat_raw[0]); b[i] = 0; b_str(b, "  CH "); while (b[i]) i++; i += r_str(b + i, bat_raw[1]); b[i] = 0;
+        ft_box(DG_X, 190, DG_W, b, &FT_SM, UI_DIM, UI_BG, 0);
+    }
+}
+static void diag_frame(void)           /* the page's fixed parts */
+{
+    lcd_rect(0, 0, 240, 240, UI_BG);
+    lcd_rect(0, 0, 240, 30, UI_DIM);
+    ft_box(8, 4, 150, "DIAGNOSTICS", &FT_MD, BLK, UI_DIM, 0);
+    {
+        char b[16]; b[0] = 0;
+        b_str(b, dg_page ? "2/2" : "1/2");
+#ifdef OP_VERSION
+        b_str(b, "  " OP_VERSION);
+#endif
+        ft_box(158, 8, 78, b, &FT_SM, BLK, UI_DIM, 2);
+    }
+    if (dg_page) {
+        ft_box(DG_X, 36, DG_W, "INPUT (DB BELOW FULL SCALE)", &FT_SM, UI_DIM, UI_BG, 0);
+        ft_box(DG_X, 94, DG_W, "OUTPUT", &FT_SM, UI_DIM, UI_BG, 0);
+        ft_box(DG_X, 138, DG_W, "BATTERY", &FT_SM, UI_DIM, UI_BG, 0);
+    }
+    lcd_rect(0, F_Y, 240, 240u - F_Y, UI_PANEL);
+    ft_box(0, F_Y + 3u, 240, dg_page ? "KNOB: PAGE 1   PHOTO BOTH PAGES" : "KNOB: PAGE 2   PHOTO BOTH PAGES", &FT_SM, UI_DIM, UI_PANEL, 1);
+    for (int k = 0; k < 4; k++) dg_hash[k] = ~0u;
 }
 static void diag_open(void)
 {
     ui_mode = M_DIAG;
     a_tmute = 0;                                              /* (the sound plays: the figures are of it) */
-    lcd_rect(0, 0, 240, 240, UI_BG);
-    lcd_rect(0, 0, 240, 30, UI_DIM);
-    ft_box(8, 4, 160, "DIAGNOSTICS", &FT_MD, BLK, UI_DIM, 0);
-#ifdef OP_VERSION
-    ft_box(168, 8, 68, OP_VERSION, &FT_SM, BLK, UI_DIM, 2);
-#endif
-    ft_box(DG_X, 124, DG_W, "CPU PER BLOCK", &FT_SM, UI_DIM, UI_BG, 0);
-    ft_box(0, 186, 240, "PHOTO THIS FOR A BUG REPORT", &FT_SM, UI_DIM, UI_BG, 1);
-    lcd_rect(0, F_Y, 240, 240u - F_Y, UI_PANEL);
-    ft_box(0, F_Y + 3u, 240, "ANY KEY: EXIT", &FT_SM, UI_DIM, UI_PANEL, 1);
-    dg_last_ld = ~0u; tn_last_lv = 0x7FFF; tn_last_raw = ~0u; tn_last_pf = ~0u;
+    dg_page = 0;
+    dg_clip_seen = (uint32_t)bat_raw[3]; dg_clip_hold = 0;   /* (the marker lights for a clip from now on) */
+    diag_frame();
 }
+static void diag_turn(void) { dg_page ^= 1u; diag_frame(); }
 static void diag_close(void) { ui_mode = M_CHAIN; ui_item = 0; lcd_rect(0, 0, 240, 240, UI_BG); uc.screen = -1; ui_invalidate(); }
-static void diag_draw(void) { diag_load(); diag_level(); diag_raw(); diag_prof(); }
+static void diag_draw(void) { if (dg_page) diag_power(); else diag_dsp(); }
 
 /* ===================================================== controls ======== */
 /* What each control does on each page, in one place: the main loop (openpocket.c) and the simulator (tests/edsim.c) give
@@ -971,7 +1047,8 @@ static void ui_turn(int dd, int fast)  /* the PARA knob, one detent (fast: turne
     if (ui_mode == M_SAVE) save_knob(dd);
     else if (ui_mode == M_MIDI) midi_knob(dd);
     else if (ui_mode == M_LIST) list_knob(dd);
-    else if (ui_mode != M_TUNER && ui_mode != M_DIAG) ui_knob(dd, fast);
+    else if (ui_mode == M_DIAG) diag_turn();
+    else if (ui_mode != M_TUNER) ui_knob(dd, fast);
 }
 static void ui_press(int b, uint32_t now)   /* a button's plain press: at its press, PUSH HOME FX at a short release */
 {
