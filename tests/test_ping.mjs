@@ -53,4 +53,5 @@ check("v40.2 Bluetooth reply: its heap and tasks, then the profile", () => {
 await check("the editor page's ping(): the same figures", async () => {
   const a = await ping([...base, ...prof(35)]), b = await ping([...ble, ...prof(35)]);
   assert.equal(a.stackFree, 22244); assert.equal(a.bleHeapFree, undefined); assert.equal(b.bleHeapFree, 14152);
+  assert.deepEqual(a.prof, Array.from({ length: 12 }, (_, i) => i * 3 + 1)); assert.equal(a.profNam, 37);   // the blocks, then the network
 });
