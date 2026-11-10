@@ -140,7 +140,7 @@ and the pedal's state; `firmware/ui.h` has the MIDI page; `firmware/px_store.h` 
 - **CPU and audio.** The MIDI code runs on the main loop (CPU0), not in the audio interrupt and not on the DSP core. Per pass it
   reads the ring (usually empty) and compares the 84 on/model/setting bytes of the preset with the last values sent. The binary
   grows by about 3.3 KB. The DSP load was **not measured on a pedal** (no hardware here): the hardware checklist asks for the
-  "C1 xx%" reading with and without MIDI traffic. Nothing was added to the audio path.
+  "DSP xx%" reading with and without MIDI traffic. Nothing was added to the audio path.
 - **Flash.** The only new write is the settings save, in the preset store's own area, through the existing commit.
 - **Update and recovery paths.** Unchanged. The tests of the installer, the update loader and the editor run as before.
 - **Never flash from here.** The test package is built and checked on a PC; the captain installs it.
