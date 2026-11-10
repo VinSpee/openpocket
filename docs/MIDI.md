@@ -82,6 +82,23 @@ by accident. Map them to one of the free numbers in your DAW instead.
 The map is in one place in the source, `px_cc_param()` and its siblings in `firmware/px_midi.h`; a test checks that every
 number is unique, reserved ones are free, and a value sent by one pedal is applied by another to the same sound.
 
+## From the web editor
+
+The editor's **MIDI** section ([`docs/editor.html`](editor.html), `docs/edmidi.js`, `docs/pxmidi.js`) does three things:
+
+- **The map, named for the current preset.** The table above with each setting's name in the preset on the pedal
+  (setting 1 of the AMP is GAIN for a fitted amp and MODEL for NAM), and the settings a type does not have marked.
+- **Learned controls.** For a controller plugged into the computer, not into the pedal: click a control in the table,
+  then move a knob or press a switch on the controller. From then on the page passes that Control Change on to the
+  pedal as an editor command (`SET`, `SELECT`), scaled as the pedal scales its own. A switch can flip on each press or
+  follow the value; a control can work in every preset or only in one; a switch can step to the next or the previous
+  preset; Program Change 0 to 51 loads preset 1 to 52. Learned controls are kept in the browser and work only while the
+  page is open and connected: the pedal itself stores no mapping.
+- **Monitor.** What the controllers send and what it did, and the pedal's own messages (with SEND on), each named. A
+  setting turned on the pedal lights its cell in the table, which is the quick way to find its number.
+
+CHANNEL, SEND and CLOCK > DELAY stay on the pedal's MIDI page: the editor protocol has no command for them.
+
 ## Tempo for the delay
 
 Turn **CLOCK > DELAY** on (default off). When the host sends MIDI clock, the pedal times 24 clocks, and sets the delay TIME to
