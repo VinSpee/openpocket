@@ -58,7 +58,8 @@ A design review of the pedal's interface ([SOUNDS-AND-CONTROLS.md](SOUNDS-AND-CO
 - On a block page the knob goes down the page in the order drawn: ON, the model, the settings. FX steps through its
   blocks in the order of the preset's chain.
 - The corner reads `DSP 42%`, amber above 80 %, red when a block ran late. The tuner page shows the tuner only, with an
-  arrow toward in tune; the readings for a bug report are on the **diagnostics page** (keep holding HOME).
+  arrow toward in tune; the readings for a bug report are on the **diagnostics pages** (keep holding HOME): bars and
+  meters for the load, each core, the costliest blocks, the inputs and the battery, every figure written beside its picture.
 - Smaller things: a copy saved to another slot keeps its name (the page says so), RESTORE FACTORY says `PUSH: RESTORE`
   and does nothing on a factory sound, SYN's page is SYNTH, USER IR's cuts show `HZ`, a failed start or update says what
   to do first.
