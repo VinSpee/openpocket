@@ -41,7 +41,7 @@ OpenPocket (the stock-firmware scan was skipped on purpose).
    **Back to the official firmware** step. The SD-card recovery (`make appimage`) works as before.
 
 The status text at the bottom right of the screen shows the Bluetooth state: `STARTING` with the stage and the pedal's
-usual `C1 42%`, then `ADVERTISING` (the proof counters, scrolling) or `FAILED` (the failure, scrolling, with its short
+usual `DSP 42%`, then `ADVERTISING` (the proof counters, scrolling) or `FAILED` (the failure, scrolling, with its short
 code first so that it is always on screen). See [Reading the status text](#reading-the-status-text).
 
 ## What you should see
@@ -95,7 +95,7 @@ The log channel (`node tools/op.mjs log`) adds two lines, and the status area sc
 | Text | Meaning |
 | --- | --- |
 | `STARTING n` | the last stage reached: 1 task created, 2 controller init called, 3 radio front end replay entered, 4 waiting for the controller task, 5 setting the advertisement, 6 enabling it, 7 the replay returned, 8 the baseband asked for its interrupts. The markers are set by two tasks, so 3 and 7 can appear after 4; the number shown is the last one set, not the highest |
-| `FAILED s c` | step `s` failed with return value `c`. The status area is only 11 characters wide, so the whole line scrolls like a marquee (2 characters a second, resting 2 s on the start, then looping): `FAILED 2 -7  step btctrler_task_init stage init`. The short code is first, so it can be read before the scroll starts. The usual `C1 42%` is not shown while it has failed. |
+| `FAILED s c` | step `s` failed with return value `c`. The status area is only 11 characters wide, so the whole line scrolls like a marquee (2 characters a second, resting 2 s on the start, then looping): `FAILED 2 -7  step btctrler_task_init stage init`. The short code is first, so it can be read before the scroll starts. The usual `DSP 42%` is not shown while it has failed. |
 | `ADVERTISING` | the controller accepted the command to advertise; it does not mean a packet was sent. The status shows the proof counters instead, as a marquee (below) |
 
 Failing steps: `1` `task_create` failed (`c` is -1); `2` `btctrler_task_init` returned `c` (not 0); `3`

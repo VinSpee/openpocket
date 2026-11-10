@@ -101,13 +101,14 @@ static void ota_show(uint32_t step, int32_t code)
         ft_box(0, 150, 240, "DO NOT UNPLUG", &FT_SM, UI_DIM, UI_BG, 1);
         return;
     }
-    {
-        char b[16] = "FAILED -";
-        uint32_t k = 8, v = (uint32_t)(code < 0 ? -code : code);
-        if (v >= 10u) b[k++] = (char)('0' + v / 10u);
+    {   /* v42: what happened and what to do, the code for a bug report */
+        char b[24] = "UPDATE FAILED (CODE ";
+        uint32_t k = 20, v = (uint32_t)(code < 0 ? -code : code);
+        if (v >= 10u) b[k++] = (char)('0' + v / 10u % 10u);
         b[k++] = (char)('0' + v % 10u);
-        b[k] = 0;
+        b[k++] = ')'; b[k] = 0;
         ft_box(0, 124, 240, b, &FT_SM, RED, UI_BG, 1);
+        ft_box(0, 150, 240, "TRY AGAIN FROM THE INSTALLER", &FT_SM, UI_TXT, UI_BG, 1);
     }
     for (int i = 0; i < 15; i++) { fm1_wdt_feed(); fm1_delay_ms(100); }
 }
