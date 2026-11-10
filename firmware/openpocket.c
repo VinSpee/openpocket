@@ -43,7 +43,8 @@
 enum { RED=0xF800, GRN=0x07E0, BLU=0x001F, WHT=0xFFFF, BLK=0x0000, CYN=0x07FF, YEL=0xFFE0, ORG=0xFD20 };
 
 extern uint32_t _data_start[], _data_end[], _data_load[], _bss_start[], _bss_end[];
-extern uint32_t _rt_start[], _rt_end[], _rt_load[];
+extern uint32_t _rt_start[], _rt_end[], _rt_load[], _bss_hi_start[], _bss_hi_end[], _pool_tail_start[], _pool_tail_end[],
+                _bss_lo_start[], _bss_lo_end[];
 static volatile struct { uint32_t magic, pending, failed; } guard __attribute__((section(".noinit")));
 
 static uint32_t ms_now(void) { return (uint32_t)(fm1_ticks() / (FM1_TICKS_PER_US * 1000u)); }
@@ -306,7 +307,7 @@ static void fm1_fault(const fm1_crash_t *c)
 #define PH_DIR  (*(volatile uint32_t *)0x501C8u)
 #define ENC_MASK 0x3u      /* PC0=A, PC1=B */
 #ifndef OP_VERSION_NUM                  /* a test channel build (firmware/build.sh, OP_CHANNEL) sets its own number and tag */
-#define OP_VERSION_NUM "37"
+#define OP_VERSION_NUM "40"
 #endif
 #ifndef OP_TAG
 #define OP_TAG ""
@@ -540,15 +541,66 @@ static const int8_t QDEC[16] = {0,-1,1,0, 1,0,0,-1, -1,0,0,1, 0,1,-1,0};
 #include "px_usb.h"         /* USB-MIDI + update entry (web installer) */
 #include "px_store.h"       /* the user's presets in flash */
 #include "px_models.h"      /* v37: the NAM user models in flash */
+#include "px_irs.h"         /* v38: the user cabinet IRs in flash */
 #if !AUDIO_PROBE
 static uint32_t ed_load(void) { return a_bypass ? a_peak : a_load; }   /* PING: the DSP load, as at the bottom right */
 static uint32_t ed_flags(void) { return (a_bypass ? 1u : 0u) | (a_c1 ? 2u : 0u); }
+/* v40.1: the stacks' deepest use since boot. fm1_cstart paints them; the bytes at the bottom never written since are free */
+#define OP_PAINT 0x5AA5C33Cu
+extern char _ustack_top[];
+static uint32_t stack_free(const char *lo, const char *hi)
+{
+    const uint32_t *p = (const uint32_t *)(const void *)lo;
+    while ((const char *)p < hi && *p == OP_PAINT) p++;
+    return (uint32_t)((const char *)p - lo);
+}
+#if OP_BLE_TEST
+uint32_t ble_heap_min_free(void);
+uint32_t ble_stack_min_free(void);
+#endif
+static uint32_t ed_stat(uint32_t k)                    /* PING, after the flags */
+{
+    return k == 0u ? a_peak : k == 1u ? a_peak_all : k == 2u ? a_xrun : k == 3u ? a_clip
+         : k == 4u ? stack_free(_ustack_lo, _ustack_top) : k == 5u ? stack_free(_sstack_lo, _sstack_top)
+#if OP_BLE_TEST
+         : k == 6u ? ble_heap_min_free() : ble_stack_min_free();
+#else
+         : 0u;
+#endif
+}
+/* v40.2: PING's profile (14 bits each): each block's and the NAM network's share of an audio block's time over the last
+ * second (%, a_pf), the network's way of running (pxn_mode), then from its start-up timing (0.1 % of real time, the
+ * network alone): each way of running (px_nam_tuned), and where one core's time goes (pxn_prof_ticks); then the layer
+ * split: 0 off, else 1 + the last layer CPU0 runs; then with it CPU0's and CPU1's load and their peaks since the preset
+ * was set (%) */
+#define ED_PROF (PX_NBLK + 2u + PXN_MODES + 9u + 5u)
+static uint32_t ed_prof(uint32_t k)
+{
+    if (k <= PX_NBLK) return a_pf[k];
+    if (k == PX_NBLK + 1u) return (uint32_t)pxn_mode();
+    k -= PX_NBLK + 2u;
+    if (k == PXN_MODES + 9u) return g_eng.nam_lp ? 1u + (uint32_t)px_nam_lp_split_now() : 0u;   /* v40.2 */
+    if (k > PXN_MODES + 9u && k <= PXN_MODES + 13u) {  /* each core's load and peak (%), the layer split only */
+        const uint32_t j = k - PXN_MODES - 10u;
+        return g_eng.nam_lp ? (j < 2u ? a_cl[j] : a_cpk[j - 2u]) : 0u;
+    }
+    const uint32_t t = k < PXN_MODES ? px_nam_tuned((int)k) : pxn_prof_ticks((int)(k - PXN_MODES));
+    return t * 10u / (A_BUDGET * 2u / 100u);           /* (ticks for 256 frames: two audio blocks) */
+}
 static void nm_changed(uint32_t s)   /* v37: a user model was written or erased: the engine reloads it if it plays it */
 {
     if (g_eng.nam_idx == (int)(PX_NAM_NFACT + s)) g_eng.nam_idx = -1;
+    a_full = 1;                                        /* v38: the same knobs, another network: a full apply */
+    audio_apply();
+}
+static void ir_changed(uint32_t s)   /* v38: a user IR was written or erased: the engine reloads it if it plays it */
+{
+    if (g_eng.ir_slot == (int)s) g_eng.ir_slot = -1;
+    a_full = 1;
     audio_apply();
 }
 #if OP_BLE_TEST             /* the log channel (firmware/ble/ble_diag.h): only this image answers DIAG, the normal firmware does not change */
+#define ED_STATS 8u         /* PING also gives the Bluetooth heap's and tasks' lowest free bytes */
 #define ED_DIAG_LINES 5u
 #define ED_DIAG_LEN 224u
 static void ed_diag_line(uint32_t i, char *out);
@@ -612,7 +664,7 @@ static void app_main(void)
     }
 #endif
 #if DSP_CPU1
-    fm1_cpu1_bar_build(27u);             /* a new build gives the 2nd core another chance */
+    fm1_cpu1_bar_build(402u);            /* a new build gives the 2nd core another chance (v40.2: its NAM routines changed) */
     fm1_cpu1_start();                    /* at boot, before audio and interrupts (Felucca) */
 #endif
     lcd_init();
@@ -705,11 +757,28 @@ static void app_main(void)
     px_usb_start();                      /* USB-MIDI device + update entry (web installer) */
     px_store_boot();                     /* the saved presets; start on the last one saved */
     nm_scan();                           /* v37: the NAM user models (names, levels) */
+    ir_scan();                           /* v38: the user cabinet IRs (names) */
 #if DSP_CPU1
     px_nam_helper(a_hrun, a_hwait);      /* v37: CPU1 can take a part of the NAM network */
 #endif
-    if (pxc_status == PXC_READY) px_nam_fast((void *)PXC_BEGIN, PXC_END - PXC_BEGIN);   /* the vector unit's inputs */
-    px_nam_check(b_ticks);               /* v37: the NAM routines by hand checked, its fastest way to run chosen */
+#if OP_BLE_TEST
+    {   /* the vector unit's inputs: what the cache RAM has left after the tuner's buffers (app.ld .cram) */
+        extern char _cram_hi[];
+        uint32_t lo = (uint32_t)(uintptr_t)_cram_hi;
+        if (pxc_status == PXC_READY && lo < PXC_END) px_nam_fast((void *)(uintptr_t)lo, PXC_END - lo);
+        if (pxc_status == PXC_READY && lo + PXN_FAST_BYTES + PX_NAM_LP_BYTES <= PXC_END)   /* v40.2: then the layer split's */
+            px_nam_lp_mem((void *)(uintptr_t)(lo + PXN_FAST_BYTES), PX_NAM_LP_BYTES);
+    }
+#else
+    if (pxc_status == PXC_READY) {
+        px_nam_fast((void *)PXC_BEGIN, PXC_END - PXC_BEGIN);   /* the vector unit's inputs */
+        px_nam_lp_mem((void *)(PXC_BEGIN + PXN_FAST_BYTES), PX_NAM_LP_BYTES);   /* v40.2: then the layer split's queue */
+    }
+#endif
+    /* v37: the NAM routines by hand checked, its fastest way to run chosen. v40.2: not after a failed boot (safe mode,
+     * the DSP off anyway): a hand routine that faults in its check then costs one boot, not every one, and the pedal
+     * comes up with USB-MIDI for the installer's rescue (it ran C until the next boot) */
+    if (!safe) px_nam_check(b_ticks);
     audio_start();                       /* guitar -> DSP engine -> output, amp enabled */
     leds_init();                         /* the button lights: all off loaded, then on (PC7 low), as stock */
     op_stage(ST_UI, "SCREEN...");
@@ -719,6 +788,7 @@ static void app_main(void)
     op_stage(ST_RUN, 0);
 #endif
 #if OP_BLE_TEST
+    ble_os_init();                       /* the task table, before the main loop polls it (ble_os.c: it lives in NOINIT) */
     if (!safe)                           /* after a failed boot Bluetooth stays off: the pedal runs, and can be re-flashed */
         ble_test_start();                /* radio on, controller and host up, advertising (the pedal keeps working) */
 #endif
@@ -910,6 +980,11 @@ void fm1_cstart(void)
 {
     uint32_t *s, *d;
     uint32_t vdc0, sys0, dcdc, rst0, pinr0;
+    {   /* v40.1: paint the stacks (interrupts are still off), for their deepest use (ed_stat) */
+        volatile uint32_t here;
+        for (d = (uint32_t *)(void *)_ustack_lo; (char *)d < (char *)&here - 256; d++) *d = OP_PAINT;
+        for (d = (uint32_t *)(void *)_sstack_lo; (char *)d < _sstack_top - 256; d++) *d = OP_PAINT;
+    }
     fm1_time_init();
     /* v31, issue #1: the stock firmware's first act is P3_PINR_CON = 0, the long-press reset off (BlackBox_020
      * f_0200698a). Left on, a pin held at its active level resets the chip every 4 s (the SDK offers 4 or 8 s):
@@ -935,6 +1010,9 @@ void fm1_cstart(void)
     if (guard.failed >= 2u) { guard.failed = 0; guard.pending = 0; fm1_enter_uboot(); }
     fm1_irq_init();
     for (d = _bss_start; d < _bss_end; d++) *d = 0;
+    for (d = _bss_hi_start; d < _bss_hi_end; d++) *d = 0;
+    for (d = _pool_tail_start; d < _pool_tail_end; d++) *d = 0;
+    for (d = _bss_lo_start; d < _bss_lo_end; d++) *d = 0;
     for (s = _data_load, d = _data_start; d < _data_end; s++, d++) *d = *s;
     for (s = _rt_load, d = _rt_start; d < _rt_end; s++, d++) *d = *s;
     op_pwr.vdc0 = (uint8_t)vdc0; op_pwr.vdc1 = (uint8_t)fm1_vdc14();

@@ -4,11 +4,12 @@
 
 import { PORT_RE } from "./pxota.js";
 import { pack7, SLOT_BYTES } from "./pxnam.js";
+import { IR_BYTES, IR_CHUNK } from "./pxir.js";
 
 const H = [0x7D, 0x4F, 0x50];
 export const C = { INFO: 1, CAT_BLOCK: 2, CAT_TYPE: 3, TEXTS: 4, STATE: 5, SET: 6, ORDER: 7, NAME: 8, PUT: 9, SELECT: 10,
   FOCUS: 11, LIST: 12, SLOT_GET: 13, SLOT_PUT: 14, COMMIT: 15, SAVE: 16, WATCH: 17, PING: 18,
-  NAM_LIST: 19, NAM_WRITE: 20, NAM_COMMIT: 21, NAM_ERASE: 22, DIAG: 23 };
+  NAM_LIST: 19, NAM_WRITE: 20, NAM_COMMIT: 21, NAM_ERASE: 22, DIAG: 23, IR_LIST: 24, IR_WRITE: 25, IR_COMMIT: 26, IR_ERASE: 27 };
 export const NAM_CHUNK = 112;     // bytes per NAM_WRITE (firmware/px_models.h NM_CHUNK)
 export const P_SIZE = 110;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -132,7 +133,7 @@ export class Editor {
   // ---- the catalogue: blocks, types, parameter names and value texts (cached per firmware) ----
   async catalog(progress = () => {}) {
     const key = `openpocket-cat-${this.info.identity}-${this.info.version}`;
-    try { const c = JSON.parse(localStorage.getItem(key) || "null"); if (c && c.blocks && c.blocks.length === this.info.nblk) { this.cat = c; if (this.hasNam) await this.namTexts(); return c; } } catch (_) { }
+    try { const c = JSON.parse(localStorage.getItem(key) || "null"); if (c && c.blocks && c.blocks.length === this.info.nblk) { this.cat = c; if (this.hasNam) await this.namTexts(); if (this.hasIr) await this.irTexts(); return c; } } catch (_) { }
     const blocks = [];
     for (let b = 0; b < this.info.nblk; b++) {
       const r = new Reader(await this.request(C.CAT_BLOCK, [b]));
@@ -165,6 +166,7 @@ export class Editor {
     this.cat = { blocks };
     try { localStorage.setItem(key, JSON.stringify(this.cat)); } catch (_) { }
     if (this.hasNam) await this.namTexts();
+    if (this.hasIr) await this.irTexts();
     return this.cat;
   }
   // v37: the AMP NAM type's MODEL texts name the user models, which change: always asked again (not cached)
@@ -219,7 +221,15 @@ export class Editor {
   async commit() { return (await this.request(C.COMMIT, [], 4000))[0]; }
   async save(slot) { return (await this.request(C.SAVE, [slot], 4000))[1]; }
   async watch(on) { return (await this.request(C.WATCH, [on ? 1 : 0]))[0]; }
-  async ping() { const r = await this.request(C.PING); return { load: r[0], bypass: !!(r[1] & 1), c1: !!(r[1] & 2) }; }
+  async ping() {
+    const r = await this.request(C.PING), p = { load: r[0], bypass: !!(r[1] & 1), c1: !!(r[1] & 2) };
+    if (r.length >= 8) Object.assign(p, { peak: r[2], peakAll: r[3], xrun: r[4] | r[5] << 7, clip: r[6] | r[7] << 7 });   // v40.1
+    if (r.length >= 12) Object.assign(p, { stackFree: (r[8] | r[9] << 7) * 4, irqStackFree: (r[10] | r[11] << 7) * 4 });
+    // v40.2: then a count and that many 2-byte figures (the DSP profile, tools/dsp.mjs): the stack figures end before it
+    const base = [12, 16].find((b) => r.length > b && r.length === b + 1 + 2 * r[b]);
+    if ((base ?? r.length) >= 16) Object.assign(p, { bleHeapFree: (r[12] | r[13] << 7) * 4, bleTaskStackFree: (r[14] | r[15] << 7) * 4 });
+    return p;
+  }
   // v37 (protocol 2): NAM models. list -> { nfact, nuser, models: [{ index, user, slot, used, name }] }
   get hasNam() { return !!(this.info && this.info.proto >= 2); }
   async namList() {
@@ -246,6 +256,39 @@ export class Editor {
     return rc;
   }
   async namErase(slot) { return (await this.request(C.NAM_ERASE, [slot], 6000))[1]; }
+  // v38 (protocol 3): cabinet IRs. list -> [{ slot, used, name }]
+  get hasIr() { return !!(this.info && this.info.proto >= 3); }
+  async irList() {
+    const r = new Reader(await this.request(C.IR_LIST));
+    const n = r.b(), out = [];
+    for (let i = 0; i < n; i++) { const used = !!r.b(), name = r.s(); out.push({ slot: i, used, name }); }
+    return out;
+  }
+  // a packed IR (pxir.js packIr) into slot `slot`: pieces, then the flash write. rc 0 ok, 1 invalid, 2 flash
+  async irUpload(slot, bytes, progress = () => {}) {
+    if (bytes.length !== IR_BYTES) throw new Error("IR: wrong size");
+    const n = Math.ceil(bytes.length / IR_CHUNK);
+    for (let i = 0; i < n; i++) {
+      const piece = bytes.slice(i * IR_CHUNK, (i + 1) * IR_CHUNK);
+      const r = await this.request(C.IR_WRITE, [i & 0x7F, i >> 7, ...pack7(piece)]);
+      if (r[2]) throw new Error(`IR: piece ${i} refused`);
+      progress((i + 1) / (n + 1));
+    }
+    const rc = (await this.request(C.IR_COMMIT, [slot], 6000))[1];
+    progress(1);
+    return rc;
+  }
+  async irErase(slot) { return (await this.request(C.IR_ERASE, [slot], 6000))[1]; }
+  // the CAB USER IR type's IR texts name the slots, which change: always asked again (not cached)
+  async irTexts() {
+    const b = this.cat.blocks.findIndex((x) => x.label === "CAB");
+    const t = b < 0 ? -1 : this.cat.blocks[b].types.findIndex((x) => x && x.name === "USER IR");
+    if (t < 0) return;
+    const q = new Reader(await this.request(C.TEXTS, [b, t, 0]));
+    q.b(); q.b(); q.b();
+    const texts = []; for (let v = 0; v <= 100; v++) texts.push(q.s());
+    this.cat.blocks[b].types[t].params[0].texts = texts;
+  }
 }
 
 // ---- preset files (JSON, blocks and types by name) ----
