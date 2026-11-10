@@ -104,13 +104,7 @@ static void fm1_delay_ms(uint32_t ms) { (void)ms; }
 #ifdef T_REF
 #define FELUCCA_UAC 0
 #else
-#define FELUCCA_UAC 1
-#define FELUCCA_UAC_48K 0
-#define FELUCCA_UAC_OUT 1
-#define FELUCCA_UAC_MIDI_LAST 1
-#define FELUCCA_UAC_SWITCH 1
-#define HALF_FRAMES A_FR
-#define UO_N 1024u
+#include "px_uaconf.h"                          /* the pedal's streams and rings (px_usb.h) */
 #endif
 #include "usb.c"
 static uint32_t ota_now_ms(void) { return 0; }
@@ -169,7 +163,7 @@ static int desc_main(void)
 /* ---- the pedal's side: what firmware/px_uaudio.h needs of px_audio.h and px_midi.h ---- */
 static float a_out[A_FR], a_gv = 1.0f;
 static volatile uint8_t a_mute, a_ua;
-static uint32_t a_uat;
+static uint32_t a_uat, a_swaps;
 static uint8_t px_ua_on;
 #include "px_uaudio.h"
 
@@ -340,9 +334,9 @@ static void test_record(double ppm, int late, const char *name)
     snprintf(msg, sizeof msg, "%s: no gap (ring empty %u, ring full %u, no packet ready %u, stalls %u, odd packets %u)", name,
              uac.underruns - un0, uac.overruns - ov0, uac.missed - missed0, uac.stalls - st0, short_);
     CHECK(uac.underruns == un0 && uac.overruns == ov0 && uac.missed == missed0 && uac.stalls == st0 && !short_, msg);
-    snprintf(msg, sizeof msg, "%s: the ring's fill at a block's start leaves a packet in hand and room for a block (%u..%u of %u)", name,
+    snprintf(msg, sizeof msg, "%s: the ring's fill at a block's start leaves 0.6 ms in hand and room for a block (%u..%u of %u)", name,
              uac.fill_lo, uac.fill_hi, (unsigned)UA_N);
-    CHECK((late || uac.fill_lo >= 46u) && uac.fill_hi + A_FR + 46u < UA_N, msg);   /* (a late block finds less: no gap is the test) */
+    CHECK((late || uac.fill_lo >= 26u) && uac.fill_hi + A_FR + 46u < UA_N, msg);   /* (a late block finds less: no gap is the test) */
     printf("  %s: packets of 44 / 45 / other: %u / %u / %u, steered +%u -%u, fill %u..%u, %.3f frames a ms\n", name, pk[0], pk[1],
            pk[2], uac.adj_up - up0, uac.adj_down - dn0, uac.fill_lo, uac.fill_hi, (double)got / 600000.0);
 }
@@ -399,16 +393,17 @@ static void test_play(double ppm, const char *name)
     CHECK(n_out > 26000000u && !jumps && !quiet && uo.underruns == un0 && uo.overruns == ov0, msg);
     snprintf(msg, sizeof msg, "%s: left and right kept apart, full level at MASTER 100 (peak %d of 2560000, %u frames off)", name, (int)peak, lr);
     CHECK(!lr && peak > 2540000 && peak <= 2560000, msg);
-    snprintf(msg, sizeof msg, "%s: the ring's fill stays inside it (%u..%u of %u)", name, fmin, fmax, (unsigned)UO_N);
-    CHECK(fmin >= 64u && fmax + 45u < UO_N, msg);
+    snprintf(msg, sizeof msg, "%s: the ring's fill after a block's read leaves 0.6 ms in hand and stays inside it (%u..%u of %u)", name, fmin, fmax, (unsigned)UO_N);
+    CHECK(fmin >= 26u && fmax + 45u < UO_N, msg);
     printf("  %s: fill %u..%u frames (target %u)\n", name, fmin, fmax, (unsigned)UO_TGT);
 }
 
-static void play_block(int32_t *d, int32_t pedal)    /* a block with the computer playing +20000 on both channels */
+static uint32_t play_v = 20000u;
+static void play_block(int32_t *d, int32_t pedal)    /* a block with the computer playing play_v (+20000) on both channels */
 {
     for (int k = 0; k < 6; k++) {                 /* 3 ms of its packets, the polls taking them */
         if (!(m_ep[4][4] & 0x01u)) {
-            for (uint32_t i = 0; i < 45u; i++) ep4rx[i] = 20000u | 20000u << 16;
+            for (uint32_t i = 0; i < 45u; i++) ep4rx[i] = play_v | play_v << 16;
             m_ep[4][4] |= 0x01u; m_ep[4][6] = 180u; m_ep[4][7] = 0;
         }
         usb_poll();
@@ -442,6 +437,19 @@ static void test_mix(void)
     ctrl(0x01, 11, 0, 2, 0, 0);
     play_block(d, 1234);
     CHECK(d[0] == 1234 && d[255] == 1234, "mix: with the stream closed the output is the pedal's alone");
+    {   /* v40.7: the stream opened again plays what the computer sends now, not what the ring still held of the last one */
+        int old = 0, heard = 0;
+        CHECK(uo_w - uo_r >= 100u, "mix: (the ring still holds frames of the stream that closed)");
+        ctrl(0x01, 11, 1, 2, 0, 0);
+        play_v = 5000u;
+        for (i = 0; i < 40; i++) {
+            play_block(d, 0);
+            for (int k = 0; k < 2 * (int)A_FR; k++) { if (d[k] == 20000 * 256) old++; else if (d[k] == 5000 * 256) heard++; }
+        }
+        play_v = 20000u;
+        CHECK(uo.go && !old && heard > 30 * 2 * (int)A_FR, "mix: a stream opened again does not play the end of the one before");
+        ctrl(0x01, 11, 0, 2, 0, 0);
+    }
 }
 static void test_knee(void)                       /* the record stream's level: MASTER at 100, the output's soft knee */
 {

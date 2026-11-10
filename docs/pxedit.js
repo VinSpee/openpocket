@@ -297,7 +297,7 @@ export class Editor {
     const n = r[3] || 0, v = [];
     for (let i = 0; i < n && 4 + 4 * i + 3 < r.length; i++) { const k = 4 + 4 * i; v.push(r[k] | r[k + 1] << 7 | r[k + 2] << 14 | r[k + 3] << 21); }
     const names = ["recStarts", "recPackets", "recFrames", "recEmpty", "recFull", "recNoPacket", "recStalls", "recLonger", "recShorter",
-      "recFillLow", "recFillHigh", "playStarts", "playPackets", "playFrames", "playEmpty", "playFull", "blockTicks"];
+      "recFillLow", "recFillHigh", "playStarts", "playPackets", "playFrames", "playEmpty", "playFull", "blockTicks", "recSkipped", "playSkipped", "blockSwaps"];
     return { on: !!r[0], rc: r[1], recording: !!(r[2] & 1), flowing: !!(r[2] & 2), playing: !!(r[2] & 4), sounding: !!(r[2] & 8),
       counts: Object.fromEntries(names.map((k, i) => [k, v[i] ?? 0])) };
   }

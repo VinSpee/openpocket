@@ -53,7 +53,7 @@ The 12 blocks, by index: 0 GATE, 1 COMP, 2 PITCH, 3 SFX, 4 DRIVE, 5 AMP, 6 CAB, 
 | 25 IR_WRITE | piece (2 bytes), 128 packed bytes | the 2 piece bytes, rc (0 ok, 1 invalid). As `NAM_WRITE`: piece i holds bytes 112 i .. 112 i + 111 of an IR (2112 bytes, 19 pieces). Stored in RAM only (the same buffer as `NAM_WRITE`: one upload at a time) |
 | 26 IR_COMMIT | slot (0..7) | slot, rc (0 ok, 1 invalid: header, CRC; 2 flash). Checks the pieces received and writes them to the slot |
 | 27 IR_ERASE | slot (0..7) | slot, rc (0 ok, 1 invalid, 2 flash). Empties the slot |
-| 28 USB_AUDIO | nothing, or on (0/1) | on (0/1), rc (0 ok, 1 this firmware has no USB audio, 2 flash), state, n (17), then n counts of 4 bytes each (bits 0-6, 7-13, 14-20, 21-27). Without an argument it only reads. With one it sets the USB AUDIO setting and, if it changed, writes it to the flash; see "USB audio" below |
+| 28 USB_AUDIO | nothing, or on (0/1) | on (0/1), rc (0 ok, 1 this firmware has no USB audio, 2 flash), state, n (20; 17 before v40.7), then n counts of 4 bytes each (bits 0-6, 7-13, 14-20, 21-27). Without an argument it only reads. With one it sets the USB AUDIO setting and, if it changed, writes it to the flash; see "USB audio" below |
 
 ### NAM models (protocol 2)
 
@@ -92,7 +92,8 @@ must connect again (after about 3 s).
 `state`: bit 0, the computer has the record stream open; bit 1, it is reading it; bit 2, it has the playback stream
 open; bit 3, its playback is sounding.
 
-The 17 counts, since the pedal started (they wrap at 2^28), in this order:
+The 20 counts, since the pedal started (they wrap at 2^28), in this order (a client reads `n` of them: a firmware
+before v40.7 sends the first 17):
 
 | # | Count |
 | --- | --- |
@@ -106,6 +107,9 @@ The 17 counts, since the pedal started (they wrap at 2^28), in this order:
 | 12..14 | playback stream: times started, packets received, frames received |
 | 15, 16 | playback ring empty (the playback starts over) and full (a packet dropped) |
 | 17 | the time the last audio block spent on USB audio, in timer ticks (a block has 69,648) |
+| 18 | (v40.7) record packets the computer took late: it left a USB frame or more without asking for one. Nothing the pedal can mend; macOS does it now and then in the first second of a stream |
+| 19 | (v40.7) playback packets that came late: a USB frame or more without one |
+| 20 | (v40.7) audio blocks whose output was asked for before their input (`firmware/px_aorder.h`). They are sent in the right order since v40.7; before, each was a block sent twice and one lost. It rises about twice a second while a stream is open, and with MIDI traffic, with or without USB audio |
 
 The Bluetooth test image has no USB audio: it answers `0, 1, 0, 0`.
 

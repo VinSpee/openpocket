@@ -143,6 +143,7 @@ static struct {
 #define UA_N 512u
 #define UA_DEEP 0u
 #endif
+#ifndef UA_LO                    /* (an app that writes the ring on a steady clock sets its own band: OpenPocket) */
 #if HALF_FRAMES > 128u           /* 256-frame halves: the band X0X measured for them */
 #define UA_PRIME (128u + UA_DEEP)
 #define UA_LO (96u + UA_DEEP)
@@ -151,6 +152,7 @@ static struct {
 #define UA_PRIME (104u + UA_DEEP)            /* silence ahead of the first rendered frame */
 #define UA_LO (80u + UA_DEEP)                /* a render may start late: keep a packet and more in hand */
 #define UA_HI (128u + UA_DEEP)
+#endif
 #endif
 #define UAC_RATE 44100u
 /* The packets follow the I2S clock (6 MHz / 136 = 44,117.647 Hz; resampled x 160 / 147 at 48 kHz, 48,019.21 Hz) as a
@@ -175,7 +177,9 @@ _Static_assert(UA_HI48 + UA_REND48 + UA_MAXF < UA_N, "the ring holds the band, a
 #define UA_MAXF 46u              /* frames in the largest packet */
 #endif
 #define UAC_MAXP (UA_MAXF * 4u)
+#ifndef UA_BAND_VAR               /* (a measurement build whose band is set at run time: OpenPocket's OP_UADEV) */
 _Static_assert(UA_HI + HALF_FRAMES + UA_MAXF < UA_N, "the ring holds the band, a render and a packet");
+#endif
 static uint32_t ua_ring[UA_N] FELUCCA_UAC_RING_ATTR;
 static volatile uint32_t ua_w, ua_r;
 static uint32_t ep4tx[UA_MAXF] __attribute__((aligned(4)));
@@ -199,6 +203,7 @@ static struct {
     uint32_t adj_up, adj_down;                   /* packets one frame longer / shorter than the pattern */
     uint32_t fill_lo, fill_hi;                   /* range of fill_min since the stream started */
     uint32_t rate_sets;                          /* SET_CUR sampling frequency requests */
+    uint32_t skips;                              /* packets the host took late: a frame or more without an IN token */
 } uac;
 #if FELUCCA_UAC_OUT
 /* USB audio output: the packets in a ring (16-bit L | R << 16), read by uac_play at the I2S clock */
@@ -207,16 +212,22 @@ static struct {
 #endif
 #define UO_MAXF 49u              /* frames in the largest packet the host may send (44.1: 44 or 45) */
 #define UO_MAXP (UO_MAXF * 4u)
+#ifndef UO_TGT
 #define UO_TGT (2u * HALF_FRAMES)   /* the fill a render aims to start at: ~11.6 ms with 256-frame halves */
+#endif
 static uint32_t uo_ring[UO_N];
 static volatile uint32_t uo_w, uo_r;
 static uint32_t ep4rx[UO_MAXF + 1u] __attribute__((aligned(4)));
 static struct {
     volatile uint8_t alt;        /* the output's streaming interface: 1 = the host plays */
     uint8_t go;                  /* primed: uac_play reads the ring */
+    volatile uint8_t stale;      /* the stream (re)started: what the ring still holds is the stream before's */
     uint32_t pos;                /* the read position's fraction, Q16 */
     float err;                   /* the fill's distance from UO_TGT, smoothed (frames) */
     uint32_t pkts, frames, underruns, overruns, starts;
+    uint32_t step;               /* the last read's step (Q16: the I2S clock against the host's) */
+    uint32_t gaps;               /* packets that came late: a frame or more without one */
+    uint8_t idle;                /* polls since the last packet */
 } uo;
 #endif
 #if FELUCCA_UAC_48K
@@ -692,6 +703,7 @@ static void uo_ep4_reset(void)                          /* EP4 OUT: isochronous,
 static void uo_stream(uint32_t alt)                     /* SET_INTERFACE, configuration, bus reset */
 {
     uo.go = 0;
+    uo.stale = 1;
     RING_PUBLISH();
     uo.alt = (uint8_t)alt;
     if (alt)
@@ -1557,8 +1569,14 @@ static void uo_service(void)                            /* an EP4 OUT packet int
     uint32_t csr, n, i, w, f;
     sie_wr(S_INDEX, 4);
     csr = sie_rd(S_RXCSR1);
-    if (!(csr & 1u))
+    if (!(csr & 1u)) {
+        if (uo.idle < 255u)
+            uo.idle++;
         return;                                         /* (most polls: RXCSR2 is read only for a packet) */
+    }
+    if (uo.idle >= 3u && uo.go)
+        uo.gaps++;                                      /* 1.5 ms or more since the last one */
+    uo.idle = 0;
     csr |= sie_rd(S_RXCSR2) << 8;
     n = (sie_rd(S_RXCOUNT1) | (sie_rd(S_RXCOUNT2) << 8)) / 4u;
     if (n > UO_MAXF)
@@ -1596,6 +1614,12 @@ static __attribute__((noinline)) void uac_play(int32_t *out, uint32_t n, uint32_
         return;
     }
     if (!uo.go) {
+        if (uo.stale) {                                 /* a new stream: not the end of the one before, played again */
+            uo.stale = 0;
+            RING_PUBLISH();
+            uo_r = uo_w;
+            return;
+        }
         if (fill < UO_TGT)
             return;                                     /* priming */
         r = uo_w - UO_TGT;                              /* start at the target: the excess is old */
@@ -1630,6 +1654,7 @@ static __attribute__((noinline)) void uac_play(int32_t *out, uint32_t n, uint32_
     RING_PUBLISH();
     uo_r = r + (pos >> 16);
     uo.pos = pos & 0xFFFFu;
+    uo.step = step;
 }
 #endif
 
@@ -1657,6 +1682,8 @@ static void uac_service(void)
     if (uac.queued) {
         if (csr & 0x04u)
             uac.missed++;                               /* UnderRun: an IN token found nothing queued */
+        if (uac.wait >= 3u && uac.flowing)
+            uac.skips++;                                /* it waited 1.5 ms or more */
         uac.flowing = 1;
     }
     uac.queued = 1;

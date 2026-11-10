@@ -20,13 +20,15 @@
 #define FELUCCA_OTA 1
 #define FELUCCA_CDC 0
 #if OP_UAUDIO
-#define FELUCCA_UAC 1                           /* the pedal's sound to the computer (EP4 IN, asynchronous) */
-#define FELUCCA_UAC_48K 0                       /* 44.1 kHz only, as the stock firmware: no resampler in the interrupt */
-#define FELUCCA_UAC_OUT 1                       /* the computer's playback to the pedal's output (EP4 OUT, adaptive) */
-#define FELUCCA_UAC_MIDI_LAST 1                 /* audio control, the streams, then MIDI: the order macOS 13-15 need (usb.c) */
-#define FELUCCA_UAC_SWITCH 1                    /* only while the setting is on (usb_uac_on) */
-#define HALF_FRAMES A_FR                        /* the frames a block feeds the record ring */
-#define UO_N 1024u                              /* the playback ring: 4 KB (it holds 256 frames, +- a block and a packet) */
+#include "px_uaconf.h"                          /* the streams and their rings (also tests/test_usb_audio.c's) */
+#if OP_UADEV                                    /* the measurement option (px_audio.h): the band and the target set at run time */
+static uint32_t uad_lo = 52u, uad_hi = 108u, uad_prime = 80u, uad_tgt = 208u;
+#define UA_BAND_VAR 1
+#define UA_LO uad_lo
+#define UA_HI uad_hi
+#define UA_PRIME uad_prime
+#define UO_TGT uad_tgt
+#endif
 #endif
 #define FELUCCA_USB_PRODUCT "OpenPocket"
 #define FELUCCA_USB_MANUFACTURER "OpenPocket"
@@ -53,6 +55,9 @@ static uint8_t *ota_scratch(void);              /* px_models.h: the upload stagi
 
 static uint8_t px_flash_ok;                     /* the flash is a 1 MiB SPI NOR: the update entry may stage */
 static volatile uint32_t px_t5_sub;
+#if OP_UADEV
+static void uad_poll(void);                     /* px_uaudio.h: the gaps between USB polls */
+#endif
 
 void fm1_timer5_irq(void)                       /* 10 kHz; USB at 2 kHz */
 {
@@ -63,6 +68,9 @@ void fm1_timer5_irq(void)                       /* 10 kHz; USB at 2 kHz */
 #endif
     if (++px_t5_sub >= 5u) {
         px_t5_sub = 0;
+#if OP_UADEV
+        uad_poll();
+#endif
         usb_poll();
     }
 }
