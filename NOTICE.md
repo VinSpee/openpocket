@@ -24,7 +24,10 @@ Contributors: **Vince Speelman ([VinSpee](https://github.com/VinSpee))**: the si
 command-line flasher, MIDI, the Bluetooth test image (the radio's fix, a connectable BLE-MIDI peripheral, the Chocolate
 Plus test, `op.mjs log`), and v41's two-core NAM work (the network split by layers, the `rdm` / `post4` / `post5` routines, 24 KB of RAM
 freed, the faster preset switches with LOADING, PING's DSP health and `tools/dsp.mjs`, the pedal screen's quick wins;
-pull request #22).
+pull request #22), and v42's web editor in four sections (#23), the pedal's reworked controls and diagnostics pages
+(#24) and USB audio (#25).
+**Ivan Shevchuk ([Testing7B](https://github.com/Testing7B))**: v42's check and restore of the BlackBox V21 factory
+sounds (pull request #26).
 
 Sound models: the names refer to the gear that inspired each voicing (circuit analyses published by ElectroSmash,
 Electric Druid, R.G. Keen / GEOFEX, Rob Robinette, Duncan's Tone Stack Calculator; speaker data sheets; manufacturers'
