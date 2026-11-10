@@ -682,7 +682,7 @@ static void app_main(void)
     ft_box(0, 126, 240, OP_VERSION, &FT_SM, UI_DIM, UI_BG, 1);
 #endif
 #if !AUDIO_PROBE
-    ft_box(0, 150, 240, "STARTING", &FT_SM, UI_TXT, UI_BG, 1);   /* v41: a plain word first, the numbers small below */
+    ft_box(0, 150, 240, "STARTING", &FT_SM, UI_TXT, UI_BG, 1);   /* v42: a plain word first, the numbers small below */
     {   /* the supplies as found (fm1_cstart) and why the chip last reset */
         char l[32]; l[0] = 0;
         b_str(l, "PWR "); b_num(l, op_pwr.vdc0); b_str(l, " "); b_num(l, op_pwr.sys0); b_str(l, " (BOOT LEVELS)");
@@ -705,7 +705,7 @@ static void app_main(void)
         if ((st != ST_OK || crashed) && !op_diag.safe) {
             char l[48], h[9];
             safe = 1;                    /* this boot: DSP bypassed, so the pedal stays usable */
-            lcd_rect(0, 0, 240, 240, UI_BG);   /* v41: what happened and what to do first, the numbers for a bug report below */
+            lcd_rect(0, 0, 240, 240, UI_BG);   /* v42: what happened and what to do first, the numbers for a bug report below */
             ft_box(0, 6, 240, "LAST START FAILED", &FT_MD, RED, UI_BG, 1);
             ft_box(0, 34, 240, "THE EFFECTS ARE OFF FOR THIS START", &FT_SM, UI_TXT, UI_BG, 1);
             ft_box(0, 52, 240, "SWITCH OFF AND ON TO TRY AGAIN", &FT_SM, UI_TXT, UI_BG, 1);
@@ -822,12 +822,12 @@ static void app_main(void)
                 char c[16];
                 int late = a_xrun && a_blocks - a_xrun_at < 700u;   /* a block ran late in the last 2 s: "DSP 88%!" in red */
                 uint32_t ld = a_bypass ? a_peak : a_load;
-                ui_dg.load = ld; ui_dg.peak = a_peak; ui_dg.cl[0] = a_cl[0]; ui_dg.cl[1] = a_cl[1];   /* (v41: the diagnostics page) */
+                ui_dg.load = ld; ui_dg.peak = a_peak; ui_dg.cl[0] = a_cl[0]; ui_dg.cl[1] = a_cl[1];   /* (v42: the diagnostics page) */
                 ui_dg.cores = (uint8_t)(a_c1 ? (px_nam_dual(&g_eng) ? 2u : 1u) : 0u);
                 ui_dg.split = (uint8_t)(g_eng.nam_lp != 0); ui_dg.guard = (uint8_t)(a_c1 ? 93u : 85u);   /* (px_audio.h's dsp_load limits) */
                 ui_dg.late = (uint8_t)late; ui_dg.bypass = a_bypass;
                 ui_load_text(c, ld, safe, a_bypass, late);
-                int kind = ui_load_kind(ld, safe, a_bypass, late, a_ld);   /* v40.3: LOADING a NAM model; v41: amber when high */
+                int kind = ui_load_kind(ld, safe, a_bypass, late, a_ld);   /* v40.3: LOADING a NAM model; v42: amber when high */
                 bat_raw[2] = (int32_t)a_xrun; bat_raw[3] = (int32_t)a_clip; bat_raw[4] = (int32_t)a_peak_all;   /* diagnostics page */
 #if OP_BLE_TEST
                 {   /* "STARTING 4 C1 42%": the Bluetooth state first; FAILED and ADVERTISING scroll their long lines instead (ble_status.h) */

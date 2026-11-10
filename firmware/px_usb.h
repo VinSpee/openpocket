@@ -101,7 +101,7 @@ static void ota_show(uint32_t step, int32_t code)
         ft_box(0, 150, 240, "DO NOT UNPLUG", &FT_SM, UI_DIM, UI_BG, 1);
         return;
     }
-    {   /* v41: what happened and what to do, the code for a bug report */
+    {   /* v42: what happened and what to do, the code for a bug report */
         char b[24] = "UPDATE FAILED (CODE ";
         uint32_t k = 20, v = (uint32_t)(code < 0 ? -code : code);
         if (v >= 10u) b[k++] = (char)('0' + v / 10u % 10u);

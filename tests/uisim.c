@@ -148,12 +148,12 @@ static int quick_wins(const char *d)
     return 0;
 }
 
-/* ---- the full overhaul (v41): the design review's F4 to F17, through ui.h's own controls (ui_buttons, ui_turn, ui_action) ---- */
+/* ---- the full overhaul (v42): the design review's F4 to F17, through ui.h's own controls (ui_buttons, ui_turn, ui_action) ---- */
 static uint32_t T = 100000u;                            /* the simulated clock (ms); ui_buttons runs every 5 ms as the main loop */
 static void hold(uint32_t mask, uint32_t ms) { for (uint32_t t = 0; t < ms; t += 5u) { ui_buttons(T, mask); T += 5u; } }
 static void tap(int b) { hold(1u << b, 40); hold(0, 5); }
 #define CHECK(c, m) do { if (!(c)) { printf("%s\n", m); return 1; } } while (0)
-/* the diagnostics as pictures (v41): each figure beside its graphic, colours by state, two pages turned by the knob */
+/* the diagnostics as pictures (v42): each figure beside its graphic, colours by state, two pages turned by the knob */
 static int px_at(uint32_t x, uint32_t y, uint16_t c) { return fb[y * 240u + x] == c; }
 static int diagnostics(const char *d)
 {

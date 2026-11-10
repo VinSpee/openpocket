@@ -16,10 +16,10 @@
  *  +------------------------------+       +------------------------------+
  *
  * Controls (ui_buttons, ui_turn and ui_action below: the main loop and the simulator both use them):
- * KNOB = select / adjust; PUSH = open / edit / confirm; HOME = back to PLAY, on PLAY the preset list (v41), hold 0.7 s =
- * tuner, held on = diagnostics; FOOTSWITCHES = next / previous preset, both together = tuner (v41);
+ * KNOB = select / adjust; PUSH = open / edit / confirm; HOME = back to PLAY, on PLAY the preset list (v42), hold 0.7 s =
+ * tuner, held on = diagnostics; FOOTSWITCHES = next / previous preset, both together = tuner (v42);
  * AMP CAB DLY REV MOD = that block's page (press again = on/off); FX = the next of DRV, SFX, SYN, PIT, CMP, GT, EQ in the
- * preset's chain order (v41). Hold PUSH = SAVE (into one of the 52 slots, in flash). Hold FX = MIDI.
+ * preset's chain order (v42). Hold PUSH = SAVE (into one of the 52 slots, in flash). Hold FX = MIDI.
  * Double-click PUSH on PLAY = MOVE the selected block: KNOB moves it along the chain, PUSH drops it, HOME puts it back.
  * The preset LEVEL (v36) is the GT page's 3rd setting ("PRESET LVL").
  */
@@ -78,7 +78,7 @@ static uint16_t ui_dark(uint16_t c)    /* a colour at ~1/3: the "off" version of
 }
 
 /* what the load figure stands for: the overload banner (BYPASS), LOADING a NAM model (amber on the MODEL row, the amp name
- * greyed on PLAY), a late block (the figure in red), little headroom left (v41: the figure in amber) */
+ * greyed on PLAY), a late block (the figure in red), little headroom left (v42: the figure in amber) */
 enum { UI_ST_NORM, UI_ST_LATE, UI_ST_BYPASS, UI_ST_LOADING, UI_ST_HIGH };
 #define UI_LOAD_HIGH 80u               /* above this load the figure turns amber */
 
@@ -99,7 +99,7 @@ static int ui_np(void) { return px_nparams((int)ui_blk, PRESET.type[ui_blk]); }
 static int ui_nitems(void) { return 2 + ui_np(); }     /* 0 = type, 1 = on/off, 2.. = parameters */
 static const char *ui_block_name(int b) { return b == PX_B_SYN ? "SYNTH" : px_block_name(b); }   /* (the documents' name) */
 
-/* v41: a setting that picks from a list (NAM MODEL, USER IR) steps one item a detent, skips the empty slots and shows its
+/* v42: a setting that picks from a list (NAM MODEL, USER IR) steps one item a detent, skips the empty slots and shows its
  * place in the list. The stored value stays 0..100 (px_nam_knob, px_ir_knob): presets do not change. */
 static int ui_list_n(int b, int t, int k)              /* the list's length, 0: not a list */
 {
@@ -177,7 +177,7 @@ static void draw_status(int force)
     lcd_rect(66, 0, 18, S_H, UI_PANEL); lcd_rect(158, 0, ST_X - 158u, S_H, UI_PANEL);
     draw_battery(force);
 }
-/* the DSP load, from the main loop: "DSP 42%", "DSP 88%!" (a block ran late), "SAFE 42%", "PEAK 150%" (bypassed). v41: which
+/* the DSP load, from the main loop: "DSP 42%", "DSP 88%!" (a block ran late), "SAFE 42%", "PEAK 150%" (bypassed). v42: which
  * cores ran is on the diagnostics page (ui_dg). Every text fits ST_W (tests/uisim.c checks the worst ones). */
 static struct {                        /* the main loop's last DSP figures, for the diagnostics page */
     uint32_t load, peak, cl[2];        /* the load (the peak while bypassed), the peak since the preset, each core's (layer split) */
@@ -295,7 +295,7 @@ static void draw_tiles(int force)
         if (force || uc.tile_blk[i] != b || uc.tile_on[i] != on || uc.tile_sel[i] != sel || uc.tile_mv[i] != mv) draw_tile(i);
     }
 }
-static void draw_info(int force)       /* the selected block: label, model (v41: a NAM amp's model, a user IR's name), on/off */
+static void draw_info(int force)       /* the selected block: label, model (v42: a NAM amp's model, a user IR's name), on/off */
 {
     int b = (int)ui_blk, t = PRESET.type[b], on = PRESET.on[b] != 0;
     int m = ui_list_n(b, t, 0) ? ui_list_of(b, PRESET.p[b][0]) : -1;
@@ -337,7 +337,7 @@ static void draw_type(void)
     int sel = (UI_PAGE && ui_item == 0u), ed = sel && ui_mode == M_EDIT, many = px_ntypes((int)ui_blk) > 1;
     uint16_t bg = sel ? C_CARD : UI_BG, fg = ed ? UI_ACC : UI_TXT;
     ui_rbox(4, E_TYPE_Y - 2u, 232, 28, 5, bg, UI_BG);
-    ft_box(8, E_TYPE_Y, 20, sel && many ? "<" : "", &FT_MD, UI_ACC, bg, 1);   /* (v41: no arrows on a block of one model) */
+    ft_box(8, E_TYPE_Y, 20, sel && many ? "<" : "", &FT_MD, UI_ACC, bg, 1);   /* (v42: no arrows on a block of one model) */
     ft_box(28, E_TYPE_Y, 184, px_type_name((int)ui_blk, PRESET.type[ui_blk]), &FT_MD, fg, bg, 1);
     ft_box(212, E_TYPE_Y, 20, sel && many ? ">" : "", &FT_MD, UI_ACC, bg, 1);
 }
@@ -345,7 +345,7 @@ static int ui_loading_row(int k)       /* the NAM amp's MODEL row while its mode
 {
     return uc.status_kind == UI_ST_LOADING && ui_blk == PX_B_AMP && PRESET.type[PX_B_AMP] == PX_AMP_NAM && k == 0;
 }
-static void ui_hz_text(char *b, int off)   /* v41: USER IR's cut frequencies with their unit: "89 HZ", "6.3 KHZ", "OFF" */
+static void ui_hz_text(char *b, int off)   /* v42: USER IR's cut frequencies with their unit: "89 HZ", "6.3 KHZ", "OFF" */
 {
     uint32_t hz = 0;
     for (int i = 0; b[i]; i++) hz = hz * 10u + (uint32_t)(b[i] - '0');
@@ -498,7 +498,7 @@ static void ui_knob(int dd, int fast)
     } else if (ui_mode == M_MOVE) {                    /* the grabbed block swaps with its neighbour */
         int i = ui_pos_of(ui_blk), j = i + (dd > 0 ? 1 : -1);
         if (j >= 0 && j < PX_NBLK) { uint8_t t = PRESET.order[i]; PRESET.order[i] = PRESET.order[j]; PRESET.order[j] = t; }
-    } else if (ui_mode == M_BLOCK) {                   /* v41: in the order drawn: ON (item 1) at the top, MODEL, the settings */
+    } else if (ui_mode == M_BLOCK) {                   /* v42: in the order drawn: ON (item 1) at the top, MODEL, the settings */
         int n = ui_nitems(), p = ui_item < 2u ? 1 - (int)ui_item : (int)ui_item;
         p = (p + n + dd) % n;
         ui_item = (uint32_t)(p < 2 ? 1 - p : p);
@@ -552,9 +552,9 @@ static void save_draw(void)
     if (sv_shown == sv_dest) return;
     sv_shown = sv_dest;
     char b[20];
-    int restore = sv_dest == SV_FACTORY, can = !restore || st_saved(cur_preset);   /* (v41: nothing to restore: PUSH does nothing) */
+    int restore = sv_dest == SV_FACTORY, can = !restore || st_saved(cur_preset);   /* (v42: nothing to restore: PUSH does nothing) */
     ft_box(0, F_Y + 3u, 240, !can ? "KNOB: SLOT   HOME: NO" : restore ? "PUSH: RESTORE   HOME: NO" : "KNOB: SLOT  PUSH: SAVE  HOME: NO", &FT_SM, UI_DIM, UI_PANEL, 1);
-    /* v41: the pedal cannot rename: a copy keeps the name (the web editor renames) */
+    /* v42: the pedal cannot rename: a copy keeps the name (the web editor renames) */
     ft_box(0, 186, 240, restore || sv_dest == cur_preset ? "" : "NAME STAYS: RENAME IN THE EDITOR", &FT_SM, UI_DIM, UI_BG, 1);
     if (restore) {
         ft_box(0, 82, 240, "", &FT_XL, UI_ACC, UI_BG, 1);
@@ -666,7 +666,7 @@ static void midi_knob(int dd)
 }
 static void midi_push(void) { if (++mi_row >= MI_ROWS) midi_close(); }
 
-/* v41: one unsaved edit survives a preset change by foot or from the list: stepping away keeps it, coming back to its slot
+/* v42: one unsaved edit survives a preset change by foot or from the list: stepping away keeps it, coming back to its slot
  * gives it back (still EDITED). An edit elsewhere takes its place; it is dropped if its slot was saved over meanwhile. */
 static px_preset_t ui_kept;
 static uint32_t ui_kept_slot = ~0u, ui_kept_sum;     /* (the sum of what the slot held when the edit was kept) */
@@ -698,7 +698,7 @@ static void ui_preset_step(int dd)
 /* the FX button's blocks (the FX light follows them: px_lights.h) */
 static const uint8_t UI_FXB[7] = {PX_B_DRIVE, PX_B_SFX, PX_B_SYN, PX_B_PITCH, PX_B_COMP, PX_B_GATE, PX_B_EQ};
 static int ui_is_fx(uint32_t b) { for (int i = 0; i < 7; i++) if (UI_FXB[i] == b) return 1; return 0; }
-static void ui_fx_cycle(void)          /* FX: the next of its blocks along the preset's chain, as the tiles read (v41), else the first */
+static void ui_fx_cycle(void)          /* FX: the next of its blocks along the preset's chain, as the tiles read (v42), else the first */
 {
     ui_order_fix();
     int from = ui_is_fx(ui_blk) ? ui_pos_of(ui_blk) + 1 : 0;
@@ -710,7 +710,7 @@ static void ui_fx_cycle(void)          /* FX: the next of its blocks along the p
 }
 
 /* ===================================================== preset list ======== */
-/* v41: HOME on PLAY: the knob browses the presets by name without loading them, PUSH loads the one in the middle, HOME goes
+/* v42: HOME on PLAY: the knob browses the presets by name without loading them, PUSH loads the one in the middle, HOME goes
  * back. The playing preset's number is amber. */
 #define LS_Y0  38u
 #define LS_ROW 36u
@@ -750,7 +750,7 @@ static void list_close(void) { ui_mode = M_CHAIN; ui_item = 0; uc.screen = -1; u
 static void list_load(void) { if (ls_at != cur_preset) ui_goto(ls_at); list_close(); }
 
 /* ===================================================== tuner ======== */
-/* v41: the tuner only; the readings for a photo are on the diagnostics page, HOME held on past the tuner */
+/* v42: the tuner only; the readings for a photo are on the diagnostics page, HOME held on past the tuner */
 static const char *NOTE_N[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 static int tn_last_note = -2, tn_last_x = -1, tn_last_c = 1000, tn_last_dir = 2;
 #define TN_BAR_Y 172u
@@ -817,7 +817,7 @@ static void tuner_draw(float hz)       /* hz <= 0: no note */
 }
 
 /* ===================================================== diagnostics ======== */
-/* v41 (on the tuner page before): what a bug report needs a photo of, as pictures with every figure written beside them.
+/* v42 (on the tuner page before): what a bug report needs a photo of, as pictures with every figure written beside them.
  * HOME held on past the tuner; the knob turns the page (1: the DSP, 2: input and power); any control leaves. The sound
  * plays. Colours: green, amber above UI_LOAD_HIGH, red when a block ran late or the effects are bypassed. */
 #define DG_X   8u
@@ -1052,7 +1052,7 @@ static void ui_turn(int dd, int fast)  /* the PARA knob, one detent (fast: turne
 }
 static void ui_press(int b, uint32_t now)   /* a button's plain press: at its press, PUSH HOME FX at a short release */
 {
-    if (b == UB_FSUP || b == UB_FSDN) {        /* v41: both footswitches = the tuner. The first acts at once, as always; the
+    if (b == UB_FSUP || b == UB_FSDN) {        /* v42: both footswitches = the tuner. The first acts at once, as always; the
                                                 * other one soon after, while the first is still down, takes its step back
                                                 * and opens the tuner */
         ug.clk = 0;
@@ -1067,7 +1067,7 @@ static void ui_press(int b, uint32_t now)   /* a button's plain press: at its pr
         ug.fs_dir = (int8_t)ui_stepped;
         return;
     }
-    if (b == UB_PUSH) {                        /* v41: a click on PLAY opens the block at once; a 2nd one soon after: MOVE it */
+    if (b == UB_PUSH) {                        /* v42: a click on PLAY opens the block at once; a 2nd one soon after: MOVE it */
         if (ug.clk && ui_mode == M_BLOCK && ui_item == 0u && ui_blk == ug.clk_blk) {
             ug.clk = 0;
             ui_mode = M_CHAIN;

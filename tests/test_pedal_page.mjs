@@ -111,7 +111,7 @@ s = await until((x) => x.mode === "move");
 ok(s.mode === "move", "PARA clicked twice: MOVE");
 await post("/api/press/home");
 
-// ---- 5. both footswitches: the tuner, as the panel says (v41), on the same preset ----
+// ---- 5. both footswitches: the tuner, as the panel says (v42), on the same preset ----
 s = await state();
 await page.evaluate(async () => { await Promise.all([pedal.down("fs_dn"), pedal.down("fs_up")]); });
 await page.waitForTimeout(800);
@@ -148,7 +148,7 @@ ok(s.volume === 100, "MASTER in focus: End is 100");
 await page.locator("#master").blur();
 
 await post("/api/press/amp");
-await post("/api/knob/2");                             // (v41: down the page from MODEL: the NAM MODEL list, then GAIN)
+await post("/api/knob/2");                             // (v42: down the page from MODEL: the NAM MODEL list, then GAIN)
 await post("/api/press/push");
 s = await until((x) => x.mode === "edit");
 const gain = s.preset.p[5][1], k0 = s.knob, pb = await box("#para");
