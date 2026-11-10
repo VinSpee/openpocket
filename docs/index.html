@@ -86,7 +86,6 @@ footer a,.note a{color:inherit}
     <p class="note warnbox" data-t="s2warn"></p>
     <p class="note warnbox" id="bbwarn" hidden data-t="bbwarn"></p>
     <p class="note warnbox" id="testchan" hidden data-t="testchan"></p>
-    <label class="chk"><input type="checkbox" id="rescueOn"><span data-t="rescueon"></span></label>
     <div class="row">
       <button class="go" id="install" disabled data-t="install"></button>
       <button class="alt" id="resume" hidden data-t="resume"></button>
@@ -94,6 +93,7 @@ footer a,.note a{color:inherit}
     <div class="bar"><i id="bar"></i></div>
     <div class="steps" id="steps"></div>
     <p class="msg" id="msg"></p>
+    <p class="note" id="next" hidden><a href="editor.html" data-t="nexteditor"></a> · <a id="notes" data-t="nextnotes"></a></p>
   </section>
 
   <section class="card">
@@ -108,6 +108,7 @@ footer a,.note a{color:inherit}
   <section class="card">
     <details>
       <summary data-t="rescue"></summary>
+      <label class="chk"><input type="checkbox" id="rescueOn"><span data-t="rescueon"></span></label>
       <p class="note" data-t="rescuenote"></p>
       <p class="note" data-t="rescuemac"></p>
       <div class="row"><button class="alt" id="uboot" disabled data-t="uboot"></button></div>
@@ -140,7 +141,7 @@ const T = {
     s2warn: "During the install (about 1 to 2 minutes): do not unplug or switch the pedal off, keep this tab open. Nothing is written before the pedal has checked the package. First install over the official firmware: keep your backup (SD card / fm1buddy) at hand.",
     install: "Install", resume: "Resume the update",
     st_start: "start", st_verify: "check", st_loader: "loader", st_write: "write", st_reboot: "restart", st_done: "done",
-    done: "Done: the pedal now runs ", sameok: "OpenPocket is up to date.",
+    done: "Done: the pedal now runs ", nexteditor: "Open the preset editor", nextnotes: "What is new in this version", sameok: "OpenPocket is up to date.",
     s3: "Back to the official firmware", s3note: "Pick your pedal's official file (.fwsc), downloaded from Donner / M-VAVE. It is checked here, in your browser, and sent to no server.",
     backoff: "Return to the official firmware", offknown: "Official file verified: ", offunknown: "Well-formed official file, unknown to this page: ",
     unknownok: "I understand: this file has not been tested with this page. Install it anyway.",
@@ -264,10 +265,13 @@ async function run(job) {
   busy = true; stepAt = 0; drawSteps(); $("bar").style.width = "0";
   setState(t("busy"), "warn");
   ["install", "backoff", "uboot", "connect"].forEach((id) => $(id).disabled = true);
-  setMsg($("msg"), "");
+  setMsg($("msg"), ""); $("next").hidden = true;
   try {
     const res = await job();
-    setMsg($("msg"), t("done") + res, "ok");
+    stepAt = STEPS.length; drawSteps();                 // every stage done, none still lit
+    const v = /^(?:PocketX|BlackBox)_9(\d\d)$/.exec(res);
+    setMsg($("msg"), t("done") + (v ? `${t("opfw")} v${+v[1]} (${res})` : res), "ok");
+    if (v) { $("notes").href = `WHATS-NEW-v${+v[1]}.md`; $("next").hidden = false; }
     log("done: " + res);
   } catch (e) {
     setMsg($("msg"), errText(e), "err");
