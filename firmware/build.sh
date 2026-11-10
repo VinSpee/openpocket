@@ -85,7 +85,7 @@ RAM_DSP="px_engine_process px_engine_part px_wet_run px_wet_swap dly_block rv_bl
 # v40.2: the layer split's path (pxn_lp_*, lp_job, dsp_lp_run) in RAM; out of it, to make the room: the frame split's serving
 # (now the fallback when the layer split cannot run), the vector unit's paths (never chosen: slower) and the C versions
 # of the hand routines (used only if a hand one fails its start-up check: the network is then too slow anyway)
-RAM_FW="a_enc a_dec a_collect a_commit dsp_block dsp_out dsp_load dsp_job post_job post_run dsp_pipe lp_job dsp_lp_run a_lp_post lp_split
+RAM_FW="a_enc a_dec a_block a_send a_collect a_commit dsp_block dsp_out dsp_load dsp_job post_job post_run dsp_pipe lp_job dsp_lp_run a_lp_post lp_split
   fm1_alnk0_irq tn_capture fm1_cpu1_run fm1_cpu1_wait fm1_cpu1_retire a_hrun a_hwait b_ticks memcpy memset"
 python3 "$HERE/../tools/ramcode.py" "$O/px_dsp.o" --plain $RAM_DSP
 python3 "$HERE/../tools/ramcode.py" "$O/openpocket.o" $RAM_FW

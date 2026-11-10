@@ -9,11 +9,27 @@
  *   - the SysEx soft key F0 22 24 35 7D F7 enters the chip's UBOOT mode (rescue).
  * The identity the pedal reports ("PocketX_924", "BlackBox_924") is OP_PRODUCT, which tools/pxpkg.py writes into the
  * app of each package; an image not made by pxpkg (the SD-card image) reports the default below.
+ *
+ * v42: USB audio (docs/USB-AUDIO.md), while the USB AUDIO setting is on (px_midi.h px_ua_on, off by default). The
+ * pedal is then a class-compliant USB sound card as well (USB Audio Class 1, felucca-bsp's streams in usb.c, both on
+ * endpoint 4, isochronous): the computer records the pedal's sound and plays through its output. 16-bit stereo at
+ * 44.1 kHz. With the setting off the USB device is the same as before, byte for byte (tests/test_usb_audio.c).
  */
 #pragma once
 
 #define FELUCCA_OTA 1
 #define FELUCCA_CDC 0
+#if OP_UAUDIO
+#include "px_uaconf.h"                          /* the streams and their rings (also tests/test_usb_audio.c's) */
+#if OP_UADEV                                    /* the measurement option (px_audio.h): the band and the target set at run time */
+static uint32_t uad_lo = 52u, uad_hi = 108u, uad_prime = 80u, uad_tgt = 208u;
+#define UA_BAND_VAR 1
+#define UA_LO uad_lo
+#define UA_HI uad_hi
+#define UA_PRIME uad_prime
+#define UO_TGT uad_tgt
+#endif
+#endif
 #define FELUCCA_USB_PRODUCT "OpenPocket"
 #define FELUCCA_USB_MANUFACTURER "OpenPocket"
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")
@@ -39,6 +55,9 @@ static uint8_t *ota_scratch(void);              /* px_models.h: the upload stagi
 
 static uint8_t px_flash_ok;                     /* the flash is a 1 MiB SPI NOR: the update entry may stage */
 static volatile uint32_t px_t5_sub;
+#if OP_UADEV
+static void uad_poll(void);                     /* px_uaudio.h: the gaps between USB polls */
+#endif
 
 void fm1_timer5_irq(void)                       /* 10 kHz; USB at 2 kHz */
 {
@@ -49,6 +68,9 @@ void fm1_timer5_irq(void)                       /* 10 kHz; USB at 2 kHz */
 #endif
     if (++px_t5_sub >= 5u) {
         px_t5_sub = 0;
+#if OP_UADEV
+        uad_poll();
+#endif
         usb_poll();
     }
 }
@@ -122,8 +144,12 @@ static void ota_commit(const uint8_t *parm)
     fm1_enter_update(parm);                     /* record into RAM, core reset: the SPL runs the staged loader */
 }
 
+#if OP_UAUDIO
+#include "px_uaudio.h"         /* v42: the blocks to and from the computer, the setting, the figures */
+#endif
+
 /* ---- boot / main loop ---- */
-static void px_usb_start(void)                  /* interrupts still off (before audio_start) */
+static void px_flash_boot(void)                 /* interrupts still off (before audio_start) */
 {
     uint32_t f = irq_save(), id = FL_FAR(fl_jedec_ram)();
     irq_restore(f);
@@ -131,6 +157,14 @@ static void px_usb_start(void)                  /* interrupts still off (before 
     px_flash_ok = (id & 0xFFu) == 0x14u && id != 0xFFFFFFu && id != 0u;   /* 2^0x14 = 1 MiB */
     if (px_flash_ok)
         ota_boot_cleanup();                     /* a staging area left by an update: the SPL must not re-enter it */
+}
+/* after px_store_boot (v42): the computer must find the audio streams, or not, from its first question on */
+static void px_usb_start(void)                  /* interrupts still off */
+{
+#if OP_UAUDIO
+    usb_uac_on = px_ua_on;
+    a_ua = usb_uac_on;
+#endif
     usb_start();
     fm1_timer5_start(isr_timer5, 4);            /* above ALNK0 (3), as felucca-bsp */
 }
@@ -147,6 +181,9 @@ static void px_audio_halt(void)                 /* before any flash write: nothi
 static void ed_service(uint32_t now);
 static void px_usb_service(uint32_t now)        /* every main-loop pass */
 {
+#if OP_UAUDIO
+    px_ua_service(now);
+#endif
     usb_retry(now);
     if (usb.uboot_req) {                        /* SysEx soft key: the chip's UBOOT (rescue) */
         px_audio_halt();

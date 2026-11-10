@@ -212,6 +212,14 @@ input[type=range]:focus-visible::-webkit-slider-thumb{outline:2px solid var(--ac
         its level like the other cabinets.</p>
       <div class="list namlist" id="irlist" hidden aria-label="Cabinet IRs"></div>
       <input type="file" id="irfile" accept=".wav,audio/wav,audio/x-wav,audio/wave" hidden>
+      <h2 id="uah" hidden>USB audio</h2>
+      <p class="note" id="uanote" hidden>With USB audio on, the pedal is also a USB sound card, with no driver to install
+        (stereo, 16 bit, 44.1 kHz). The computer records the pedal's sound, and what the computer plays comes out of the
+        pedal's output. A change takes the pedal off USB for a second; the editor connects again by itself.</p>
+      <div class="slotbar" id="uarow" hidden>
+        <span class="lbl" id="uastate">Off</span>
+        <button class="btn small" id="uabtn">Turn on</button>
+      </div>
     </aside>
 
     <main class="device">
@@ -305,6 +313,7 @@ async function connect() {
     slots = await ed.list();
     await loadNam();
     await loadIr();
+    await loadUa();
     ed.onState = onPush;
     await ed.watch(true);
     $("idle").hidden = true; $("ui").hidden = false; $("actions").hidden = false;
@@ -488,6 +497,39 @@ async function namClear(m) {
   } catch (e) { say(`Not cleared: ${e.message}`, "err"); }
   finally { busy = false; }
 }
+
+// ---- v42: USB audio (protocol 4; docs/USB-AUDIO.md) ----
+let ua = null;
+async function loadUa() {
+  let on = !!(ed && ed.hasUsbAudio);
+  if (on) { ua = await ed.usbAudio(); on = ua.rc !== 1; }      // (rc 1: this firmware has no USB audio)
+  ["uah", "uanote", "uarow"].forEach((id) => { $(id).hidden = !on; });
+  if (!on) return;
+  $("uastate").textContent = !ua.on ? "Off" : ua.recording && ua.playing ? "On: the computer records and plays"
+    : ua.recording ? "On: the computer records" : ua.playing ? "On: the computer plays" : "On";
+  $("uabtn").textContent = ua.on ? "Turn off" : "Turn on";
+}
+$("uabtn").onclick = async () => {
+  if (!ed || busy || !ua) return;
+  const on = !ua.on;
+  if (!await ask(`Turn USB audio ${on ? "on" : "off"}? The sound stops for a moment while the pedal saves the setting, ` +
+    "then the pedal leaves USB for a second and the editor connects again.", on ? "Turn on" : "Turn off")) return;
+  busy = true;
+  let again = false;
+  try {
+    const r = await ed.usbAudio(on);
+    if (r.rc) { say("The pedal could not save the setting.", "err"); return; }
+    // the pedal leaves USB 150 ms after its reply and is back about 3 s later, as another USB device
+    clearInterval(pingTimer);
+    ed.close(); ed = null; again = true;
+    $("dot").classList.remove("on");
+    $("status").textContent = "reconnecting…";
+    say(`USB audio is ${on ? "on" : "off"}. Waiting for the pedal to come back on USB…`, "ok");
+    await sleep(3500);
+  } catch (e) { say(`Not changed: ${e.message}`, "err"); }
+  finally { busy = false; }
+  if (again) connect();
+};
 
 // ---- v38: cabinet IRs (8 user slots) ----
 let irs = null, irSlot = -1;

@@ -283,6 +283,24 @@ await shot("editor_5_imported.png");
   await shot("editor_7_tone3000.png");
 }
 
+// ---- v42: USB audio: off by default; the button asks, sets it, and the editor connects again by itself ----
+{
+  ok(await page.isVisible("#uah") && await page.textContent("#uastate") === "Off" && await page.textContent("#uabtn") === "Turn on",
+    "USB audio: shown, off by default");
+  await page.click("#uabtn");
+  ok(/Turn USB audio on\?.*leaves USB/.test(await page.textContent("#asktext")), "USB audio: asks first, and says the pedal leaves USB");
+  await page.click("#askyes");
+  const back = (state) => page.waitForFunction((t) => document.getElementById("uastate").textContent === t &&
+    /^Connected to/.test(document.getElementById("msg").textContent), state, { timeout: 20000 });
+  await back("On");
+  ok(await page.textContent("#uabtn") === "Turn off" && !(await page.isHidden("#ui")), "USB audio: on, and the editor connected again");
+  await shot("editor_8_usb_audio.png");
+  await page.click("#uabtn");
+  await page.click("#askyes");
+  await back("Off");
+  ok(await page.textContent("#uabtn") === "Turn on", "USB audio: off again");
+}
+
 // ---- phone width ----
 await page.setViewportSize({ width: 390, height: 844 });
 await sleep(200);

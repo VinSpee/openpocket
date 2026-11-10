@@ -32,6 +32,9 @@ Written from scratch for the pedal's own chip (JieLi AC791N, two cores), install
 - **MIDI over USB-C (v37)**: Program Change selects a preset, Control Change switches blocks and sets their models and
   settings, the pedal tells the computer when you change the sound, MIDI clock sets the delay time. Class-compliant, no driver;
   Bluetooth MIDI is only in the test image ([docs/BLE-TEST.md](docs/BLE-TEST.md)). Reference: [docs/MIDI.md](docs/MIDI.md), hardware test: [docs/MIDI-TEST.md](docs/MIDI-TEST.md)
+- **USB audio over USB-C (v42)**: with the USB AUDIO setting on (off by default: the MIDI page's fourth row, or the web
+  editor), the pedal is also a class-compliant USB sound card, 16-bit stereo at 44.1 kHz, no driver: the computer records
+  the pedal's sound and plays through its output, beside MIDI. [docs/USB-AUDIO.md](docs/USB-AUDIO.md)
 - What changed: [v41](docs/WHATS-NEW-v41.md), [v40](docs/WHATS-NEW-v40.md), [v39](docs/WHATS-NEW-v39.md), [v38](docs/WHATS-NEW-v38.md), [v37](docs/WHATS-NEW-v37.md), [since v33](docs/WHATS-NEW-v34-v36.md)
 - **New screen (v36)**: a PLAY page readable from a distance (preset number and name, amp, chain in colour) and an EDIT
   page with big values and bars
