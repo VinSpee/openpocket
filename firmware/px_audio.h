@@ -121,7 +121,7 @@ static uint8_t a_pf[PX_NBLK + 1];
 static uint32_t a_wcut;                                /* v39: wet blocks cut short so far (the footer, when not 0) */
 static volatile uint8_t a_nan;                         /* engine output a NaN/Inf: needs a reset */
 /* v42: USB audio (px_usb.h, docs/USB-AUDIO.md). While the USB AUDIO setting is on, each output block goes through
- * px_ua_block in a_dec (CPU0, the I2S interrupt): the block to the computer, the computer's playback into the output.
+ * px_ua_block in a_send (CPU0, the I2S interrupt): the block to the computer, the computer's playback into the output.
  * a_uat: the ticks it took, part of CPU0's work in a block (0 while the setting is off: the loads are then as before) */
 static volatile uint8_t a_ua;
 static uint32_t a_uat;
@@ -555,6 +555,22 @@ static float tuner_estimate(void)      /* frequency in Hz, or 0 (silence / uncle
 #ifndef OP_TESTSIG
 #define OP_TESTSIG 0
 #endif
+/* OP_UADEV 1 (measurements only, never a release): USB audio's figures for the pedal's timing (px_uaudio.h): when the
+ * interrupt's two callbacks run, the USB poll's gaps, the rings' fills; a counter or the computer's playback in the
+ * record stream in place of the sound, so a frame lost or repeated on the way shows exactly; a steady tone as the input;
+ * the output blocks sent in the order the driver asks, as before v42 */
+#ifndef OP_UADEV
+#define OP_UADEV 0
+#endif
+#if OP_UADEV
+static uint8_t ua_dev;                                 /* the modes (px_uaudio.h) */
+static void uad_enc(uint32_t t);
+static void uad_send(void);
+static void uad_tone(float *x);
+#define A_ORDER_OLD (ua_dev & 8u)
+#else
+#define A_ORDER_OLD 0u
+#endif
 #if OP_TESTSIG
 static void a_testsig(void)
 {
@@ -571,10 +587,8 @@ static void a_testsig(void)
     }
 }
 #endif
-static void a_enc(void *priv, uint8_t *data, int len, uint8_t ch)     /* guitar block received */
+static void a_block(const uint8_t *data, int len)      /* a guitar block: its DSP started, or run */
 {
-    (void)priv;
-    if (ch != 1u) return;
 #if DSP_CPU1
     const uint32_t t_irq = fm1_ticks();
 #endif
@@ -607,6 +621,9 @@ static void a_enc(void *priv, uint8_t *data, int len, uint8_t ch)     /* guitar 
 #if OP_TESTSIG
     a_testsig();
 #endif
+#if OP_UADEV
+    uad_tone(a_in);
+#endif
     tn_capture(a_in, A_FR);
 #if DSP_CPU1
     /* a NAM amp on two cores (px_nam_dual): pipelined here (dsp_pipe), CPU1 its helper */
@@ -625,17 +642,17 @@ static void a_enc(void *priv, uint8_t *data, int len, uint8_t ch)     /* guitar 
 #endif
     dsp_block();
 }
-static void a_dec(void *priv, uint8_t *data, int len, uint8_t ch)     /* output block to fill */
+static void a_send(int32_t *d, uint32_t n)             /* an output block filled: the block a_block just started */
 {
-    (void)priv; (void)ch;
+#if OP_UADEV
+    uad_send();
+#endif
 #if DSP_CPU1
     a_decw = 0;
     if (a_lpw) a_decw = a_lp_post();                   /* v40.2: the layer split: only its output (the worker goes on) */
     else
 #endif
     a_collect();                                       /* the previous block must be finished */
-    int32_t *d = (int32_t *)data;
-    uint32_t n = (uint32_t)len / 8u;
     if (n > A_FR) n = A_FR;
     for (uint32_t i = 0; i < n; i++) d[2u * i] = d[2u * i + 1u] = a_res[i];
 #if OP_UAUDIO
@@ -646,6 +663,8 @@ static void a_dec(void *priv, uint8_t *data, int len, uint8_t ch)     /* output 
     }
 #endif
 }
+#define A_ORDER_TICKS (A_BUDGET / 4u)                  /* an a_enc this soon after an a_dec is the same interrupt's (it comes within microseconds) */
+#include "px_aorder.h"                                /* v42: a_enc and a_dec, in whichever order the driver calls them */
 void fm1_alnk0_irq(void) { iis_irq_handler(0); }
 extern void isr_alnk0(void);
 
