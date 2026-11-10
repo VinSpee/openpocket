@@ -182,10 +182,16 @@ int main(int argc, char **argv)
     midi_push(); midi_knob(1); mid_usb_up = 1; mid_last[0] = PXM_CC; mid_last[1] = 25; mid_last[2] = 127; midi_draw(); shot(d, "midi_send_off_host_cc");
     midi_push(); midi_knob(1); mid_last[0] = PXM_PC; mid_last[1] = 11; midi_draw(); shot(d, "midi_clock_on_pc");
     mid_c1_off = 2; midi_draw(); shot(d, "midi_core2_off_late"); mid_c1_off = 0; midi_draw();   /* v41: the 2nd core retired */
+    /* v40.6: the fourth row, USB AUDIO: the setting follows the row only when the page is left */
+    midi_push(); midi_knob(1); midi_draw(); shot(d, "midi_usb_audio_on");
+    if (px_ua_on) { printf("midi: USB AUDIO must not change while the page is open\n"); return 1; }
     midi_push(); poison(); uc.screen = -1; ui_invalidate(); ui_render(); status();
     if (midi_saved != 1 || ui_mode != M_CHAIN) { printf("midi: leaving the page after a change must save once and return to the chain\n"); return 1; }
+    if (!px_ua_on) { printf("midi: leaving the page must set USB AUDIO as the row showed\n"); return 1; }
     midi_open(); midi_close();
     if (midi_saved != 1) { printf("midi: leaving without a change must not save\n"); return 1; }
+    midi_open(); midi_push(); midi_push(); midi_push(); midi_knob(-1); midi_close();
+    if (midi_saved != 2 || px_ua_on) { printf("midi: USB AUDIO off again must save once more\n"); return 1; }
     mid_cfg.chan = 16; midi_open(); midi_knob(1); midi_draw(); shot(d, "midi_channel_wraps_to_omni");
     if (mid_cfg.chan != 0) { printf("midi: channel 16 + 1 must wrap to omni\n"); return 1; }
     midi_knob(-1); if (mid_cfg.chan != 16) { printf("midi: omni - 1 must wrap to 16\n"); return 1; }
