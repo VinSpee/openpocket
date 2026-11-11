@@ -26,7 +26,7 @@ tested (issue #1: a restart loop after power cycles in some versions, rescue mod
 - [ ] Connect the pedal, check that it is found, press Install, wait for "Done". Do not unplug while it works.
 - [ ] The pedal restarts. The boot screen shows **v37 MIDI TEST**.
 - [ ] The sound is normal: play a few presets, each block of one preset, the tuner (hold HOME). Note the number at the bottom
-      right ("C1 42%"): baseline DSP load with the same preset: ______ %.
+      right ("DSP 42%"): baseline DSP load with the same preset: ______ %.
 - [ ] Open the web editor (`editor.html`): it connects, shows the presets, and a knob turned on the pedal moves on the page.
 
 ## 2. The MIDI page

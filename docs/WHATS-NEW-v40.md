@@ -39,8 +39,30 @@ as v39 to within 0.0002 on every type.
 ## On the pedal
 
 - Nothing to change in your presets. The delay's TIME knob, tap tempo and MIDI clock give the same times.
-- **Please report**, on a preset that went to `BYP` with v39: the tuner page's footer (CPU per block) with v39 and with
-  v40, and whether `BYP`, `LATE` or `CUT` still appear.
+- **Please report**, on a preset that went to `BYP` with v39: the CPU per block (on the tuner page's footer in v39, on
+  the diagnostics page now: keep holding HOME past the tuner) with v39 and with v40, and whether `BYP`, `LATE` or `CUT`
+  still appear.
+
+## The pedal's screen and controls
+
+A design review of the pedal's interface ([SOUNDS-AND-CONTROLS.md](SOUNDS-AND-CONTROLS.md) has the full list):
+
+- **Both footswitches open the tuner**, as the panel always said. The first one still changes the preset at once; the
+  second one, within about 0.15 s, changes it back and opens the tuner.
+- **PUSH on PLAY opens the block at once.** It used to wait 350 ms for a possible second click. A double click still
+  starts MOVE.
+- **An unsaved edit is kept** when a footswitch moves on: come back to that preset and the edit is there, still marked
+  `EDITED`. One edit is kept at a time.
+- **The preset list**: HOME on PLAY lists the presets by name; the knob browses without loading, PUSH loads.
+- **NAM MODEL and USER IR move one model a click**, skip the empty slots and show their place (`MODEL 6/14`).
+- On a block page the knob goes down the page in the order drawn: ON, the model, the settings. FX steps through its
+  blocks in the order of the preset's chain.
+- The corner reads `DSP 42%`, amber above 80 %, red when a block ran late. The tuner page shows the tuner only, with an
+  arrow toward in tune; the readings for a bug report are on the **diagnostics pages** (keep holding HOME): bars and
+  meters for the load, each core, the costliest blocks, the inputs and the battery, every figure written beside its picture.
+- Smaller things: a copy saved to another slot keeps its name (the page says so), RESTORE FACTORY says `PUSH: RESTORE`
+  and does nothing on a factory sound, SYN's page is SYNTH, USER IR's cuts show `HZ`, a failed start or update says what
+  to do first.
 
 ## For developers
 
