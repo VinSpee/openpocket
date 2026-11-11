@@ -9,11 +9,25 @@
  *   - the SysEx soft key F0 22 24 35 7D F7 enters the chip's UBOOT mode (rescue).
  * The identity the pedal reports ("PocketX_924", "BlackBox_924") is OP_PRODUCT, which tools/pxpkg.py writes into the
  * app of each package; an image not made by pxpkg (the SD-card image) reports the default below.
+ *
+ * v40.6: USB audio (docs/USB-AUDIO.md), while the USB AUDIO setting is on (px_midi.h px_ua_on, off by default). The
+ * pedal is then a class-compliant USB sound card as well (USB Audio Class 1, felucca-bsp's streams in usb.c, both on
+ * endpoint 4, isochronous): the computer records the pedal's sound and plays through its output. 16-bit stereo at
+ * 44.1 kHz. With the setting off the USB device is the same as before, byte for byte (tests/test_usb_audio.c).
  */
 #pragma once
 
 #define FELUCCA_OTA 1
 #define FELUCCA_CDC 0
+#if OP_UAUDIO
+#define FELUCCA_UAC 1                           /* the pedal's sound to the computer (EP4 IN, asynchronous) */
+#define FELUCCA_UAC_48K 0                       /* 44.1 kHz only, as the stock firmware: no resampler in the interrupt */
+#define FELUCCA_UAC_OUT 1                       /* the computer's playback to the pedal's output (EP4 OUT, adaptive) */
+#define FELUCCA_UAC_MIDI_LAST 1                 /* audio control, the streams, then MIDI: the order macOS 13-15 need (usb.c) */
+#define FELUCCA_UAC_SWITCH 1                    /* only while the setting is on (usb_uac_on) */
+#define HALF_FRAMES A_FR                        /* the frames a block feeds the record ring */
+#define UO_N 1024u                              /* the playback ring: 4 KB (it holds 256 frames, +- a block and a packet) */
+#endif
 #define FELUCCA_USB_PRODUCT "OpenPocket"
 #define FELUCCA_USB_MANUFACTURER "OpenPocket"
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")
@@ -121,8 +135,12 @@ static void ota_commit(const uint8_t *parm)
     fm1_enter_update(parm);                     /* record into RAM, core reset: the SPL runs the staged loader */
 }
 
+#if OP_UAUDIO
+#include "px_uaudio.h"         /* v40.6: the blocks to and from the computer, the setting, the figures */
+#endif
+
 /* ---- boot / main loop ---- */
-static void px_usb_start(void)                  /* interrupts still off (before audio_start) */
+static void px_flash_boot(void)                 /* interrupts still off (before audio_start) */
 {
     uint32_t f = irq_save(), id = FL_FAR(fl_jedec_ram)();
     irq_restore(f);
@@ -130,6 +148,14 @@ static void px_usb_start(void)                  /* interrupts still off (before 
     px_flash_ok = (id & 0xFFu) == 0x14u && id != 0xFFFFFFu && id != 0u;   /* 2^0x14 = 1 MiB */
     if (px_flash_ok)
         ota_boot_cleanup();                     /* a staging area left by an update: the SPL must not re-enter it */
+}
+/* after px_store_boot (v40.6): the computer must find the audio streams, or not, from its first question on */
+static void px_usb_start(void)                  /* interrupts still off */
+{
+#if OP_UAUDIO
+    usb_uac_on = px_ua_on;
+    a_ua = usb_uac_on;
+#endif
     usb_start();
     fm1_timer5_start(isr_timer5, 4);            /* above ALNK0 (3), as felucca-bsp */
 }
@@ -146,6 +172,9 @@ static void px_audio_halt(void)                 /* before any flash write: nothi
 static void ed_service(uint32_t now);
 static void px_usb_service(uint32_t now)        /* every main-loop pass */
 {
+#if OP_UAUDIO
+    px_ua_service(now);
+#endif
     usb_retry(now);
     if (usb.uboot_req) {                        /* SysEx soft key: the chip's UBOOT (rescue) */
         px_audio_halt();

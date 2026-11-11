@@ -521,14 +521,20 @@ static void save_confirm(void)
 }
 /* ===================================================== MIDI page ======== */
 /* hold FX: the MIDI settings (docs/MIDI.md). KNOB changes the selected row, PUSH moves to the next row and, after the
- * last one, leaves; HOME leaves. The settings are saved (a flash write, as SAVE) only if something changed. */
+ * last one, leaves; HOME leaves. The settings are saved (a flash write, as SAVE) only if something changed.
+ * v40.6: a fourth row, USB AUDIO (docs/USB-AUDIO.md): the row shows mi_ua, and the setting (px_ua_on) follows only on
+ * leaving, because a change takes the pedal off USB for a second. */
+#if OP_UAUDIO
+enum { MI_CHAN, MI_SEND, MI_CLOCK, MI_UAUDIO, MI_ROWS };
+#else
 enum { MI_CHAN, MI_SEND, MI_CLOCK, MI_ROWS };
+#endif
 static uint32_t mi_row, mi_shown_hash = ~0u;
-static uint8_t mi_orig;
+static uint8_t mi_orig, mi_ua;
 static void midi_persist(void);                 /* openpocket.c: writes the settings to the store */
 static void midi_open(void)
 {
-    ui_mode = M_MIDI; mi_row = 0; mi_shown_hash = ~0u; mi_orig = px_midi_cfg_pack(&mid_cfg);
+    ui_mode = M_MIDI; mi_row = 0; mi_shown_hash = ~0u; mi_orig = px_midi_cfg_pack(&mid_cfg); mi_ua = px_ua_on;
     lcd_rect(0, 0, 240, 240, UI_BG);
     lcd_rect(0, 0, 240, 4, UI_ACC); lcd_rect(0, 27, 240, 3, UI_ACC); lcd_rect(0, 4, 8, 23, UI_ACC);
     ft_box(8, 4, 232, "MIDI", &FT_MD, BLK, UI_ACC, 0);
@@ -538,24 +544,32 @@ static void midi_open(void)
 static void midi_draw(void)
 {
     uint32_t h = mi_row | (uint32_t)px_midi_cfg_pack(&mid_cfg) << 4 | (uint32_t)mid_usb_up << 12 |
-                 (uint32_t)mid_last[0] << 13 | (uint32_t)mid_last[1] << 16 | (uint32_t)mid_last[2] << 23;
+                 (uint32_t)mid_last[0] << 13 | (uint32_t)mid_last[1] << 16 | (uint32_t)mid_last[2] << 23 | (uint32_t)mi_ua << 31;
     if (h == mi_shown_hash) return;
     mi_shown_hash = h;
+#if OP_UAUDIO
+    static const char *const NAME[MI_ROWS] = {"CHANNEL", "SEND", "CLOCK > DELAY", "USB AUDIO"};
+#else
     static const char *const NAME[MI_ROWS] = {"CHANNEL", "SEND", "CLOCK > DELAY"};
+#endif
     char v[MI_ROWS][8];
     if (mid_cfg.chan) { v[0][0] = (char)(mid_cfg.chan >= 10 ? '0' + mid_cfg.chan / 10 : ' '); v[0][1] = (char)('0' + mid_cfg.chan % 10); v[0][2] = 0; }
     else { v[0][0] = 'O'; v[0][1] = 'M'; v[0][2] = 'N'; v[0][3] = 'I'; v[0][4] = 0; }
     v[1][0] = v[2][0] = 0;
     b_str(v[1], mid_cfg.send ? "ON" : "OFF");
     b_str(v[2], mid_cfg.clock ? "ON" : "OFF");
-    for (uint32_t r = 0; r < MI_ROWS; r++) {
-        uint32_t y = 44u + r * 36u;
+#if OP_UAUDIO
+    v[MI_UAUDIO][0] = 0;
+    b_str(v[MI_UAUDIO], mi_ua ? "ON" : "OFF");
+#endif
+    for (uint32_t r = 0; r < MI_ROWS; r++) {       /* (v40.6: four rows of 30 px; three of 36 before) */
+        uint32_t y = 36u + r * 30u;
         uint16_t bg = r == mi_row ? C_CARD : UI_BG;
-        lcd_rect(0, y, 240, 32, bg);
-        ft_box(8, y + 4u, 130, NAME[r], &FT_SM, r == mi_row ? UI_TXT : UI_DIM, bg, 0);
+        lcd_rect(0, y, 240, 28, bg);
+        ft_box(8, y + 6u, 130, NAME[r], &FT_SM, r == mi_row ? UI_TXT : UI_DIM, bg, 0);
         ft_box(140, y + 2u, 92, v[r], &FT_MD, r == mi_row ? UI_ACC : UI_TXT, bg, 2);
     }
-    ft_box(0, 160, 240, mid_usb_up ? "USB: HOST CONNECTED" : "USB: NO HOST", &FT_SM, mid_usb_up ? GRN : UI_DIM, UI_BG, 1);
+    ft_box(0, 162, 240, mid_usb_up ? "USB: HOST CONNECTED" : "USB: NO HOST", &FT_SM, mid_usb_up ? GRN : UI_DIM, UI_BG, 1);
     char l[24]; l[0] = 0;
     if (mid_last[0] == PXM_PC) { b_str(l, "LAST: PC "); b_num(l, mid_last[1] + 1u); }
     else if (mid_last[0] == PXM_CC) { b_str(l, "LAST: CC "); b_num(l, mid_last[1]); b_str(l, " = "); b_num(l, mid_last[2]); }
@@ -565,7 +579,7 @@ static void midi_draw(void)
 static void midi_close(void)
 {
     ui_mode = M_CHAIN; ui_item = 0;
-    if (px_midi_cfg_pack(&mid_cfg) != mi_orig) midi_persist();
+    if (px_midi_cfg_pack(&mid_cfg) != mi_orig || mi_ua != px_ua_on) { px_ua_on = mi_ua; midi_persist(); }
     lcd_rect(0, 0, 240, 240, UI_BG);
     uc.screen = -1;
     ui_invalidate();
@@ -574,7 +588,8 @@ static void midi_knob(int dd)
 {
     if (mi_row == MI_CHAN) mid_cfg.chan = (uint8_t)((mid_cfg.chan + 17u + (uint32_t)(dd > 0 ? 1 : 16)) % 17u);
     else if (mi_row == MI_SEND) mid_cfg.send ^= 1u;
-    else mid_cfg.clock ^= 1u;
+    else if (mi_row == MI_CLOCK) mid_cfg.clock ^= 1u;
+    else mi_ua ^= 1u;
 }
 static void midi_push(void) { if (++mi_row >= MI_ROWS) midi_close(); }
 

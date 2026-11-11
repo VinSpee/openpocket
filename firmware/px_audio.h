@@ -120,6 +120,12 @@ static void a_commit(void) { if (a_kpend) { px_engine_knobs(&g_eng, &a_kp); a_kp
 static uint8_t a_pf[PX_NBLK + 1];
 static uint32_t a_wcut;                                /* v39: wet blocks cut short so far (the footer, when not 0) */
 static volatile uint8_t a_nan;                         /* engine output a NaN/Inf: needs a reset */
+/* v40.6: USB audio (px_usb.h, docs/USB-AUDIO.md). While the USB AUDIO setting is on, each output block goes through
+ * px_ua_block in a_dec (CPU0, the I2S interrupt): the block to the computer, the computer's playback into the output.
+ * a_uat: the ticks it took, part of CPU0's work in a block (0 while the setting is off: the loads are then as before) */
+static volatile uint8_t a_ua;
+static uint32_t a_uat;
+static void px_ua_block(int32_t *d, uint32_t n);
 static volatile uint32_t a_nan_count;
 static int a_running;
 
@@ -429,7 +435,7 @@ static void dsp_lp_run(int run, uint32_t t_irq)
         if (!a_lpw) while (px_nam_lp_b(&g_eng)) { }
     }
     a_lpta = ta;
-    a_lpc0 = run && a_lpw ? fm1_ticks() - t_irq - a_encw : 0u;   /* (from the interrupt: the input, the tuner's samples) */
+    a_lpc0 = run && a_lpw ? fm1_ticks() - t_irq - a_encw + a_uat : 0u;   /* (from the interrupt: the input, the tuner's samples; USB audio) */
     /* CPU1's work for a block: the blocks after the amp as last timed, and its share of the network at this split */
     {
         const uint32_t n = pxn_frame_ticks() * A_FR;
@@ -443,7 +449,7 @@ static void dsp_pipe(uint32_t t_irq)
     uint32_t t0 = fm1_ticks();
     if (g_eng.nam_lp) {
         dsp_lp_run(!a_bypass && !a_hold, t_irq);
-        const uint32_t c1 = a_lpc1, c0 = fm1_ticks() - t_irq + a_decw;
+        const uint32_t c1 = a_lpc1, c0 = fm1_ticks() - t_irq + a_decw + a_uat;
         t0 = fm1_ticks() - (c1 > c0 ? c1 : c0);         /* the busier core */
         for (int k = 0; k < 2; k++) {                   /* each core's own (PING's profile) */
             const uint32_t pc = (k ? c1 : c0) * 100u / A_BUDGET;
@@ -451,7 +457,7 @@ static void dsp_pipe(uint32_t t_irq)
             a_cl[k] = a_cls[k] / 8u;
             if (pc > a_cpk[k]) a_cpk[k] = pc;
         }
-    } else dsp_pipe_run(!a_bypass && !a_hold);
+    } else { dsp_pipe_run(!a_bypass && !a_hold); t0 -= a_uat; }   /* (USB audio's time in a_dec: CPU0's too) */
     dsp_load(t0, 93u);                                 /* (CPU0's whole block here, the UI gets the rest) */
 }
 #endif
@@ -623,6 +629,13 @@ static void a_dec(void *priv, uint8_t *data, int len, uint8_t ch)     /* output 
     uint32_t n = (uint32_t)len / 8u;
     if (n > A_FR) n = A_FR;
     for (uint32_t i = 0; i < n; i++) d[2u * i] = d[2u * i + 1u] = a_res[i];
+#if OP_UAUDIO
+    if (a_ua) {                                        /* v40.6: USB audio */
+        const uint32_t t = fm1_ticks();
+        px_ua_block(d, n);
+        a_uat = fm1_ticks() - t;
+    }
+#endif
 }
 void fm1_alnk0_irq(void) { iis_irq_handler(0); }
 extern void isr_alnk0(void);
