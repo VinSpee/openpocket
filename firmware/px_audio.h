@@ -490,8 +490,7 @@ static void a_collect(void)                            /* collects the block in 
 #endif
 }
 
-/* ---- tuner: the interrupt stores the input decimated by 4 (11025 Hz); the main loop estimates the note ---- */
-#define TN_N 1024u
+/* ---- tuner (px_tuner.h): the interrupt stores the input decimated by 4; the main loop estimates the note ---- */
 #if OP_BLE_TEST   /* the Bluetooth test image: the buffers in the cache RAM (app.ld CRAM); without it (pxc_init failed) no tuner */
 #define TN_MEM __attribute__((section(".cram.tuner")))
 #define TN_READY (pxc_status == PXC_READY)
@@ -499,55 +498,7 @@ static void a_collect(void)                            /* collects the block in 
 #define TN_MEM
 #define TN_READY 1
 #endif
-static float tn_buf[TN_N] TN_MEM;
-static volatile uint32_t tn_w;
-static void tn_capture(const float *x, uint32_t n)
-{
-    if (!TN_READY) return;
-    uint32_t w = tn_w;
-    for (uint32_t i = 0; i + 3u < n; i += 4u) {
-        tn_buf[w] = (x[i] + x[i + 1u] + x[i + 2u] + x[i + 3u]) * 0.25f;
-        w = (w + 1u) & (TN_N - 1u);
-    }
-    tn_w = w;
-}
-#define TN_W 600u
-#define TN_TMAX 180u
-static float tn_lin[TN_W + TN_TMAX] TN_MEM;   /* the newest W + TMAX samples in order: all the difference function reads */
-static float tn_d[200] TN_MEM;
-static float tuner_estimate(void)      /* frequency in Hz, or 0 (silence / unclear). YIN algorithm. */
-{
-    const uint32_t W = TN_W, TMIN = 10u, TMAX = TN_TMAX;  /* 61 Hz .. 1100 Hz at 11025 Hz */
-    uint32_t w = tn_w;
-    float e = 0.0f;
-    if (!TN_READY) return 0.0f;
-    for (uint32_t i = 0; i < TN_N; i++) {              /* the energy over all TN_N samples, the copy of the newest */
-        const float v = tn_buf[(w + i) & (TN_N - 1u)];
-        e += v * v;
-        if (i >= TN_N - W - TMAX) tn_lin[i - (TN_N - W - TMAX)] = v;
-    }
-    if (e < (float)TN_N * 1.0e-6f) return 0.0f;        /* too weak: nothing to tune */
-    const float *x = tn_lin;
-    float run = 0.0f;
-    tn_d[0] = 1.0f;
-    for (uint32_t t = 1; t <= TMAX; t++) {
-        float d = 0.0f;
-        for (uint32_t i = 0; i < W; i++) { float v = x[i] - x[i + t]; d += v * v; }
-        run += d;
-        tn_d[t] = (run > 0.0f) ? d * (float)t / run : 1.0f;
-    }
-    uint32_t best = 0;
-    for (uint32_t t = TMIN; t < TMAX; t++)
-        if (tn_d[t] < 0.15f) { while (t + 1u < TMAX && tn_d[t + 1u] < tn_d[t]) t++; best = t; break; }
-    if (!best) {
-        float m = 0.35f;
-        for (uint32_t t = TMIN; t < TMAX; t++) if (tn_d[t] < m) { m = tn_d[t]; best = t; }
-        if (!best) return 0.0f;
-    }
-    float a = tn_d[best - 1u], b = tn_d[best], c = tn_d[best + 1u], den = a - 2.0f * b + c;
-    float tf = (float)best + ((den != 0.0f) ? 0.5f * (a - c) / den : 0.0f);
-    return 11025.0f / tf;
-}
+#include "px_tuner.h"
 
 /* v40.2: OP_TESTSIG 1 (measurements only, never a release): a synthetic guitar replaces the input, so the effects that
  * work only while something sounds (envelopes, pitch tracking, the synth's keys, tails) run as with a player: a note and
