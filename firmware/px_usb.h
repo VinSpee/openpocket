@@ -41,6 +41,7 @@ static uint32_t uad_lo = 52u, uad_hi = 108u, uad_prime = 80u, uad_tgt = 208u;
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")
 /* the app may only write the OTA staging area (its loader + update record) and the flash it keeps its own data in:
  * OP_FLASH_OWN(off, n), which the app's file defines (openpocket.c: the preset store, the NAM models, the IRs) */
+#include "base/flashmap.h"                      /* (BS_FLASH_OWN: the range of an app that uses base/store.h) */
 #ifndef OP_FLASH_OWN
 #define OP_FLASH_OWN(off, n) 0                  /* an app that keeps nothing in flash */
 #endif

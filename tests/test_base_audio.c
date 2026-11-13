@@ -22,6 +22,10 @@ static void fm1_delay_ms(uint32_t ms) { (void)ms; }
 static void fm1_irq_attach(int irq, void (*isr)(void), int prio) { (void)irq; (void)isr; (void)prio; }
 static void fm1_irq_enable_all(void) { }
 #define FM1_IRQ_ALNK0 0
+static int t_held, t_held_max;                  /* the audio's interrupt held off (a_nan_poll, a_change) */
+static void fm1_irq_mask(int irq) { (void)irq; if (++t_held > t_held_max) t_held_max = t_held; }
+static void fm1_irq_unmask(int irq) { (void)irq; t_held--; }
+static void fm1_wdt_feed(void);                 /* while the main loop waits, the interrupt goes on: below */
 void isr_alnk0(void) { }
 enum { ST_I2S };
 static void op_stage(uint32_t s, const char *txt) { (void)s; (void)txt; }
@@ -56,6 +60,8 @@ static void app_sound(const float *in, float *out)
     now += t_cost;
     t_calls++;
 }
+static uint32_t t_resets;
+static void app_sound_reset(void) { t_resets++; if (t_held != 1) t_resets += 1000u; }   /* (it must run with the interrupt held) */
 #include "base/audio_plain.h"
 
 static int fails;
@@ -76,6 +82,8 @@ static void irq(int32_t amp)
     a_dec(0, (uint8_t *)out, (int)sizeof out, 0);
 }
 static int32_t in24(uint32_t i) { return (int32_t)(in[2u * i] << 8) >> 8; }
+static uint32_t t_feeds;
+static void fm1_wdt_feed(void) { t_feeds++; if (!t_held) irq(1000000); }
 /* every output frame is the guitar's left sample times k on the left and times kr on the right, to within `tol` steps */
 static int follows2(float k, float kr, int32_t tol)
 {
@@ -98,6 +106,8 @@ static int sides_agree(int32_t tol)
 }
 static int silent(void) { for (uint32_t i = 0; i < 2u * A_FR; i++) if (out[i]) return 0; return 1; }
 static int32_t peak(void) { int32_t m = 0; for (uint32_t i = 0; i < A_FR; i++) { int32_t v = out[2u * i]; if (v < 0) v = -v; if (v > m) m = v; } return m; }
+
+void t_change(void) { app_sound_reset(); if (a_running && a_xf != 0.0f) t_resets += 1000u; }   /* (the output must be silent by now) */
 
 int main(void)
 {
@@ -168,11 +178,36 @@ int main(void)
     irq(1000000); irq(1000000);
     CHECK(follows(0.5f, 2) && a_xf == 1.0f, "the sound is whole again");
 
-    /* a NaN from the app: silence, and the flag for the main loop */
+    /* a NaN from the app: silence until the main loop has reset the app's sound; then it fades back in */
+    a_nan_poll();
+    CHECK(!t_resets && !t_held_max, "no NaN: the main loop's check does nothing");
     t_nan = 1; irq(1000000);
     CHECK(silent() && a_nan, "a NaN in the app's sound: the block is silence, a_nan is set");
-    t_nan = 0; a_nan = 0; irq(1000000);
-    CHECK(follows(0.5f, 2), "the app cleared it: the sound is back");
+    t_nan = 0; irq(1000000);
+    CHECK(silent(), "and silence it stays, though the app's sound is sound again: its state may hold the NaN");
+    a_nan_poll();
+    CHECK(t_resets == 1u && !a_nan && a_nan_count == 1u && t_held == 0 && t_held_max == 1, "the main loop's check: the app's sound reset with the interrupt held, the NaN counted, the flag cleared");
+    irq(1000000);
+    CHECK(!silent() && sides_agree(2) && !follows(0.5f, 2), "the sound fades back in, the same on both sides");
+    irq(1000000); irq(1000000);
+    CHECK(follows(0.5f, 2), "and is whole again");
+
+    /* a change that must not be heard (another effect, a cleared buffer): silence first, the change, then the sound again */
+    {
+        extern void t_change(void);
+        a_running = 1; t_feeds = 0; t_held_max = 0;
+        a_change(t_change);
+        CHECK(t_resets == 2u && t_held == 0 && t_held_max == 1, "a_change runs the change once the output is silent, with the interrupt held, and releases it");
+        CHECK(t_feeds >= 2u && t_feeds <= 4u && a_xft == 1, "it waited for the fade (256 samples: 2 blocks), feeding the watchdog; the sound is asked back");
+        irq(1000000);
+        CHECK(!silent() && !follows(0.5f, 2), "the first block after the change fades in from silence");
+        irq(1000000); irq(1000000);
+        CHECK(follows(0.5f, 2), "the sound is whole again");
+        a_running = 0; t_feeds = 0;
+        a_change(t_change);
+        CHECK(t_resets == 3u && t_feeds == 0u, "before the audio runs (the start) the change is made at once: no waiting for a fade nobody makes");
+        a_xf = 1.0f;
+    }
 
     /* the load: 50 % reads 50; over 85 % for 8 blocks running the app's sound is bypassed; 100 % is a late block */
     t_cost = A_BUDGET / 2u;

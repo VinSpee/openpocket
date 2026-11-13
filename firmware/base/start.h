@@ -9,16 +9,6 @@
 #define OP_GUARD_STACK 1
 #endif
 
-/* P3_RST_SRC as read at boot: why the chip last reset (fm1_sys.h) */
-static void rst_names(char *l, uint32_t r)
-{
-    static const char *const N[7] = {"POWER-ON", "VDDIO LOW", "WATCHDOG", "VCM", "LONG PRESS", "1.2V", "SOFT"};
-    int any = 0;
-    for (int i = 0; i < 7; i++)
-        if (r & (1u << i)) { if (any) b_str(l, "+"); b_str(l, N[i]); any = 1; }
-    if (!any) b_str(l, "NONE");
-}
-
 static void app_main(void);
 void fm1_cstart(void)
 {

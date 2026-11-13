@@ -45,12 +45,12 @@ assert.deepEqual(r.calls, [["info"], BUILD, base(["sh", "firmware/build.sh"])], 
 r = op(["ble"]);
 assert.deepEqual(r.calls.at(-1), base(["sh", "-c", "OP_BLE=1 sh firmware/build.sh && sha256sum firmware/openpocket-ble.bin build/ble/*.fwsc"]), "ble: the test image is its own build");
 
-touch("firmware/apps/thru/app.sh");
-r = op(["app", "thru"]);
-assert.deepEqual(r.calls.at(-1), base(["sh", "-c", "OP_APP=thru sh firmware/build.sh && sha256sum build/apps/thru/thru.bin build/apps/thru/*.fwsc"]), "app: an app on the base is its own build");
+touch("firmware/apps/starter/app.sh");
+r = op(["app", "starter"]);
+assert.deepEqual(r.calls.at(-1), base(["sh", "-c", "OP_APP=starter sh firmware/build.sh && sha256sum build/apps/starter/starter.bin build/apps/starter/*.fwsc build/apps/starter/manifest.json > build/apps/starter/SHA256SUMS && cat build/apps/starter/SHA256SUMS"]), "app: an app on the base is its own build, with its own sums");
 r = op(["app", "none"]);
 assert.ok(r.status !== 0 && r.calls.length === 0 && /firmware\/apps\/none\/app\.sh not found/.test(r.err), "app: a name without a folder is refused before Docker");
-r = op(["app", "../thru"]);
+r = op(["app", "../starter"]);
 assert.ok(r.status !== 0 && r.calls.length === 0, "app: a path is not a name");
 
 r = op(["test"]);

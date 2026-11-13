@@ -7,7 +7,7 @@
  *       still off): 1 = data holds the newest whole copy written with this magic, len its length and ver its format,
  *       for an app that reads its own older formats; 0 = none, and data is untouched (the app's factory state stands)
  *   bs_save(magic, ver, data, len)          0 = written and read back; the sound is muted for the write
- * and its file defines, before px_usb.h, the flash it may write:
+ * and its file defines, before px_usb.h, the flash it may write (base/flashmap.h):
  *   #define OP_FLASH_OWN(off, n) BS_FLASH_OWN(off, n)
  *
  * Where: 0xE5000..0xEF000, ten 4 KiB sectors between the update's staging area and OpenPocket's presets, which
@@ -24,12 +24,10 @@
  */
 #pragma once
 
-#define BS_LO      0xE5000u
-#define BS_HI      0xEF000u
+#include "base/flashmap.h"                      /* BS_LO, BS_HI, BS_FLASH_OWN */
 #define BS_NSEC    5u                           /* sectors a copy */
 #define BS_USE     0xF00u                       /* bytes used in a sector: the rest stays erased (see above) */
 #define BS_MAX     (BS_NSEC * BS_USE - 16u)     /* 19184: the most an app can keep */
-#define BS_FLASH_OWN(off, n) FL_IN(off, n, BS_LO, BS_HI)
 #ifndef BS_IRQ_OFF
 #define BS_IRQ_OFF() __asm__ volatile("cli" ::: "memory")
 #endif

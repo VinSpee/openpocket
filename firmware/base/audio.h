@@ -60,12 +60,15 @@ void free(void *p) { (void)p; }
 #endif
 /* memset / memcpy: felucca-bsp libc.c (included by openpocket.c) */
 
+#ifndef JL_GPIO
+#define JL_GPIO 0x50000u                               /* the ports' registers (a host build has its own: tests/host) */
+#endif
 static volatile uint32_t *jl_preg(uint32_t gpio, uint32_t off)
 {
     uint32_t port = gpio >> 4;
     if (port == 3u || port > 7u) return 0;             /* no port D (flash) */
     if (port == 2u && (gpio & 15u) == 7u) return 0;    /* PC7 = display */
-    return (volatile uint32_t *)(0x50000u + port * 0x40u + off);
+    return (volatile uint32_t *)(JL_GPIO + port * 0x40u + off);
 }
 static void jl_rmw(uint32_t g, uint32_t off, int on)
 {

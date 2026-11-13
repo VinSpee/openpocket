@@ -31,8 +31,13 @@
 #  - packages: tools/pxpkg.py rebuilds the official PocketX_016 app area byte for byte (needs the official file)
 #  - installer: docs/pxota.js + docs/pxpkg.js against a simulated pedal running the real update code (ota.c, ldr_core.c)
 #  - flasher: tools/flash.mjs (node tools/op.mjs flash) against the same simulated pedal: update, dry run, wrong model, damaged package, rescue of a pedal that restarts in a loop
+#  - products: an alternative firmware (an app on the base firmware) on the same simulated pedal: what it says it is, the
+#    flasher's --app guard, the install, the way back to OpenPocket (also by rescue), what the flash keeps through both.
+#    With OP_BUILT=1 (node tools/op.mjs all) also with the packages the build made: each product's image byte for byte
 #  - rescue: tools/uboot_rescue.py (protocol, guards, resume) against a simulated UBOOT pedal, tests/uboot_sim.py
 #  - hosted simulator: tools/sim.mjs driven over HTTP (controls, held buttons, screen, flash file, SysEx, the Web MIDI shim)
+#  - an app in the hosted simulator: firmware/apps/starter's own C files with tests/host as the chip, over the same HTTP
+#    interface: its controls, its sound at the two outputs, MIDI, its store, safe mode, the boot guard
 #  - pedal skin: its input mapping (tools/sim/pedal-input.js)
 #  - sound: the WebAssembly engine on known signals, against the native build; the bundled loops against their manifest
 #  - Chocolate Plus files: tools/chocolate/fcp.py against a made-up export
@@ -108,10 +113,14 @@ build/lightsim > build/lightsim.log || { cat build/lightsim.log; exit 1; }; tail
 echo "== simulated pedal"
 $CC -O1 -Wall -Wno-unused-function -o build/devsim tests/devsim.c
 if [ -n "$1" ]; then echo "== packages"; python3 tests/test_pxpkg.py "$1"; fi
+echo "== packages of two products (tools/pxpkg.py: an app's product descriptor, its packages' names, the manifest)"
+python3 tests/test_pxpkg_app.py > build/pxpkg_app.log || { cat build/pxpkg_app.log; exit 1; }; tail -1 build/pxpkg_app.log
 echo "== installer"
 node tests/test_installer.mjs "$1"
 echo "== flasher (tools/flash.mjs)"
 node tests/test_flash.mjs
+echo "== two products from one base (an alternative firmware installed, told from OpenPocket, and OpenPocket put back)"
+node tests/test_products.mjs ${OP_BUILT:+--built}
 echo "== build entry point (tools/op.mjs)"
 node tests/test_op.mjs
 echo "== release pin (tests/release_pin.sh: the same sums pass, one changed byte's sum fails)"
@@ -124,6 +133,8 @@ echo "== rescue tool (tools/uboot_rescue.py on a simulated UBOOT pedal)"
 python3 tests/test_uboot_rescue.py $1
 echo "== hosted simulator (tools/sim.mjs)"
 node tests/test_sim.mjs
+echo "== an app on the base firmware in the simulator (firmware/apps/starter, from its own C files: tools/sim.mjs --app)"
+node tests/test_app_sim.mjs
 echo "== Bluetooth test image sources (third_party/jieli-ble)"
 node tests/test_ble_sources.mjs
 echo "== Bluetooth test image status codes"

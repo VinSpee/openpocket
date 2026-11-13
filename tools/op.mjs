@@ -91,7 +91,8 @@ const commands = {
   app([name]) {                                // an app on the base firmware other than OpenPocket: its own outputs, build/apps/<name>/
     if (!/^[a-z0-9-]+$/.test(name || "")) fail("usage: app NAME   (a folder of firmware/apps, such as thru). See docs/BASE-FIRMWARE.md.");
     if (!existsSync(resolve(root, "firmware/apps", name, "app.sh"))) fail(`firmware/apps/${name}/app.sh not found.`);
-    return inContainer(["sh", "-c", `OP_APP=${name} sh firmware/build.sh && sha256sum build/apps/${name}/${name}.bin build/apps/${name}/*.fwsc`]);
+    const out = `build/apps/${name}`;
+    return inContainer(["sh", "-c", `OP_APP=${name} sh firmware/build.sh && sha256sum ${out}/${name}.bin ${out}/*.fwsc ${out}/manifest.json > ${out}/SHA256SUMS && cat ${out}/SHA256SUMS`]);
   },
   test: () => inContainer(["sh", "tests/run_tests.sh"]),
   // (the release pin, tests/release_pin.sh: OpenPocket's outputs must be the published release's bytes, or this fails)
