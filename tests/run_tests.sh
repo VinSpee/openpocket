@@ -20,6 +20,8 @@
 #    load's bypass
 #  - base controls (firmware/base/input.h): each button's pins and the keypad's voltages to its event, the debounce, a
 #    hold and its release, two buttons together, the encoder's detents, the MASTER knob
+#  - base store (firmware/base/store.h): save / reload, a power cut at every step of a save, nothing written outside its
+#    ten sectors, no sector ending like an update record whatever the app saves
 #  - USB audio (v42): the USB device code and the audio glue (bsp/chip/usb.c, firmware/px_uaudio.h) against a model of
 #    the controller and a computer: with the setting off the descriptors are the earlier device's byte for byte; with
 #    it on, the descriptors, the requests, 10 minutes of each stream with the clocks apart (no gap, no repeat)
@@ -76,6 +78,8 @@ base_test test_base_audio $CC $BAF tests/test_base_audio.c firmware/px_math.c -l
 base_test test_base_audio2 $CC $BAF -DA_CH=2 tests/test_base_audio.c firmware/px_math.c -lm   # an app with a stereo sound
 echo "== base controls (firmware/base/input.h over base/controls.h: the pins and the ADC to an app's events)"
 base_test test_base_input $CC -O1 -Wall -Wno-unused-function -Itests/host -Ifirmware tests/test_base_input.c
+echo "== base store (firmware/base/store.h: an app's own data in flash, kept by every update loader)"
+base_test test_base_store $CC -O1 -Wall -Wno-unused-function -Ifirmware tests/test_base_store.c
 echo "== USB audio (the device code and the audio glue against a model of the controller and a computer)"
 UAF="-O1 -Wall -Wno-unused-function -Wno-int-to-pointer-cast -Iengine -Ifirmware -Ifirmware/bsp/chip"
 $CC $UAF tests/test_usb_audio.c -lm -o build/test_usb_audio
