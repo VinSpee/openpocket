@@ -106,7 +106,7 @@ RAM_DSP="px_engine_process px_engine_part px_wet_run px_wet_swap dly_block rv_bl
 RAM_FW="a_enc a_dec a_block a_send a_collect a_commit dsp_block dsp_out dsp_load dsp_job post_job post_run dsp_pipe lp_job dsp_lp_run a_lp_post lp_split
   fm1_alnk0_irq tn_capture fm1_cpu1_run fm1_cpu1_wait fm1_cpu1_retire a_hrun a_hwait b_ticks memcpy memset"
 # an app: its own lists, and the base's audio path (base/audio.h, px_aorder.h)
-[ -n "$OP_APP" ] && { RAM_DSP="$APP_RAM_DSP"; RAM_FW="a_enc a_dec a_block a_send a_collect dsp_out dsp_load fm1_alnk0_irq tn_capture memcpy memset $APP_RAM_FW"; }
+[ -n "$OP_APP" ] && { RAM_DSP="$APP_RAM_DSP"; RAM_FW="a_enc a_dec a_block a_send a_collect a_input a_output dsp_out dsp_load fm1_alnk0_irq tn_capture memcpy memset $APP_RAM_FW"; }
 [ -z "$ENGINE" ] || python3 "$HERE/../tools/ramcode.py" "$EOBJ" --plain $RAM_DSP
 python3 "$HERE/../tools/ramcode.py" "$MOBJ" $RAM_FW
 # a direct call between the flash code and the RAM code is out of the CPU's call range: refuse it with its name

@@ -15,6 +15,8 @@
 #  - preset store: save / reload / power cut at every step of a save (firmware/px_store.h on a simulated flash)
 #  - the audio callbacks' order (v42, firmware/px_aorder.h): the I2S driver calls the output's callback before the
 #    input's when its interrupt enters late; every output block must still be the sound of that interrupt's guitar block
+#  - base audio (firmware/base/audio.h, audio_plain.h): the audio stages every app shares, as the THRU app uses them:
+#    the guitar through an app's sound to both output channels, MASTER, the mutes, the soft knee, the load's bypass
 #  - USB audio (v42): the USB device code and the audio glue (bsp/chip/usb.c, firmware/px_uaudio.h) against a model of
 #    the controller and a computer: with the setting off the descriptors are the earlier device's byte for byte; with
 #    it on, the descriptors, the requests, 10 minutes of each stream with the clocks apart (no gap, no repeat)
@@ -62,6 +64,8 @@ echo "== preset store"
 $CC -O1 -Iengine tests/test_store.c engine/px_dsp.c firmware/px_math.c -lm -o build/test_store && build/test_store | tail -2
 echo "== audio callbacks' order (the output block is its interrupt's, whichever callback the driver calls first)"
 $CC -O1 -Wall -Ifirmware tests/test_aorder.c -o build/test_aorder && build/test_aorder | tail -1
+echo "== base audio (the stages every app shares, under the plain schedule: firmware/base/audio.h, audio_plain.h)"
+$CC -O1 -Wall -Wno-unused-function -Wno-unused-variable -Wno-int-to-pointer-cast -Ifirmware tests/test_base_audio.c firmware/px_math.c -lm -o build/test_base_audio && build/test_base_audio | tail -1
 echo "== USB audio (the device code and the audio glue against a model of the controller and a computer)"
 UAF="-O1 -Wall -Wno-unused-function -Wno-int-to-pointer-cast -Iengine -Ifirmware -Ifirmware/bsp/chip"
 $CC $UAF tests/test_usb_audio.c -lm -o build/test_usb_audio
