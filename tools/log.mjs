@@ -20,7 +20,7 @@ const USAGE = `usage: node tools/op.mjs log [--follow] [--json] [--wait SEC] [--
 Exit: 0 pass or running, 1 fail, 2 bad arguments, 3 undecided (still starting, the scanner could not run, no log channel).`;
 const BLE_MIDI = "03B80E5A-EDE8-4B33-A751-6CE34EC4C700";
 
-// firmware/openpocket.c: ST_NAME, rst_names (tests/test_log.mjs compares them)
+// firmware/base/diag.h ST_NAME, firmware/base/start.h rst_names (tests/test_log.mjs compares them)
 export const BOOT_STAGES = ["?", "INPUTS", "PRESET", "ENGINE INIT", "ENGINE SET", "I2S START", "UI DRAW", "FIRST 6 S", "OK"];
 export const RESET_CAUSES = ["POWER-ON", "VDDIO LOW", "WATCHDOG", "VCM", "LONG PRESS", "1.2V", "SOFT"];
 const STAGE_OK = BOOT_STAGES.indexOf("OK");

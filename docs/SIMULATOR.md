@@ -119,7 +119,7 @@ The price is a committed binary: `tools/sim/px_engine.wasm` (82 KB), so that the
 compiler. `node tools/op.mjs wasm` (`make wasm`) rebuilds it in the container with Debian's clang and lld. Next to it,
 `px_engine.wasm.sources` holds the sources' checksum, and the test fails when the engine changes without a rebuild.
 
-`engine/px_wasm.c` mirrors `dsp_block()`, `audio_apply()`, `audio_reset()` and `audio_volume()` of `firmware/px_audio.h`:
+`engine/px_wasm.c` mirrors `dsp_block()`, `audio_apply()`, `audio_reset()` and `audio_volume()` of `firmware/px_audio.h` and `firmware/base/audio.h`:
 if those change, change it with them. Left out: the 24-bit output rounding, and the overload guard that drops to bypass,
 because a computer's load says nothing about the pedal's.
 

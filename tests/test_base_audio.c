@@ -1,0 +1,159 @@
+/* SPDX-License-Identifier: GPL-3.0-only
+ * OpenPocket — host test of the base firmware's audio stages (firmware/base/audio.h) under the plain schedule
+ * (firmware/base/audio_plain.h), as the THRU app uses them (firmware/apps/thru/thru.c): the I2S driver's two callbacks
+ * with a guitar block and an output block to fill, the app's sound between a_in and a_out.
+ * The pedal's own code runs here; only the chip is stood in for (the tick counter, the I2S driver's entry points).
+ * audio_io_start is not called: it writes the chip's registers.
+ *   cc -O1 -Wall -Wno-unused-function -Wno-unused-variable -Wno-int-to-pointer-cast -Ifirmware tests/test_base_audio.c \
+ *      firmware/px_math.c -lm -o build/test_base_audio
+ */
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+
+/* ---- the chip, stood in for ---- */
+#define FM1_TICKS_PER_US 24u
+static uint32_t now;
+static uint32_t fm1_ticks(void) { return now; }
+static void fm1_delay_ms(uint32_t ms) { (void)ms; }
+static void fm1_irq_attach(int irq, void (*isr)(void), int prio) { (void)irq; (void)isr; (void)prio; }
+static void fm1_irq_enable_all(void) { }
+#define FM1_IRQ_ALNK0 0
+void isr_alnk0(void) { }
+enum { ST_I2S };
+static void op_stage(uint32_t s, const char *txt) { (void)s; (void)txt; }
+/* base/audio.h defines the C library functions the I2S driver calls: under other names here, the PC has its own */
+#define printf jl_printf
+#define malloc jl_malloc
+#define free jl_free
+#include "base/audio.h"
+int  iis_open(struct iis_platform_data *pd, uint8_t index) { (void)pd; (void)index; return 0; }
+int  iis_set_sample_rate(int sample_rate, uint8_t index) { (void)sample_rate; (void)index; return 0; }
+void iis_channel_on(uint8_t channel, uint8_t index) { (void)channel; (void)index; }
+void iis_set_enc_data_handler(void *priv, void (*cb)(void *, uint8_t *, int, uint8_t), uint8_t index) { (void)priv; (void)cb; (void)index; }
+void iis_set_dec_data_handler(void *priv, void (*cb)(void *, uint8_t *, int, uint8_t), uint8_t index) { (void)priv; (void)cb; (void)index; }
+void iis_irq_handler(uint8_t index) { (void)index; }
+
+/* ---- the app: its sound is the guitar times t_gain; it takes t_cost ticks, and says so ---- */
+static float t_gain = 1.0f;
+static uint32_t t_cost, t_calls;
+static int t_nan;
+static void app_sound(const float *in, float *out)
+{
+    for (uint32_t i = 0; i < A_FR; i++) out[i] = in[i] * t_gain;
+    if (t_nan) out[A_FR / 2u] = 0.0f / 0.0f * in[0];
+    now += t_cost;
+    t_calls++;
+}
+#include "base/audio_plain.h"
+
+static int fails;
+#define CHECK(c, what) do { if (!(c)) { fprintf(stdout, "FAIL %s\n", what); fails++; } } while (0)
+
+static uint32_t in[2 * A_FR];                   /* the I2S's blocks: 2 words a frame, 24 bits right-aligned */
+static int32_t out[2 * A_FR];
+static uint32_t ph;
+/* one interrupt: a guitar block (a sine of `amp` 24-bit steps, 441 Hz, on the left; noise on the right), its output */
+static void irq(int32_t amp)
+{
+    for (uint32_t i = 0; i < A_FR; i++, ph++) {
+        in[2u * i] = (uint32_t)(int32_t)((float)amp * sinf(6.2831853f * (float)(ph % 100u) / 100.0f)) & 0x00FFFFFFu;
+        in[2u * i + 1u] = (ph * 2654435761u >> 20) & 0xFFu;
+    }
+    a_enc(0, (uint8_t *)in, (int)sizeof in, 1);
+    now += A_BUDGET;
+    a_dec(0, (uint8_t *)out, (int)sizeof out, 0);
+}
+static int32_t in24(uint32_t i) { return (int32_t)(in[2u * i] << 8) >> 8; }
+/* every output frame is the guitar's left sample times k, both channels alike, to within `tol` steps */
+static int follows(float k, int32_t tol)
+{
+    for (uint32_t i = 0; i < A_FR; i++) {
+        const int32_t want = (int32_t)((float)in24(i) * k), d = out[2u * i] - want;
+        if (out[2u * i] != out[2u * i + 1u] || d > tol || d < -tol) return 0;
+    }
+    return 1;
+}
+static int silent(void) { for (uint32_t i = 0; i < 2u * A_FR; i++) if (out[i]) return 0; return 1; }
+static int32_t peak(void) { int32_t m = 0; for (uint32_t i = 0; i < A_FR; i++) { int32_t v = out[2u * i]; if (v < 0) v = -v; if (v > m) m = v; } return m; }
+
+int main(void)
+{
+    char msg[160];
+    uint32_t n;
+
+    /* the guitar through the app at MASTER 100: a_input halves it (the level every app's sound starts from) */
+    audio_volume(100u);
+    for (n = 0; n < 40u; n++) irq(1000000);         /* (the volume glides to its place) */
+    CHECK(follows(0.5f, 2), "MASTER 100: the output is the app's sound, half the input's steps, on both channels");
+    CHECK(t_calls == 40u && a_blocks == 40u, "one call of the app's sound for each guitar block");
+    CHECK(a_load == 0u && !a_bypass && !a_clip && !a_xrun, "no load, no bypass, no clip, no late block");
+    audio_volume(50u);
+    for (n = 0; n < 40u; n++) irq(1000000);
+    CHECK(follows(0.125f, 2), "MASTER 50: a quarter of that (the quadratic curve)");
+    audio_volume(0u);
+    for (n = 0; n < 40u; n++) irq(1000000);
+    CHECK(peak() <= 1, "MASTER 0: silence");
+    audio_volume(100u);
+    for (n = 0; n < 40u; n++) irq(1000000);
+
+    /* the start and safe mode: the app's sound is held off, the guitar passes */
+    a_hold = 1; t_gain = 0.0f; n = t_calls;
+    irq(1000000);
+    CHECK(t_calls == n && follows(0.5f, 2), "a_hold: the app's sound is not called, the guitar goes straight out");
+    a_hold = 0; t_gain = 1.0f;
+
+    /* the output's soft knee: a sound above full scale never reaches it, and is counted */
+    t_gain = 8.0f;
+    for (n = 0; n < 4u; n++) irq(4000000);
+    CHECK(peak() > 6710886 && peak() < 8388607 && a_clip >= 4u, "a sound over full scale: bent under it by the soft knee, the clip counted");
+    t_gain = 1.0f; a_clip = 0;
+
+    /* a flash write mutes; the tuner's mute fades */
+    a_mute = 1; irq(1000000);
+    CHECK(silent(), "a_mute: zeros");
+    a_mute = 0; irq(1000000);
+    CHECK(follows(0.5f, 2), "and the sound is back with the next block");
+    a_tmute = 1;
+    for (n = 0; n < 20u; n++) irq(1000000);
+    CHECK(silent(), "the tuner's mute: silence after its ramp");
+    a_tmute = 0;
+    for (n = 0; n < 20u; n++) irq(1000000);
+    CHECK(follows(0.5f, 2), "and back after its ramp");
+
+    /* a NaN from the app: silence, and the flag for the main loop */
+    t_nan = 1; irq(1000000);
+    CHECK(silent() && a_nan, "a NaN in the app's sound: the block is silence, a_nan is set");
+    t_nan = 0; a_nan = 0; irq(1000000);
+    CHECK(follows(0.5f, 2), "the app cleared it: the sound is back");
+
+    /* the load: 50 % reads 50; over 85 % for 8 blocks running the app's sound is bypassed; 100 % is a late block */
+    t_cost = A_BUDGET / 2u;
+    for (n = 0; n < 64u; n++) irq(1000000);
+    snprintf(msg, sizeof msg, "an app that takes half a block: the load reads 50 %% (it reads %u)", (unsigned)a_load);
+    CHECK(a_load >= 49u && a_load <= 50u && !a_bypass, msg);
+    t_cost = A_BUDGET * 90u / 100u;
+    for (n = 0; n < 7u; n++) irq(1000000);
+    CHECK(!a_bypass, "7 blocks at 90 %: not yet bypassed");
+    irq(1000000); n = t_calls; irq(1000000);
+    CHECK(a_bypass && t_calls == n && follows(0.5f, 2), "the 8th: bypassed, the guitar goes straight out, the app's sound is no longer called");
+    CHECK(!a_xrun, "90 % is not a late block");
+    a_bypass = 0; a_over = 0; t_cost = A_BUDGET + A_BUDGET / 10u;
+    irq(1000000);
+    CHECK(a_xrun == 1u, "110 %: a late block, counted");
+    t_cost = 0;
+
+    /* the input levels and the tuner's capture: a 441 Hz sine at a tenth of full scale */
+    a_bypass = 0; a_over = 0;
+    for (n = 0; n < 200u; n++) irq(838861);
+    snprintf(msg, sizeof msg, "the left input level reads -23 dB (a sine at -20 dB of full scale: it reads %d)", a_level_db(0));
+    CHECK(a_level_db(0) >= -24 && a_level_db(0) <= -22, msg);
+    CHECK(a_level_db(1) < -80, "the right input (noise) reads far below");
+    {
+        const float hz = tuner_estimate();
+        snprintf(msg, sizeof msg, "the tuner's estimate of a 441 Hz guitar: %d.%d Hz", (int)hz, (int)(hz * 10.0f) % 10);
+        CHECK(hz > 440.5f && hz < 441.5f, msg);
+    }
+    fprintf(stdout, fails ? "base audio: %d FAILURES\n" : "base audio: ok (0 failures)\n", fails);
+    return fails ? 1 : 0;
+}
