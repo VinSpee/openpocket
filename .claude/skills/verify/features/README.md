@@ -6,4 +6,5 @@
 | [installer-page.md](installer-page.md) | Web installer `docs/index.html`: connect, detect, install, rescue | `pages.sh`; by hand: `op.mjs sim --update` |
 | [editor-page.md](editor-page.md) | Web editor `docs/editor.html`: presets, sound, models and their library, TONE3000, MIDI controls | `pages.sh`; by hand: `op.mjs sim` |
 | [screen-ui.md](screen-ui.md) | Pedal screen pages (play, edit, save, tuner) | `uisim` via `op.mjs test`; live: `op.mjs sim` |
+| [base-firmware.md](base-firmware.md) | The base firmware and the apps on it (`firmware/base/`, `firmware/apps/thru`) | `op.mjs package`, `op.mjs app thru`, `op.mjs test` |
 | [midi-usb.md](midi-usb.md) | USB-MIDI: update/editor SysEx today; musical MIDI with the MIDI feature | simulators; hardware by the captain |
