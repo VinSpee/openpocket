@@ -753,15 +753,6 @@ static void audio_volume(uint32_t vol)                 /* 0..100 -> gain (quadra
 
 
 /* ===================== boot benchmark screen (6 s): CPU/FPU speed and engine cost ===================== */
-static void b_num(char *d, uint32_t v)
-{
-    char t[10]; int n = 0;
-    while (*d) d++;
-    do { t[n++] = (char)('0' + v % 10u); v /= 10u; } while (v && n < 9);
-    while (n) *d++ = t[--n];
-    *d = 0;
-}
-static void b_str(char *d, const char *s) { while (*d) d++; while (*s) *d++ = *s++; *d = 0; }
 static uint32_t b_engine(const px_preset_t *pp)        /* % of the real-time budget for 128 frames */
 {
     px_engine_set(&g_eng, pp);
@@ -773,13 +764,6 @@ static uint32_t b_engine(const px_preset_t *pp)        /* % of the real-time bud
     uint32_t dt = (fm1_ticks() - t0) / 8u;
     fm1_wdt_feed();
     return dt * 100u / A_BUDGET;
-}
-static void b_fix2(char *d, uint32_t v100)           /* 123 -> "1.23" */
-{
-    b_num(d, v100 / 100u);
-    b_str(d, ".");
-    if (v100 % 100u < 10u) b_str(d, "0");
-    b_num(d, v100 % 100u);
 }
 static uint32_t b_ticks(void) { return fm1_ticks(); }
 /* v37: what the NAM network costs on the pedal, piece by piece (cycles at 360 MHz: ticks x 15). Off by default:

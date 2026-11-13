@@ -250,3 +250,27 @@ static void lcd_text(uint32_t x, uint32_t y, const char *str, uint16_t fg, uint1
 {
     while (*str) { lcd_char(x, y, *str++, fg, bg, s); x += 8u*s; }
 }
+/* ---- interrupt entries the vector table names and this board does not use ---- */
+#if AUDIO_PROBE
+void fm1_timer5_irq(void) { }
+#endif
+#if !AUDIO_PROBE
+void op_audio_irq(void) { }           /* internal DAC: not used by the Pocket X */
+#endif
+/* ---- text for a line of the screen: a number or a string appended to d ---- */
+static void b_num(char *d, uint32_t v)
+{
+    char t[10]; int n = 0;
+    while (*d) d++;
+    do { t[n++] = (char)('0' + v % 10u); v /= 10u; } while (v && n < 9);
+    while (n) *d++ = t[--n];
+    *d = 0;
+}
+static void b_str(char *d, const char *s) { while (*d) d++; while (*s) *d++ = *s++; *d = 0; }
+static void b_fix2(char *d, uint32_t v100)           /* 123 -> "1.23" */
+{
+    b_num(d, v100 / 100u);
+    b_str(d, ".");
+    if (v100 % 100u < 10u) b_str(d, "0");
+    b_num(d, v100 % 100u);
+}

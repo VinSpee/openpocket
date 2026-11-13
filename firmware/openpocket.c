@@ -9,6 +9,8 @@
 #include <stdint.h>
 #define AUDIO_PROBE 0      /* 1 = audio test (find IN/OUT on the I2S) instead of the UI */
 #define DSP_CPU1 1         /* 1 = DSP engine on the 2nd core (automatic fallback to CPU0 on trouble) */
+#define OP_NAME "OPENPOCKET"            /* the name on the boot screen (base/boot_screens.h) */
+#define OP_RAM_CODE px_block_label      /* the engine's RAM code: a crash report gives its place (base/boot_screens.h) */
 #include "base/board.h"               /* the chip, the pins, the screen and its text (docs/BASE-FIRMWARE.md) */
 /* ---- preset: the v2 engine's struct (engine/px_dsp.h), edited directly by the UI ---- */
 #include "px_dsp.h"
@@ -20,30 +22,6 @@ static uint32_t master_vol = 80;        /* 0..100, follows the MASTER knob (ADC 
 static void st_get(uint32_t k, px_preset_t *p);   /* px_store.h: the saved preset of slot k, else the factory one */
 static uint8_t preset_new;                             /* v40.3: a preset was loaded: the sound follows at once */
 static void load_preset(uint32_t i) { st_get(i, &PRESET); preset_new = 1; }
-
-#if AUDIO_PROBE
-void fm1_timer5_irq(void) { }
-#endif
-#if !AUDIO_PROBE
-void op_audio_irq(void) { }           /* internal DAC: not used by the Pocket X */
-#endif
-/* readable crash screen: vector, PC, return address, bus error register — then reboot */
-static void hex8(char *b, uint32_t v){ static const char H[]="0123456789ABCDEF";
-    for (int i=0;i<8;i++) b[i]=H[(v>>(28-4*i))&15u]; b[8]=0; }
-static void fm1_fault(const fm1_crash_t *c)
-{
-    char h[9];
-    lcd_rect(0,0,240,240,RED);
-    lcd_text(8,8,"CRASH",WHT,RED,2);
-    lcd_text(8,40,"VEC",WHT,RED,1); hex8(h,c->vec);  lcd_text(64,40,h,WHT,RED,1);
-    lcd_text(8,56,"PC", WHT,RED,1); hex8(h,c->pc);   lcd_text(64,56,h,WHT,RED,1);
-    lcd_text(8,72,"RETS",WHT,RED,1);hex8(h,c->rets); lcd_text(64,72,h,WHT,RED,1);
-    lcd_text(8,88,"DBG",WHT,RED,1); hex8(h,c->dbg);  lcd_text(64,88,h,WHT,RED,1);
-    lcd_text(8,104,"EMU",WHT,RED,1);hex8(h,c->emu);  lcd_text(64,104,h,WHT,RED,1);
-    lcd_text(8,136,"Take a photo :)",WHT,RED,1);
-    for (int i=0;i<6;i++){ fm1_wdt_feed(); fm1_delay_ms(1000); }
-    fm1_reboot();
-}
 
 #ifndef OP_VERSION_NUM                  /* a test channel build (firmware/build.sh, OP_CHANNEL) sets its own number and tag */
 #define OP_VERSION_NUM "42"
@@ -59,22 +37,7 @@ static void fm1_fault(const fm1_crash_t *c)
 #define ADC_PROBE 0        /* 1 = ADC diagnostic: shows the channels that move at the bottom (C2:512) */
 #define LED_PROBE 0        /* 1 = LED map (issue #8, led_probe.h): the knob picks a bit of the lights' 595, it blinks; no sound */
 #include "base/controls.h"            /* the controls' pins, the ADC, the battery, the debounce */
-/* ===== boot diagnostics (v23b) : survive a reset in .noinit, shown at the next boot =====
- * stage = last boot step reached; blocks/load/peak/nans/c1/loops = audio state seen by the main loop. */
-#define OPD_MAGIC 0x4F504442u
-enum { ST_NONE, ST_INPUTS, ST_PRESET, ST_ENG_INIT, ST_ENG_SET, ST_I2S, ST_UI, ST_RUN, ST_OK, ST_N };
-static const char *const ST_NAME[ST_N] = {"?", "INPUTS", "PRESET", "ENGINE INIT", "ENGINE SET", "I2S START",
-                                          "UI DRAW", "FIRST 6 S", "OK"};
-volatile struct { uint32_t magic, stage, blocks, load, peak, nans, c1, loops, crash_seen, safe; } op_diag
-    __attribute__((section(".noinit")));
-static struct { uint8_t vdc0, vdc1, sys0, sys1, dcdc, rst, pinr; } op_pwr;   /* supplies, reset source, pin reset (fm1_cstart) */
-static void op_stage(uint32_t s, const char *txt)
-{
-    op_diag.stage = s;
-    fm1_wdt_feed();
-    (void)txt;
-}
-
+#include "base/diag.h"                /* the crash screen, the boot stages kept across a reset, the stacks' use */
 #if AUDIO_PROBE
 #include "audio_probe.h"
 #else
@@ -93,15 +56,6 @@ static void op_stage(uint32_t s, const char *txt)
 #if !AUDIO_PROBE
 static uint32_t ed_load(void) { return a_bypass ? a_peak : a_load; }   /* PING: the DSP load, as at the bottom right */
 static uint32_t ed_flags(void) { return (a_bypass ? 1u : 0u) | (a_c1 ? 2u : 0u); }
-/* v40.1: the stacks' deepest use since boot. fm1_cstart paints them; the bytes at the bottom never written since are free */
-#define OP_PAINT 0x5AA5C33Cu
-extern char _ustack_top[];
-static uint32_t stack_free(const char *lo, const char *hi)
-{
-    const uint32_t *p = (const uint32_t *)(const void *)lo;
-    while ((const char *)p < hi && *p == OP_PAINT) p++;
-    return (uint32_t)((const char *)p - lo);
-}
 #if OP_BLE_TEST
 uint32_t ble_heap_min_free(void);
 uint32_t ble_stack_min_free(void);
@@ -189,16 +143,7 @@ static void ed_diag_line(uint32_t i, char *out)
 }
 #endif
 
-/* P3_RST_SRC as read at boot: why the chip last reset (fm1_sys.h) */
-static void rst_names(char *l, uint32_t r)
-{
-    static const char *const N[7] = {"POWER-ON", "VDDIO LOW", "WATCHDOG", "VCM", "LONG PRESS", "1.2V", "SOFT"};
-    int any = 0;
-    for (int i = 0; i < 7; i++)
-        if (r & (1u << i)) { if (any) b_str(l, "+"); b_str(l, N[i]); any = 1; }
-    if (!any) b_str(l, "NONE");
-}
-
+#include "base/start.h"               /* fm1_cstart, the boot screen, the last start's report; it calls app_main, below */
 static void app_main(void)
 {
     uint32_t boots_ok = 0;
@@ -220,77 +165,7 @@ static void app_main(void)
     fm1_cpu1_start();                    /* at boot, before audio and interrupts (Felucca) */
 #endif
     lcd_init();
-    /* boot screen with the version: shows which image is running */
-    lcd_rect(0,0,240,240,UI_BG);
-    ft_box(0, 98, 240, "OPENPOCKET", &FT_MD, UI_ACC, UI_BG, 1);
-#if OP_BLE_TEST
-    ft_box(0, 126, 240, OP_VERSION " BLE TEST", &FT_SM, UI_DIM, UI_BG, 1);
-#else
-    ft_box(0, 126, 240, OP_VERSION, &FT_SM, UI_DIM, UI_BG, 1);
-#endif
-#if !AUDIO_PROBE
-    ft_box(0, 150, 240, "STARTING", &FT_SM, UI_TXT, UI_BG, 1);   /* v42: a plain word first, the numbers small below */
-    {   /* the supplies as found (fm1_cstart) and why the chip last reset */
-        char l[32]; l[0] = 0;
-        b_str(l, "PWR "); b_num(l, op_pwr.vdc0); b_str(l, " "); b_num(l, op_pwr.sys0); b_str(l, " (BOOT LEVELS)");
-        ft_box(0, 196, 240, l, &FT_SM, UI_DIM, UI_BG, 1);
-        char h[9]; l[0] = 0;
-        b_str(l, "RST "); rst_names(l, op_pwr.rst); b_str(l, " PINR "); hex8(h, op_pwr.pinr); b_str(l, h + 6);
-        ft_box(0, 214, 240, l, &FT_SM, UI_DIM, UI_BG, 1);
-    }
-#endif
-    for (int i = 0; i < 6; i++) { fm1_wdt_feed(); fm1_delay_ms(100); }
-    /* --- report of the previous boot, if it did not finish (or crashed) --- */
-    int safe = 0;
-    {
-        uint32_t cc = (fm1_crash.magic == FM1_CRASH_MAGIC) ? fm1_crash.count : 0u;
-        if (op_diag.magic != OPD_MAGIC) {
-            op_diag.magic = OPD_MAGIC; op_diag.stage = ST_OK; op_diag.crash_seen = 0; op_diag.safe = 0;   /* a crash left by an older build is shown once */
-        }
-        int crashed = cc != op_diag.crash_seen;
-        uint32_t st = op_diag.stage < ST_N ? op_diag.stage : 0u;
-        if ((st != ST_OK || crashed) && !op_diag.safe) {
-            char l[48], h[9];
-            safe = 1;                    /* this boot: DSP bypassed, so the pedal stays usable */
-            lcd_rect(0, 0, 240, 240, UI_BG);   /* v42: what happened and what to do first, the numbers for a bug report below */
-            ft_box(0, 6, 240, "LAST START FAILED", &FT_MD, RED, UI_BG, 1);
-            ft_box(0, 34, 240, "THE EFFECTS ARE OFF FOR THIS START", &FT_SM, UI_TXT, UI_BG, 1);
-            ft_box(0, 52, 240, "SWITCH OFF AND ON TO TRY AGAIN", &FT_SM, UI_TXT, UI_BG, 1);
-            l[0] = 0; b_str(l, "STOPPED AT: "); b_str(l, ST_NAME[st]);
-            ft_box(0, 78, 240, l, &FT_SM, UI_DIM, UI_BG, 1);
-            if (!crashed) {
-                l[0] = 0; b_str(l, "RESET BY: "); rst_names(l, op_pwr.rst);
-                ft_box(0, 96, 240, l, &FT_SM, UI_DIM, UI_BG, 1);
-            }
-            if (crashed) {
-                l[0] = 0; b_str(l, "CRASH  PC "); hex8(h, fm1_crash.pc); b_str(l, h);
-                ft_box(0, 96, 240, l, &FT_SM, UI_DIM, UI_BG, 1);
-                l[0] = 0; b_str(l, "RETS "); hex8(h, fm1_crash.rets); b_str(l, h); b_str(l, "  VEC "); b_num(l, fm1_crash.vec);
-                ft_box(0, 114, 240, l, &FT_SM, UI_DIM, UI_BG, 1);
-                l[0] = 0; b_str(l, "DSP CODE AT "); hex8(h, (uint32_t)(uintptr_t)px_block_label); b_str(l, h);
-                ft_box(0, 132, 240, l, &FT_SM, UI_DIM, UI_BG, 1);
-                l[0] = 0; b_str(l, "UPTIME "); b_num(l, fm1_crash.uptime_ms); b_str(l, " MS  DBG "); hex8(h, fm1_crash.dbg); b_str(l, h);
-                ft_box(0, 150, 240, l, &FT_SM, UI_DIM, UI_BG, 1);
-            }
-            l[0] = 0; b_str(l, "BLOCKS "); b_num(l, op_diag.blocks); b_str(l, "  LOAD "); b_num(l, op_diag.load);
-            b_str(l, "%  PEAK "); b_num(l, op_diag.peak); b_str(l, "%");
-            ft_box(0, 168, 240, l, &FT_SM, UI_DIM, UI_BG, 1);
-            l[0] = 0; b_str(l, "NAN "); b_num(l, op_diag.nans); b_str(l, "  CPU1 "); b_num(l, op_diag.c1);
-            b_str(l, "  LOOPS "); b_num(l, op_diag.loops);
-            ft_box(0, 186, 240, l, &FT_SM, UI_DIM, UI_BG, 1);
-            ft_box(0, 212, 240, "PHOTO THIS FOR A BUG REPORT", &FT_SM, UI_ACC, UI_BG, 1);
-            for (int i = 0; i < 120; i++) { fm1_wdt_feed(); fm1_delay_ms(100); }   /* 12 s */
-            lcd_rect(0, 0, 240, 240, UI_BG);
-            ft_box(0, 98, 240, "OPENPOCKET", &FT_MD, UI_ACC, UI_BG, 1);
-            ft_box(0, 126, 240, OP_VERSION " SAFE MODE", &FT_SM, UI_DIM, UI_BG, 1);
-        }
-#if OP_BLE_TEST
-        ble_last = (ble_boot_t){ st != ST_OK || crashed, crashed, st, op_diag.blocks, op_diag.load, op_diag.peak, op_diag.nans, op_diag.c1,
-                                 op_diag.loops, fm1_crash.vec, fm1_crash.pc, fm1_crash.rets, fm1_crash.dbg, fm1_crash.emu, fm1_crash.uptime_ms };
-#endif
-        op_diag.crash_seen = cc; op_diag.safe = (uint32_t)safe;
-        op_diag.blocks = op_diag.load = op_diag.peak = op_diag.nans = op_diag.c1 = op_diag.loops = 0;
-    }
+#include "base/boot_screens.h"         /* (statements) the boot screen, the last start's report; declares safe */
     op_stage(ST_INPUTS, "INPUTS...");
     input_init();
     adc_pins_analog();
@@ -479,51 +354,4 @@ static void app_main(void)
         ui_render();                     /* redraws only what changed */
 #endif
     }
-}
-
-void fm1_cstart(void)
-{
-    uint32_t *s, *d;
-    uint32_t vdc0, sys0, dcdc, rst0, pinr0;
-    {   /* v40.1: paint the stacks (interrupts are still off), for their deepest use (ed_stat) */
-        volatile uint32_t here;
-        for (d = (uint32_t *)(void *)_ustack_lo; (char *)d < (char *)&here - 256; d++) *d = OP_PAINT;
-        for (d = (uint32_t *)(void *)_sstack_lo; (char *)d < _sstack_top - 256; d++) *d = OP_PAINT;
-    }
-    fm1_time_init();
-    /* v31, issue #1: the stock firmware's first act is P3_PINR_CON = 0, the long-press reset off (BlackBox_020
-     * f_0200698a). Left on, a pin held at its active level resets the chip every 4 s (the SDK offers 4 or 8 s):
-     * Megal's BlackBox reset every 4.3 s after a power cycle, never after an install (the always-on P33 kept the
-     * stock firmware's 0 across the warm reset). Read first, so the boot screen can show it. */
-    rst0 = fm1_p33_read(FM1_P3_RST_SRC);
-    pinr0 = fm1_p33_read(0x94u);
-    fm1_p33_write(0x94u, 0);
-    fm1_wdt_arm(0x0D);
-    /* v33: the supplies stay as the boot loader leaves them (VDC14 3, SYSVDD 11, LDO), as up to v29. v30 set them as
-     * the stock firmware does (VDC14 7, SYSVDD 15, the 1.3 V supply on the DC-DC): it was not what fixed issue #1
-     * (the long-press reset was), and with it a Pocket X ran its DSP ~25 % slower (DOOM SLUDGE 61 % -> 77 %) and
-     * crackled. Only read, for the boot screen. */
-    vdc0 = fm1_vdc14();
-    sys0 = fm1_sysvdd();
-    dcdc = 0;
-    fm1_wdt_feed();
-    if (guard.magic != 0x48575431u || guard.pending > 1u || guard.failed > 1u) {
-        guard.magic = 0x48575431u; guard.failed = 0; guard.pending = 0;
-    }
-    if (guard.pending) guard.failed++;
-    guard.pending = 1;
-    if (guard.failed >= 2u) { guard.failed = 0; guard.pending = 0; fm1_enter_uboot(); }
-    fm1_irq_init();
-    for (d = _bss_start; d < _bss_end; d++) *d = 0;
-    for (d = _bss_hi_start; d < _bss_hi_end; d++) *d = 0;
-    for (d = _pool_tail_start; d < _pool_tail_end; d++) *d = 0;
-    for (d = _bss_lo_start; d < _bss_lo_end; d++) *d = 0;
-    for (s = _data_load, d = _data_start; d < _data_end; s++, d++) *d = *s;
-    for (s = _rt_load, d = _rt_start; d < _rt_end; s++, d++) *d = *s;
-    op_pwr.vdc0 = (uint8_t)vdc0; op_pwr.vdc1 = (uint8_t)fm1_vdc14();
-    op_pwr.sys0 = (uint8_t)sys0; op_pwr.sys1 = (uint8_t)fm1_sysvdd(); op_pwr.dcdc = (uint8_t)dcdc;
-    op_pwr.rst = (uint8_t)rst0; op_pwr.pinr = (uint8_t)pinr0;
-    fm1_guard_enable((OP_GUARD_STACK ? FM1_GUARD_STACK : 0) | FM1_GUARD_WRITE | FM1_GUARD_BUS | FM1_GUARD_PC);
-    app_main();
-    for (;;) ;
 }
