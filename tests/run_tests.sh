@@ -65,7 +65,9 @@ $CC -O1 -Iengine tests/test_store.c engine/px_dsp.c firmware/px_math.c -lm -o bu
 echo "== audio callbacks' order (the output block is its interrupt's, whichever callback the driver calls first)"
 $CC -O1 -Wall -Ifirmware tests/test_aorder.c -o build/test_aorder && build/test_aorder | tail -1
 echo "== base audio (the stages every app shares, under the plain schedule: firmware/base/audio.h, audio_plain.h)"
-$CC -O1 -Wall -Wno-unused-function -Wno-unused-variable -Wno-int-to-pointer-cast -Ifirmware tests/test_base_audio.c firmware/px_math.c -lm -o build/test_base_audio && build/test_base_audio | tail -1
+BAF="-O1 -Wall -Wno-unused-function -Wno-unused-variable -Wno-int-to-pointer-cast -Ifirmware"
+$CC $BAF tests/test_base_audio.c firmware/px_math.c -lm -o build/test_base_audio && build/test_base_audio | tail -1
+$CC $BAF -DA_CH=2 tests/test_base_audio.c firmware/px_math.c -lm -o build/test_base_audio2 && build/test_base_audio2 | tail -1   # an app with a stereo sound
 echo "== USB audio (the device code and the audio glue against a model of the controller and a computer)"
 UAF="-O1 -Wall -Wno-unused-function -Wno-int-to-pointer-cast -Iengine -Ifirmware -Ifirmware/bsp/chip"
 $CC $UAF tests/test_usb_audio.c -lm -o build/test_usb_audio

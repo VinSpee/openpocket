@@ -4,8 +4,11 @@
  * with a guitar block and an output block to fill, the app's sound between a_in and a_out.
  * The pedal's own code runs here; only the chip is stood in for (the tick counter, the I2S driver's entry points).
  * audio_io_start is not called: it writes the chip's registers.
- *   cc -O1 -Wall -Wno-unused-function -Wno-unused-variable -Wno-int-to-pointer-cast -Ifirmware tests/test_base_audio.c \
- *      firmware/px_math.c -lm -o build/test_base_audio
+ * Built twice (tests/run_tests.sh): as it is, for an app with a mono sound, and with -DA_CH=2, for an app whose sound
+ * has a left and a right block (the starter app, firmware/apps/starter). The stereo app here makes its right side a
+ * quarter of its left, so a stage that forgot a side, or mixed the two, shows.
+ *   cc -O1 -Wall -Wno-unused-function -Wno-unused-variable -Wno-int-to-pointer-cast -Ifirmware [-DA_CH=2] \
+ *      tests/test_base_audio.c firmware/px_math.c -lm -o build/test_base_audio
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -38,10 +41,18 @@ void iis_irq_handler(uint8_t index) { (void)index; }
 static float t_gain = 1.0f;
 static uint32_t t_cost, t_calls;
 static int t_nan;
+#if A_CH == 2
+#define T_RIGHT 0.25f                           /* the app's right side, as a part of its left */
+#else
+#define T_RIGHT 1.0f                            /* a mono sound: both outputs alike */
+#endif
 static void app_sound(const float *in, float *out)
 {
     for (uint32_t i = 0; i < A_FR; i++) out[i] = in[i] * t_gain;
-    if (t_nan) out[A_FR / 2u] = 0.0f / 0.0f * in[0];
+#if A_CH == 2
+    for (uint32_t i = 0; i < A_FR; i++) out[A_FR + i] = in[i] * t_gain * T_RIGHT;
+#endif
+    if (t_nan) out[A_OUT_N - A_FR / 2u] = 0.0f / 0.0f * in[0];   /* (in the right block, when there is one) */
     now += t_cost;
     t_calls++;
 }
@@ -65,12 +76,23 @@ static void irq(int32_t amp)
     a_dec(0, (uint8_t *)out, (int)sizeof out, 0);
 }
 static int32_t in24(uint32_t i) { return (int32_t)(in[2u * i] << 8) >> 8; }
-/* every output frame is the guitar's left sample times k, both channels alike, to within `tol` steps */
-static int follows(float k, int32_t tol)
+/* every output frame is the guitar's left sample times k on the left and times kr on the right, to within `tol` steps */
+static int follows2(float k, float kr, int32_t tol)
 {
     for (uint32_t i = 0; i < A_FR; i++) {
-        const int32_t want = (int32_t)((float)in24(i) * k), d = out[2u * i] - want;
-        if (out[2u * i] != out[2u * i + 1u] || d > tol || d < -tol) return 0;
+        const int32_t d = out[2u * i] - (int32_t)((float)in24(i) * k), dr = out[2u * i + 1u] - (int32_t)((float)in24(i) * kr);
+        if (d > tol || d < -tol || dr > tol || dr < -tol) return 0;
+    }
+    return 1;
+}
+static int follows(float k, int32_t tol) { return follows2(k, k * T_RIGHT, tol); }   /* the app's sound: its two sides */
+static int straight(float k, int32_t tol) { return follows2(k, k, tol); }            /* the guitar itself, on both outputs */
+/* the right output is the left's times T_RIGHT in every frame (a fade or a mute has the same gain on both sides) */
+static int sides_agree(int32_t tol)
+{
+    for (uint32_t i = 0; i < A_FR; i++) {
+        const int32_t d = out[2u * i + 1u] - (int32_t)((float)out[2u * i] * T_RIGHT);
+        if (d > tol || d < -tol) return 0;
     }
     return 1;
 }
@@ -100,13 +122,27 @@ int main(void)
     /* the start and safe mode: the app's sound is held off, the guitar passes */
     a_hold = 1; t_gain = 0.0f; n = t_calls;
     irq(1000000);
-    CHECK(t_calls == n && follows(0.5f, 2), "a_hold: the app's sound is not called, the guitar goes straight out");
+    CHECK(t_calls == n && straight(0.5f, 2), "a_hold: the app's sound is not called, the guitar goes straight out, on both outputs");
     a_hold = 0; t_gain = 1.0f;
 
     /* the output's soft knee: a sound above full scale never reaches it, and is counted */
     t_gain = 8.0f;
     for (n = 0; n < 4u; n++) irq(4000000);
     CHECK(peak() > 6710886 && peak() < 8388607 && a_clip >= 4u, "a sound over full scale: bent under it by the soft knee, the clip counted");
+#if A_CH == 2
+    {   /* the left side is at 1.9 of full scale, the right at 0.48: under the knee, so it comes out as it is */
+        int ok = 1;
+        for (uint32_t i = 0; i < A_FR; i++) { const int32_t d = out[2u * i + 1u] - in24(i); if (d > 16 || d < -16) ok = 0; }
+        CHECK(ok, "the knee bends each side by its own level: the right side, under it, is untouched");
+    }
+    t_gain = 40.0f;                                  /* now the right side alone would be over full scale too */
+    for (n = 0; n < 4u; n++) irq(4000000);
+    {
+        int32_t m = 0;
+        for (uint32_t i = 0; i < A_FR; i++) { int32_t v = out[2u * i + 1u]; if (v < 0) v = -v; if (v > m) m = v; }
+        CHECK(m > 6710886 && m < 8388607, "a right side over full scale is bent under it too");
+    }
+#endif
     t_gain = 1.0f; a_clip = 0;
 
     /* a flash write mutes; the tuner's mute fades */
@@ -114,12 +150,23 @@ int main(void)
     CHECK(silent(), "a_mute: zeros");
     a_mute = 0; irq(1000000);
     CHECK(follows(0.5f, 2), "and the sound is back with the next block");
-    a_tmute = 1;
-    for (n = 0; n < 20u; n++) irq(1000000);
-    CHECK(silent(), "the tuner's mute: silence after its ramp");
+    a_tmute = 1; irq(1000000);
+    CHECK(!silent() && sides_agree(2), "the tuner's mute: a ramp, the same on both sides");
+    for (n = 0; n < 19u; n++) irq(1000000);
+    CHECK(silent(), "and silence after the ramp");
     a_tmute = 0;
     for (n = 0; n < 20u; n++) irq(1000000);
     CHECK(follows(0.5f, 2), "and back after its ramp");
+
+    /* a change of the sound (a type, an order): the app fades the output out, changes, fades it back in */
+    a_xft = 0; irq(1000000);
+    CHECK(!silent() && sides_agree(2) && out[0] != 0 && out[2u * (A_FR - 1u)] != 0, "the change fade: down over more than one block, the same on both sides");
+    irq(1000000); irq(1000000);
+    CHECK(silent() && a_xf == 0.0f, "silence from the third block on (256 samples down)");
+    a_xft = 1; irq(1000000);
+    CHECK(!silent() && sides_agree(2), "and up again, the same on both sides");
+    irq(1000000); irq(1000000);
+    CHECK(follows(0.5f, 2) && a_xf == 1.0f, "the sound is whole again");
 
     /* a NaN from the app: silence, and the flag for the main loop */
     t_nan = 1; irq(1000000);
@@ -136,7 +183,7 @@ int main(void)
     for (n = 0; n < 7u; n++) irq(1000000);
     CHECK(!a_bypass, "7 blocks at 90 %: not yet bypassed");
     irq(1000000); n = t_calls; irq(1000000);
-    CHECK(a_bypass && t_calls == n && follows(0.5f, 2), "the 8th: bypassed, the guitar goes straight out, the app's sound is no longer called");
+    CHECK(a_bypass && t_calls == n && straight(0.5f, 2), "the 8th: bypassed, the guitar goes straight out on both outputs, the app's sound is no longer called");
     CHECK(!a_xrun, "90 % is not a late block");
     a_bypass = 0; a_over = 0; t_cost = A_BUDGET + A_BUDGET / 10u;
     irq(1000000);
@@ -154,6 +201,6 @@ int main(void)
         snprintf(msg, sizeof msg, "the tuner's estimate of a 441 Hz guitar: %d.%d Hz", (int)hz, (int)(hz * 10.0f) % 10);
         CHECK(hz > 440.5f && hz < 441.5f, msg);
     }
-    fprintf(stdout, fails ? "base audio: %d FAILURES\n" : "base audio: ok (0 failures)\n", fails);
+    fprintf(stdout, fails ? "base audio, %u channel(s): %d FAILURES\n" : "base audio, %u channel(s): ok (0 failures)\n", (unsigned)A_CH, fails);
     return fails ? 1 : 0;
 }
