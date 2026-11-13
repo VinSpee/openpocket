@@ -342,17 +342,7 @@ static void app_main(void)
                         (uint32_t)(btn[B_AMP].stab != 0) << UB_AMP | (uint32_t)(btn[B_CAB].stab != 0) << UB_CAB |
                         (uint32_t)(btn[B_DLY].stab != 0) << UB_DLY | (uint32_t)(btn[B_REV].stab != 0) << UB_REV);
 #endif
-        if (mv >= 0) {
-            /* smoothing (x16 moving average, ~160 ms) then hysteresis of 2 on the 0..100 volume */
-            master_raw = (master_raw < 0) ? mv * 16 : master_raw + mv - master_raw / 16;
-            int32_t avg = master_raw / 16;
-            uint32_t nv;
-            if (avg <= 12) nv = 0u;
-            else if (avg >= 1010) nv = 100u;
-            else nv = (uint32_t)(avg - 12) * 100u / (1010u - 12u);
-            int32_t dv = (int32_t)nv - (int32_t)master_vol; if (dv < 0) dv = -dv;
-            if (dv >= 2 || (nv == 0u && master_vol != 0u) || (nv == 100u && master_vol != 100u)) master_vol = nv;
-        }
+        if (mv >= 0) master_follow(&master_raw, mv, &master_vol);
 #if !AUDIO_PROBE
         audio_poll(now, preset_new);     /* the sound follows the UI (preset, settings, volume), before the screen redraws */
         preset_new = 0;

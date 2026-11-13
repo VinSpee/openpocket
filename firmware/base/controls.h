@@ -143,6 +143,19 @@ static void bat_read(void)
     bat_pct = r > 635 ? 100 : r < 528 ? 0 : (r * 100 - 52700) / 109;
     bat_mv = r * 6600 / 1023;                           /* the cell, roughly (3.3 V reference, 1:2): for the tuner page */
 }
+/* the MASTER knob: a reading mv (0..1023) moves the volume *vol (0..100). raw is the caller's, below 0 at first:
+ * smoothing (x16 moving average, ~160 ms) then hysteresis of 2 on the 0..100 volume */
+static void master_follow(int32_t *raw, int32_t mv, uint32_t *vol)
+{
+    *raw = (*raw < 0) ? mv * 16 : *raw + mv - *raw / 16;
+    int32_t avg = *raw / 16;
+    uint32_t nv;
+    if (avg <= 12) nv = 0u;
+    else if (avg >= 1010) nv = 100u;
+    else nv = (uint32_t)(avg - 12) * 100u / (1010u - 12u);
+    int32_t dv = (int32_t)nv - (int32_t)*vol; if (dv < 0) dv = -dv;
+    if (dv >= 2 || (nv == 0u && *vol != 0u) || (nv == 100u && *vol != 100u)) *vol = nv;
+}
 #define KEY_DEBUG 0          /* 1 = shows the raw value of channel 9 at the bottom right (K####) */
 /* identifies the analog keypad button by the nearest value (±42 window),
  * independent of the idle state */
