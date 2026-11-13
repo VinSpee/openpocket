@@ -49,6 +49,11 @@ static void load_preset(uint32_t i) { st_get(i, &PRESET); preset_new = 1; }
 #include "ui.h"
 #include "px_lights.h"      /* the button lights follow the blocks (issue #8; px_leds.h drives them) */
 #define PX_LIGHTS_OFF() lights_off()
+/* the flash OpenPocket keeps its own data in: the preset store (px_store.h), the NAM user models (px_models.h) and the
+ * cabinet IRs (px_irs.h). px_usb.h lets the app write there and in the update's staging area, nowhere else */
+#define OP_FLASH_OWN(off, n) (FL_IN(off, n, 0xF0000u, 0xF4000u) || FL_IN(off, n, 0xC0000u, 0xE0000u) || FL_IN(off, n, 0xF4000u, 0xFC000u))
+static uint8_t *ota_scratch(void);              /* px_models.h: the upload staging buffer, idle while ota_session blocks */
+#define OTA_SCRATCH ota_scratch()
 #include "px_usb.h"         /* USB-MIDI + update entry (web installer) */
 #include "px_store.h"       /* the user's presets in flash */
 #include "px_models.h"      /* v37: the NAM user models in flash */
