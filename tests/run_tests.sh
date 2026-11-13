@@ -100,6 +100,12 @@ echo "== flasher (tools/flash.mjs)"
 node tests/test_flash.mjs
 echo "== build entry point (tools/op.mjs)"
 node tests/test_op.mjs
+echo "== release pin (tests/release_pin.sh: the same sums pass, one changed byte's sum fails)"
+sh tests/release_pin.sh tests/release.sha256 > /dev/null || { echo "release pin: refuses its own sums"; exit 1; }
+sed '1s/^./0/;1s/^00/01/' tests/release.sha256 > build/release_pin_wrong.sums
+if sh tests/release_pin.sh build/release_pin_wrong.sums > /dev/null 2>&1; then echo "release pin: accepts a changed image"; exit 1; fi
+if sh tests/release_pin.sh build/no-such.sums > /dev/null 2>&1; then echo "release pin: accepts a missing build"; exit 1; fi
+echo "release pin: ok"
 echo "== rescue tool (tools/uboot_rescue.py on a simulated UBOOT pedal)"
 python3 tests/test_uboot_rescue.py $1
 echo "== hosted simulator (tools/sim.mjs)"

@@ -94,7 +94,8 @@ const commands = {
     return inContainer(["sh", "-c", `OP_APP=${name} sh firmware/build.sh && sha256sum build/apps/${name}/${name}.bin build/apps/${name}/*.fwsc`]);
   },
   test: () => inContainer(["sh", "tests/run_tests.sh"]),
-  package: () => inContainer(["sh", "-c", `sh firmware/build.sh && mkdir -p build && sha256sum ${OUTS} > build/SHA256SUMS && cat build/SHA256SUMS`]),
+  // (the release pin, tests/release_pin.sh: OpenPocket's outputs must be the published release's bytes, or this fails)
+  package: () => inContainer(["sh", "-c", `sh firmware/build.sh && mkdir -p build && sha256sum ${OUTS} > build/SHA256SUMS && sh tests/release_pin.sh`]),
   "package-test": () => inContainer(["sh", "-c", `OP_CHANNEL=midi-test sh firmware/build.sh && mkdir -p build && sha256sum ${TEST} > build/SHA256SUMS-midi-test && cat build/SHA256SUMS-midi-test`]),
   clean() {
     for (const p of ["build", "firmware/build", "firmware/build-ble", "firmware/openpocket.bin", "firmware/openpocket-ble.bin", "firmware/openpocket-midi-test.bin", "docs/firmware/midi-test", "docs/firmware/manifest.json", "engine/px_render"]) {

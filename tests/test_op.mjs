@@ -60,6 +60,7 @@ r = op(["package"]);
 assert.equal(r.calls.filter((c) => c[0] === "run").length, 1, "package is one container run");
 assert.deepEqual(r.calls.at(-1).slice(0, -1), base(["sh", "-c"]));
 assert.match(r.calls.at(-1).at(-1), /^sh firmware\/build\.sh && .*sha256sum .*openpocket\.bin.*> build\/SHA256SUMS/);
+assert.match(r.calls.at(-1).at(-1), /> build\/SHA256SUMS && sh tests\/release_pin\.sh$/, "package ends with the release pin: a changed OpenPocket image fails it");
 
 r = op(["package-test"]);
 assert.equal(r.calls.filter((c) => c[0] === "run").length, 1, "package-test is one container run");
