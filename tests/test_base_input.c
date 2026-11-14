@@ -3,7 +3,7 @@
  * app's main loop uses them (firmware/apps/starter). The pedal's own code runs here; only the chip's ports and ADC
  * are stood in for (tests/host/pins.h): the test sets a pin or an ADC reading as a hand would, lets the main loop
  * pass, and reads the events the app was given.
- *   cc -O1 -Wall -Wno-unused-function -Itests/host -Ifirmware tests/test_base_input.c -o build/test_base_input
+ *   cc -O1 -Wall -Wno-unused-function -Wno-unused-variable -Itests/host -Ifirmware tests/test_base_input.c -o build/test_base_input
  */
 #include <stdio.h>
 #include <string.h>

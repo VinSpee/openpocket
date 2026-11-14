@@ -148,7 +148,7 @@ async function handshake(link, tries = 3) {
 
 // which product the firmware on this link is: parseInfo's result, or null when it does not answer (the official
 // firmware, an OpenPocket before v32, a loader)
-async function queryProduct(link, ms = 400, tries = 2) {
+async function queryProduct(link, ms, tries = 2) {
   for (let t = 0; t < tries; t++) {
     link.drain();
     if (!link.send(INFO_QUERY)) return null;
@@ -165,7 +165,7 @@ async function queryProduct(link, ms = 400, tries = 2) {
 
 // timings (ms) as the hardware needs them; the tests shorten them
 export const TIMING = { afterUpgrade: 2000, afterStep1: 3000, loaderWait: 30000, step1Idle: 8000, step2Idle: 180000,
-  afterWrite: 3000, backWait: 40000, perRequest: 10, poll: 1000, rescuePoll: 100, info: 400 };
+  afterWrite: 3000, backWait: 40000, perRequest: 10, poll: 1000, rescuePoll: 100, info: 600 };
 
 export class Updater {
   constructor(access, log, timing = {}) {
@@ -192,11 +192,12 @@ export class Updater {
   }
 
   // what is connected, for the status line: { id, name, product } or null (the link closed). product: which firmware
-  // on the base it is (parseInfo), null when it does not say
-  async identify() {
+  // on the base it is (parseInfo), null when it does not say. product: false skips that question, for a caller that
+  // must act the moment a pedal answers (rescue: a pedal that restarts every few seconds)
+  async identify({ product: ask = true } = {}) {
     const dev = await this.find((id) => MODELS.includes(id.model) || IS_OTA(id));
     if (!dev) return null;
-    const product = IS_OPENPOCKET(dev.id) ? await queryProduct(dev.link, this.t.info) : null;
+    const product = ask && IS_OPENPOCKET(dev.id) ? await queryProduct(dev.link, this.t.info) : null;
     dev.link.close();
     return { id: dev.id, name: dev.name, product };
   }

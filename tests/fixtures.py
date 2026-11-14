@@ -34,6 +34,10 @@ flash[0xC0000:0xC0010] = b"STOCK USER DATA!"                                    
 alt = app + struct.pack("<8s16s16s8sBB2x", b"OP-APP:", b"starter", b"STARTER", b"v01", 0x0D, 1)   # stereo, midi, store; editor 1
 pxpkg.build(alt, ota, out / "alt", 1, None, sdk, "starter")                       # alt/starter-PocketX_901.fwsc, ...
 (out / "app_alt_px.bin").write_bytes(pxpkg.with_product(alt, "PocketX_901"))
+on_alt = bytearray(b"\xFF" * 0x100000)                                           # a pedal that runs the alternative firmware
+img = pxpkg.flash_image(pxpkg.with_product(alt, "PocketX_901"), files)
+on_alt[:len(img)] = img
+(out / "flash_alt.bin").write_bytes(bytes(on_alt))
 pxpkg.build(app, ota, out / "op42", 42, None, sdk)                                # an OpenPocket that says which it is (v32 on)
 pxpkg.build(alt, ota, out / "alt42", 42, None, sdk, "starter")                    # an alternative firmware with OpenPocket's number
 print("fixtures ok:", ", ".join(sorted(p.name for p in out.iterdir())))

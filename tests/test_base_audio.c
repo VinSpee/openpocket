@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * OpenPocket — host test of the base firmware's audio stages (firmware/base/audio.h) under the plain schedule
- * (firmware/base/audio_plain.h), as the THRU app uses them (firmware/apps/thru/thru.c): the I2S driver's two callbacks
+ * (firmware/base/audio_plain.h), as an app on it uses them (firmware/apps/starter): the I2S driver's two callbacks
  * with a guitar block and an output block to fill, the app's sound between a_in and a_out.
  * The pedal's own code runs here; only the chip is stood in for (the tick counter, the I2S driver's entry points).
  * audio_io_start is not called: it writes the chip's registers.

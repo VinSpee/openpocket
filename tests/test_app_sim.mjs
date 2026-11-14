@@ -11,7 +11,8 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startSim } from "../tools/sim.mjs";
-import { parseIdentity, parseInfo, IS_ALT } from "../docs/pxota.js";
+import { parseIdentity, parseInfo, IS_ALT, Updater } from "../docs/pxota.js";
+import { Editor } from "../docs/pxedit.js";
 
 const TMP = mkdtempSync(join(tmpdir(), "opapp-"));
 let failed = 0;
@@ -46,6 +47,20 @@ ok(p && IS_ALT(p) && p.app === "starter" && p.name === "STARTER" && p.version ==
   "INFO says it is not OpenPocket (protocol 0) and which product it is");
 ok(p && p.caps.join() === "stereo,midi,store" && p.editor === 1, "and what it can do, as the app declares it to the base: stereo, midi, store; its own editor protocol 1");
 ok((await sysex("f07d4f50020000f7")) === null, "a request of OpenPocket's editor that it does not have (CAT_BLOCK) gets no reply");
+
+// ---- the web tools' own code against it: a MIDI access whose port is the simulated pedal ----
+{
+  const input = { name: "OpenPocket", state: "connected", onmidimessage: null, open: async () => {} };
+  const output = { name: "OpenPocket", state: "connected", open: async () => {},
+    send: (bytes) => { sysex(Buffer.from(bytes).toString("hex")).then((m) => { if (m && input.onmidimessage) input.onmidimessage({ data: m }); }); } };
+  const access = { inputs: new Map([["p", input]]), outputs: new Map([["p", output]]) };
+  const d = await new Updater(access, null, { info: 800 }).identify();
+  ok(d && d.id.text === "PocketX_901" && IS_ALT(d.product) && d.product.name === "STARTER", "the installer's library finds the pedal and learns it runs STARTER, an alternative firmware");
+  const ed = new Editor(access);
+  const info = await ed.connect();
+  ok(info === null && ed.other && ed.other.app === "starter" && ed.other.name === "STARTER" && ed.other.version === "v01",
+    "OpenPocket's web editor does not connect to it, and knows which product answered");
+}
 
 // ---- the start: its sound is held off for 1.5 s, then on ----
 ok(st.safe === 0 && st.hold === 1 && st.guard_pending === 1, "a normal start: not in safe mode; the sound is held off at first, the start not counted as finished yet");

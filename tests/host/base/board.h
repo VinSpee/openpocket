@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * The pedal's chip and screen on this computer: firmware/base/board.h's stand-in for the simulator of an app on the
- * base firmware (tests/host/README.md, tools/sim.mjs --app NAME, docs/SIMULATOR.md).
+ * base firmware (tools/sim.mjs --app NAME; docs/SIMULATOR.md, "An app on the base firmware").
  * The app's own file (firmware/apps/NAME/NAME.c) is compiled as it is, with -Itests/host before -Ifirmware: its
  * "base/board.h", "px_usb.h" and "base/start.h" are the three files here, and every other part of the base firmware is
  * the pedal's own (the controls, the audio's stages, the store, MIDI, the product's INFO, the start and the loop).

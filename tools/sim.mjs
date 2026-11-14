@@ -40,9 +40,10 @@ function appProgram(app) {
   const word = (k) => (new RegExp(`^${k}=("?)([^"#\\s]*)\\1`, "m").exec(sh) || [])[2] || "";
   if (!word("APP_MAIN")) throw new Error(`firmware/apps/${app}/app.sh names no APP_MAIN`);
   return { src: [word("APP_MAIN"), word("APP_ENGINE")].filter(Boolean).map((f) => `firmware/apps/${app}/${f}`), libs: ["-lm"],
-    flags: ["-Wno-unused-variable", "-Wno-int-to-pointer-cast", "-Itests/host", "-Ifirmware"], dirs: [`firmware/apps/${app}`, "tests/host", "tests/host/base", "firmware/base"] };
+    flags: ["-Wno-unused-variable", "-Wno-int-to-pointer-cast", "-Wno-misleading-indentation", "-Itests/host", "-Ifirmware"], dirs: [`firmware/apps/${app}`, "tests/host", "tests/host/base", "firmware/base"] };
 }
-function compile(kind, app) {
+// the simulator program of a kind ("pedal", "update", or "app" with its name), compiled when its sources are newer
+export function compile(kind, app) {
   const bin = join(BIN, kind === "pedal" ? "edsim" : kind === "app" ? `app-${app}` : "devsim");
   mkdirSync(BIN, { recursive: true });
   const p = kind === "app" ? appProgram(app) : PROGRAMS[kind];
@@ -156,7 +157,7 @@ function png(be, scale = 1) {
 }
 
 // ---- HTTP ----
-const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".json": "application/json", ".png": "image/png", ".css": "text/css", ".md": "text/plain; charset=utf-8", ".wasm": "application/wasm", ".wav": "audio/wav" };
+const TYPES = { ".fwsc": "application/octet-stream", ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".json": "application/json", ".png": "image/png", ".css": "text/css", ".md": "text/plain; charset=utf-8", ".wasm": "application/wasm", ".wav": "audio/wav" };
 const BUTTONS = ["fs_up", "fs_dn", "fx", "home", "push", "mod", "amp", "cab", "dly", "rev"];
 const CONTROLS = [...BUTTONS, "push_long", "dpush", "home_long", "fx_long", "feet"];
 const APP_CONTROLS = [...BUTTONS, ...BUTTONS.map((b) => b + "_long")];   // an app: a press, or a hold of 1.2 s (tests/host/base/start.h)
@@ -291,6 +292,8 @@ export async function startSim(opts = {}) {
       if (path === "/plain") return file(res, join(SIM_FILES, "page.html"));
       if (path.startsWith("/sim/") && SIM_SERVED.has(path.slice(5))) return file(res, join(SIM_FILES, path.slice(5)));
       if (path.startsWith("/loops/")) return file(res, within(LOOPS, path.slice(7)));
+      // (an alternative firmware's packages are where the build puts them: build/apps/NAME, as tools/serve.py serves them)
+      if (path.startsWith("/site/firmware/apps/")) return file(res, within(join(ROOT, "build", "apps"), path.slice(20)));
       if (path.startsWith("/site/")) { const p = within(join(ROOT, "docs"), path.slice(6) || "index.html"); return file(res, p, extname(p) === ".html"); }
       throw new HttpError(404, "not found");
     } catch (e) {

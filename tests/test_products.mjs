@@ -45,10 +45,17 @@ const same = (a, w) => { const x = readFileSync(a), y = readFileSync(w);
   return x.length >= y.length && x.subarray(0, y.length).equals(y) && x.subarray(y.length).every((b) => b === 0xFF); };
 
 // the flasher on a simulated pedal whose flash is the file `flash`; resolves { code, out, dump (a file) }
-async function flasher(flash, argv, { loop } = {}) {
+// mute: the pedal never hears the question "which product are you?" (INFO), so it never says
+async function flasher(flash, argv, { loop, mute } = {}) {
   const dump = join(TMP, `dump${Math.random().toString(36).slice(2)}.bin`);
   const sim = simAccess([flash, "--dump", dump]);
   await sim.ready;
+  if (mute) {
+    const INFO = "f07d4f5001f7", ports = sim.access.outputs, set = ports.set.bind(ports);
+    const hush = (o) => { const send = o.send; o.send = (b) => { if (Buffer.from(b).toString("hex") !== INFO) send(b); }; return o; };
+    for (const o of ports.values()) hush(o);
+    ports.set = (k, o) => set(k, hush(o));               // (the port comes back under a new object after each restart)
+  }
   const dev = loop ? loopAccess(sim, loop) : null;
   const lines = [];
   const code = await main(argv, { access: dev ? dev.access : sim.access, say: (l) => lines.push(l), timing: FAST });
@@ -111,6 +118,10 @@ ok(appIn(r.dump) === "PocketX_901 starter CRC-OK", "the flash holds the app with
 ok(kept(r.dump).length === 0, `through that install the flash keeps OpenPocket's presets, models and IRs, and the app's own data${kept(r.dump).length ? ": NOT " + kept(r.dump).join(", ") : ""}`);
 ok(readFileSync(r.dump).subarray(0xEF000, 0xF0000).every((b) => b === 0xFF), "a sector that ends like an update record is erased by the loader (so the store keeps those bytes erased)");
 const onAlt = r.dump;
+
+r = await flasher(start, ["--confirm-flash", "--app", "starter", "--manifest", altMan], { mute: true });
+ok(r.code === 1 && /written, but the pedal runs a firmware that does not say which it is/.test(r.out) && !/done:/.test(r.out),
+  "the flasher checks the product after an install: a pedal that does not say it runs STARTER is a failure, not a done");
 
 // ---- on the alternative firmware: every tool says which product runs
 d = await runs(onAlt);

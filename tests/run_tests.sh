@@ -82,7 +82,7 @@ BAF="-O1 -Wall -Wno-unused-function -Wno-unused-variable -Wno-int-to-pointer-cas
 base_test test_base_audio $CC $BAF tests/test_base_audio.c firmware/px_math.c -lm
 base_test test_base_audio2 $CC $BAF -DA_CH=2 tests/test_base_audio.c firmware/px_math.c -lm   # an app with a stereo sound
 echo "== base controls (firmware/base/input.h over base/controls.h: the pins and the ADC to an app's events)"
-base_test test_base_input $CC -O1 -Wall -Wno-unused-function -Itests/host -Ifirmware tests/test_base_input.c
+base_test test_base_input $CC -O1 -Wall -Wno-unused-function -Wno-unused-variable -Itests/host -Ifirmware tests/test_base_input.c
 echo "== base store (firmware/base/store.h: an app's own data in flash, kept by every update loader)"
 base_test test_base_store $CC -O1 -Wall -Wno-unused-function -Ifirmware tests/test_base_store.c
 echo "== USB audio (the device code and the audio glue against a model of the controller and a computer)"

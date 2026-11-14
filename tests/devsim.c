@@ -182,7 +182,7 @@ static int info_service(int app_runs)
     if (!app_runs) return 1;
     if (app_is_alt) ed_info_reply(&app_desc, cur_id);
     else if (ver >= 932) {
-        char v[8];
+        char v[16];
         snprintf(v, sizeof v, "v%d", ver - 900);
         ed_begin(ED_INFO); ed_b(4); ed_str(v, 15); ed_str(cur_id, 27); ed_b(12); ed_b(5); ed_b(52); ed_b(13); ed_send();
     }
