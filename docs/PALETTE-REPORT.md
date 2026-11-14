@@ -134,7 +134,7 @@ ramcode: build/apps/palette/obj/engine.o: 22 section(s), 18360 bytes of code to 
 pool tail : 0 bytes, 185008 left before the RAM code
 hi RAM    : RAM code 22716, data 0, free 42808 of 65536 bytes (the RAM code window)
 RAM       : 22912 of 65536 bytes (42624 free)
-OK -> palette.bin: 75584 bytes
+OK -> palette.bin: 75564 bytes
 ```
 
 | Region (`firmware/apps/palette/memory.ld`) | Size | Used | Free | Content |
@@ -142,7 +142,7 @@ OK -> palette.bin: 75584 bytes
 | `POOL` | 311,296 | 126,288 | 185,008 | The engine: Diffusion's line 90,112, Movement's and Texture's 16,384 each, the rest state |
 | `RAMTEXT` | 65,536 | 22,716 | 42,808 | The engine's per-sample code 18,360, the base's audio path |
 | `RAM` | 65,536 | 22,912 | 42,624 | `.data` and `.bss`: the store's copy in RAM, the base |
-| Flash image | 581,564 | 75,584 | | OpenPocket's image is 363,852 |
+| Flash image | 581,564 | 75,564 | | OpenPocket's image is 363,852 |
 
 The 185 KB left in `POOL` is kept for the looper of a later version: about 4 s at 16 bits and 22.05 kHz.
 
