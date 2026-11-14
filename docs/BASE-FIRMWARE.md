@@ -13,7 +13,8 @@ This document is the reference for the base. To start an alternative firmware, r
 [ALT-FIRMWARE.md](ALT-FIRMWARE.md) first. It also covers the install, the way back and the recovery.
 
 OpenPocket itself does not change when the base changes. `firmware/openpocket.bin` and both packages are the same
-bytes as upstream's published v42 release, and the build fails when they are not (section 9).
+bytes as the pinned release, upstream's published v42 with the bass tuner fix, and the build fails when they are not
+(section 9).
 
 ## 1. What the base holds
 
@@ -24,7 +25,7 @@ bytes as upstream's published v42 release, and the build fails when they are not
 | The controls: the pins of the encoder, buttons, and footswitches, the ADC, the battery, the debounce | `firmware/base/controls.h` |
 | The controls as events: down, hold, click, release, a detent, the volume | `firmware/base/input.h` |
 | Diagnostics kept across a reset: the crash screen, the boot stages, the stacks' depth | `firmware/base/diag.h` |
-| The audio's way in and out: the I2S, the block's stages for a mono or a stereo sound, the load and its bypass, the tuner's capture | `firmware/base/audio.h`, `px_aorder.h` |
+| The audio's way in and out: the I2S, the block's stages for a mono or a stereo sound, the load and its bypass, the tuner | `firmware/base/audio.h`, `px_aorder.h`, `px_tuner.h` |
 | A schedule for an app without one: the sound made in the interrupt, on one core; the reset after a NaN; a change made in silence | `firmware/base/audio_plain.h` |
 | The start: `fm1_cstart`, the boot guard, the boot screen, the report of a start that failed, safe mode | `firmware/base/start.h`, `firmware/base/boot_screens.h` |
 | The start and the main loop's duties for an app on the plain schedule | `firmware/base/loop.h` |
@@ -257,15 +258,16 @@ An app's outputs go to `build/apps/<name>/`. The OpenPocket build's outputs are 
 never offers an app.
 
 **The release pin.** `tests/release.sha256` holds the SHA-256 of OpenPocket's image, both packages, and the
-manifest. They are the sums of upstream's published v42 packages. `package` ends with `tests/release_pin.sh`, which
-fails when a sum differs. The build is deterministic: CI and a local build give the same bytes.
+manifest. They are the sums of upstream's published v42 packages with the bass tuner fix (the tuner reads a bass's
+low strings). `package` ends with `tests/release_pin.sh`, which fails when a sum differs. The build is deterministic: CI and a local build give the same bytes.
 
 The same sums mean that nothing in OpenPocket needs a check on a pedal. A change to a base file changes every app,
 so run `package` after one. A change that only moves code, or that adds lines for a case OpenPocket does not
 compile, leaves the image the same bytes.
 
 To pin a new OpenPocket release after a merge of upstream's next version, compare the packages with upstream's
-published ones, then copy `build/SHA256SUMS` over `tests/release.sha256` in the same commit.
+published ones, then copy `build/SHA256SUMS` over `tests/release.sha256` in the same commit. A change made to
+OpenPocket on purpose, such as the bass tuner fix, is pinned the same way once its own tests pass.
 
 ## 10. Which product an image is
 

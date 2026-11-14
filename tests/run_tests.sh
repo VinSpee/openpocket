@@ -15,6 +15,8 @@
 #  - preset store: save / reload / power cut at every step of a save (firmware/px_store.h on a simulated flash)
 #  - the audio callbacks' order (v42, firmware/px_aorder.h): the I2S driver calls the output's callback before the
 #    input's when its interrupt enters late; every output block must still be the sound of that interrupt's guitar block
+#  - tuner (firmware/px_tuner.h): bass and guitar notes, sine and plucked, in tune and off it, read every 100 ms: the
+#    note and its octave, within 2 cents from a five-string bass's low B (31 Hz) to the high E string
 #  - base audio (firmware/base/audio.h, audio_plain.h): the audio stages every app shares, for a mono and for a stereo
 #    app: the guitar through an app's sound to the output channels, MASTER, the mutes, the fades, the soft knee, the
 #    load's bypass
@@ -75,6 +77,8 @@ echo "== preset store"
 $CC -O1 -Iengine tests/test_store.c engine/px_dsp.c firmware/px_math.c -lm -o build/test_store && build/test_store | tail -2
 echo "== audio callbacks' order (the output block is its interrupt's, whichever callback the driver calls first)"
 $CC -O1 -Wall -Ifirmware tests/test_aorder.c -o build/test_aorder && build/test_aorder | tail -1
+echo "== tuner (bass and guitar notes through the pedal's capture and estimate)"
+$CC -O1 -Wall -Ifirmware tests/test_tuner.c -lm -o build/test_tuner && build/test_tuner | tail -1
 echo "== base audio (the stages every app shares, under the plain schedule: firmware/base/audio.h, audio_plain.h)"
 # (a base test's last line is its result; its whole output is shown when it fails)
 base_test() { t="$1"; shift; "$@" -o "build/$t"; "build/$t" > "build/$t.log" || { cat "build/$t.log"; exit 1; }; tail -1 "build/$t.log"; }
