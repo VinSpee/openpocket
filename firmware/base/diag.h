@@ -29,8 +29,18 @@ enum { ST_NONE, ST_INPUTS, ST_PRESET, ST_ENG_INIT, ST_ENG_SET, ST_I2S, ST_UI, ST
 static const char *const ST_NAME[ST_N] = {"?", "INPUTS", "PRESET", "ENGINE INIT", "ENGINE SET", "I2S START",
                                           "UI DRAW", "FIRST 6 S", "OK"};
 volatile struct { uint32_t magic, stage, blocks, load, peak, nans, c1, loops, crash_seen, safe; } op_diag
-    __attribute__((section(".noinit")));
+    OP_NOINIT;
 static struct { uint8_t vdc0, vdc1, sys0, sys1, dcdc, rst, pinr; } op_pwr;   /* supplies, reset source, pin reset (fm1_cstart) */
+/* P3_RST_SRC as read at boot: why the chip last reset (fm1_sys.h) */
+static void rst_names(char *l, uint32_t r)
+{
+    static const char *const N[7] = {"POWER-ON", "VDDIO LOW", "WATCHDOG", "VCM", "LONG PRESS", "1.2V", "SOFT"};
+    int any = 0;
+    for (int i = 0; i < 7; i++)
+        if (r & (1u << i)) { if (any) b_str(l, "+"); b_str(l, N[i]); any = 1; }
+    if (!any) b_str(l, "NONE");
+}
+
 static void op_stage(uint32_t s, const char *txt)
 {
     op_diag.stage = s;

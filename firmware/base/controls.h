@@ -9,6 +9,7 @@
 
 /* ---- Inputs: rotary encoder (PC0/PC1) + push button (PA2) ----
  * Reverse-engineered from the stock firmware (timer ISR reading PC_IN & 0x3). */
+#ifndef PA_IN             /* (a host test or the simulator defines the ports itself: tests/hostpins.h) */
 #define PA_IN   (*(volatile uint32_t *)0x50004u)
 #define PA_DIR  (*(volatile uint32_t *)0x50008u)
 #define PA_DIE  (*(volatile uint32_t *)0x5000Cu)
@@ -26,8 +27,12 @@
 #define PH_DIE  (*(volatile uint32_t *)0x501CCu)
 #define PH_PU   (*(volatile uint32_t *)0x501D0u)
 #define PH_DIR  (*(volatile uint32_t *)0x501C8u)
+#endif
 #define ENC_MASK 0x3u      /* PC0=A, PC1=B */
+#ifndef PA_PD
 #define PA_PD   (*(volatile uint32_t *)0x50014u)
+#define BAT_CHG (*(volatile uint32_t *)0x16A10u)   /* (stock reads its bit 16 beside the gauge: charging?) */
+#endif
 
 /* ---- Controls mapped on the real pedal (diagnostic) ----
  * "pressed" = differs from the idle state captured at boot (works whatever the polarity) */
@@ -136,7 +141,7 @@ static void bat_read(void)
     for (int k = 0; k < 8; k++) { int32_t v = fm1_adc_read(8u); if (v >= 0) { c9 += v; n++; } }
     c9 = n ? c9 / n : -1;
     bat_raw[0] = c9;
-    bat_raw[1] = (int32_t)((*(volatile uint32_t *)0x16A10u >> 16) & 1u);   /* (stock reads it beside the gauge: charging?) */
+    bat_raw[1] = (int32_t)((BAT_CHG >> 16) & 1u);
     if (c9 < 100) { bat_mv = 0; bat_pct = -1; bat_c9q = 0; return; }   /* no divider there: no gauge */
     bat_c9q = bat_c9q ? (bat_c9q * 3 + c9 * 4) / 4 : c9 * 4;   /* a little smoothing */
     int r = (int)(bat_c9q / 4);
