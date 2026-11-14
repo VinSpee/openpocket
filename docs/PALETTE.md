@@ -177,6 +177,9 @@ A web page needs no more than these.
   peak, and time. It can write each effect as a WAV file.
 - `node tools/op.mjs sim --app palette` opens a page with the screen and the controls. Its Listen button plays a guitar
   loop through the app's own code ([SIMULATOR.md](SIMULATOR.md), "An app on the base firmware").
+- [audio/README.md](audio/README.md) lists fifteen audio samples: Creative Commons guitar recordings through the
+  engine on a computer and then through an amplifier simulation, each with an amp-only reference. They are not
+  recordings of a pedal.
 - `node tools/op.mjs all` builds the image and its packages next to OpenPocket's and STARTER's, installs the built
   package on the simulated update pedal over OpenPocket and OpenPocket back, and ends with the release pin.
 
