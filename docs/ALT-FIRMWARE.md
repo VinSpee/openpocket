@@ -191,7 +191,8 @@ first step that fails and note the screen. OpenPocket itself needs none of this:
 Before you start:
 
 1. Have the pedal's official package and its SD-card backup at hand (section 6).
-2. Run `node tools/op.mjs all`. It must end with "all product tests passed" and the release pin's line.
+2. Run `node tools/op.mjs all`. It must exit with 0, and its output must hold the release pin's line and "all product
+   tests passed".
 3. With the pedal on OpenPocket, save one preset under a name you will recognise, and note it.
 
 Install:
