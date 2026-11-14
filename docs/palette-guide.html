@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>PALETTE: user's guide</title>
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     The user's guide of PALETTE, an alternative firmware of this repository (docs/PALETTE.md). One file: its styles are
+     below, its pictures are this repository's own (docs/screens/palette, docs/recordings), and it loads nothing from
+     another host. Keep it true to firmware/apps/palette/app.h. -->
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: light-dark(oklch(0.985 0 none), oklch(0.17 0 none));
+  --panel: light-dark(oklch(0.955 0 none), oklch(0.23 0 none));
+  --ink: light-dark(oklch(0.2 0 none), oklch(0.93 0 none));
+  --dim: light-dark(oklch(0.43 0 none), oklch(0.74 0 none));
+  --line: light-dark(oklch(0.86 0 none), oklch(0.36 0 none));
+  --link: light-dark(oklch(0.45 0.16 255), oklch(0.78 0.12 255));
+  --key: light-dark(oklch(0.92 0.03 70), oklch(0.32 0.04 70));
+  --gap: clamp(0.75rem, 0.5rem + 1.2vw, 1.5rem);
+}
+* { box-sizing: border-box; }
+html { scroll-padding-block-start: 1rem; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: clamp(1rem, 0.95rem + 0.25vw, 1.125rem)/1.55 system-ui, sans-serif;
+}
+main, header, footer { max-inline-size: 62rem; margin-inline: auto; padding-inline: var(--gap); }
+header { padding-block: calc(var(--gap) * 2) var(--gap); }
+h1 { font-size: clamp(1.7rem, 1.3rem + 2vw, 2.6rem); line-height: 1.15; margin: 0 0 0.4rem; }
+h2 { font-size: clamp(1.3rem, 1.15rem + 0.8vw, 1.7rem); line-height: 1.2; margin-block: calc(var(--gap) * 2.2) 0.6rem; padding-block-start: 0.8rem; border-block-start: 1px solid var(--line); }
+h3 { font-size: 1.1em; margin-block: 1.6rem 0.4rem; }
+p, ul, ol { margin-block: 0 0.9rem; max-inline-size: 70ch; }
+li { margin-block-end: 0.3rem; }
+a { color: var(--link); text-underline-offset: 0.15em; }
+@media (hover: hover) and (pointer: fine) { a:hover { text-decoration-thickness: 0.14em; } }
+a:active { opacity: 0.7; }
+:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; border-radius: 3px; }
+.skip { position: absolute; inset-inline-start: 0.5rem; inset-block-start: -4rem; background: var(--panel); padding: 0.5rem 0.8rem; border-radius: 6px; }
+.skip:focus-visible { inset-block-start: 0.5rem; }
+.lead { color: var(--dim); max-inline-size: 60ch; }
+.note { background: var(--panel); border-inline-start: 4px solid var(--line); padding: 0.7rem 1rem; border-radius: 6px; max-inline-size: 70ch; }
+nav ul { list-style: none; padding: 0; display: grid; gap: 0.25rem 1.5rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); max-inline-size: none; }
+kbd { font: 600 0.85em/1 system-ui, sans-serif; background: var(--key); border: 1px solid var(--line); border-radius: 5px; padding: 0.15em 0.4em; white-space: nowrap; }
+code { font: 0.9em ui-monospace, monospace; background: var(--panel); padding: 0.1em 0.3em; border-radius: 4px; overflow-wrap: anywhere; }
+.scroll { overflow-x: auto; margin-block-end: 1rem; border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; inline-size: 100%; font-size: 0.93em; }
+th, td { text-align: start; vertical-align: top; padding: 0.5rem 0.7rem; border-block-end: 1px solid var(--line); }
+tr:last-child > td { border-block-end: 0; }
+th { background: var(--panel); font-weight: 600; }
+td:first-child { min-inline-size: 7.5rem; }
+.num { font-variant-numeric: tabular-nums; }
+.dot { display: inline-block; inline-size: 0.75em; block-size: 0.75em; border-radius: 50%; margin-inline-end: 0.4em; }
+.shots { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); margin-block: 1rem 1.4rem; }
+figure { margin: 0; }
+figure img { display: block; inline-size: 100%; max-inline-size: 15rem; block-size: auto; image-rendering: pixelated; border-radius: 8px; border: 1px solid var(--line); background: oklch(0.1 0 none); }
+figcaption { color: var(--dim); font-size: 0.88em; margin-block-start: 0.4rem; max-inline-size: 15rem; }
+.walk { background: var(--panel); border-radius: 10px; padding: var(--gap); margin-block-end: var(--gap); }
+.walk > h3 { margin-block-start: 0; }
+.walk .goal { font-weight: 600; }
+.gif img { max-inline-size: 30rem; image-rendering: auto; }
+.gif figcaption { max-inline-size: 30rem; }
+footer { color: var(--dim); font-size: 0.9em; padding-block: calc(var(--gap) * 2); }
+</style>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the guide</a>
+<header>
+  <h1>PALETTE: user's guide</h1>
+  <p class="lead">Four effect modules in a row, one of five effects in each, in any order. PALETTE is an alternative firmware for the Donner Pocket X and the M-VAVE BlackBox, built from this repository. It is not OpenPocket: the pedal runs one or the other.</p>
+  <p class="note"><strong>Read this first.</strong> PALETTE has not run on a pedal yet. This guide describes the firmware as it runs in the simulator on a computer, with the pedal's own code. The pictures are that simulator's screen. Before a first install, read <a href="PALETTE-REPORT.md">the checks on a pedal</a>.</p>
+  <nav aria-label="Contents">
+    <ul>
+      <li><a href="#screen">1. The screen</a></li>
+      <li><a href="#modules">2. The modules and their effects</a></li>
+      <li><a href="#controls">3. The controls</a></li>
+      <li><a href="#knob">4. The knob and its lines</a></li>
+      <li><a href="#examples">5. Worked examples</a></li>
+      <li><a href="#presets">6. Presets</a></li>
+      <li><a href="#tempo">7. Tempo</a></li>
+      <li><a href="#midi">8. MIDI</a></li>
+      <li><a href="#safe">9. Safe mode and the way back</a></li>
+      <li><a href="#try">10. Try it without a pedal</a></li>
+    </ul>
+  </nav>
+</header>
+<main id="content">
+
+<h2 id="screen">1. The screen</h2>
+<div class="shots">
+  <figure><img src="screens/palette/01-home.png" width="480" height="480" alt="The screen: preset 1, CLEAN ROOM, four tiles, and the lines PRESET, MIX, LEVEL and TEMPO"><figcaption>Preset 1 after the start.</figcaption></figure>
+</div>
+<ul>
+  <li><strong>At the top:</strong> the preset's number and name. A star after the name means that the sound differs from what its slot holds.</li>
+  <li><strong>Four tiles,</strong> in the order the sound passes through them, top to bottom. A tile shows the module's name, its effect, and its AMOUNT. A module that is off is dim and says OFF. One that bypass has switched says BYP.</li>
+  <li><strong>Five rows:</strong> the lines of the selected page. The lit line is the one the knob changes.</li>
+  <li><strong>The last line:</strong> the load of the processor (DSP), its peak since the sound last changed (PEAK), and the number of audio blocks that came late (LATE). It also shows the mode, or a word such as SAVED or BYPASS.</li>
+</ul>
+
+<h2 id="modules">2. The modules and their effects</h2>
+<p>Each module runs one of its five effects, or is off. A module that is off keeps its effect and its settings.</p>
+<div class="scroll" role="region" aria-label="The four modules and their effects" tabindex="0">
+<table>
+<thead><tr><th scope="col">Module</th><th scope="col">Button</th><th scope="col">Effects, in the order the button steps through them</th><th scope="col">Its knobs</th></tr></thead>
+<tbody>
+<tr><td><span class="dot" aria-hidden="true" style="background: oklch(0.63 0.22 25)"></span>Character</td><td><kbd>AMP</kbd></td><td><strong>Drive:</strong> a warm overdrive, from a touch of colour to full drive. <strong>Sweeten:</strong> equaliser, compression and a little saturation that grow together. <strong>Fuzz:</strong> a two-stage fuzz that sputters as TILT goes up. <strong>Howl:</strong> the fuzz into a resonant filter that TILT tunes. <strong>Swell:</strong> each new note fades in from silence.</td><td>AMOUNT, TILT, SENSITIVITY, VOLUME</td></tr>
+<tr><td><span class="dot" aria-hidden="true" style="background: oklch(0.85 0.17 95)"></span>Movement</td><td><kbd>MOD</kbd></td><td><strong>Doubler:</strong> two short echoes, one a side, that widen the sound. <strong>Vibrato:</strong> a pitch wobble; DRIFT makes it uneven and wide. <strong>Phaser:</strong> sweeping notches; AMOUNT goes from 2 to 12 stages. <strong>Tremolo:</strong> a volume pulse, from soft to a hard chop. <strong>Pitch:</strong> RATE shifts by up to an octave down or up, and its centre is no shift; AMOUNT mixes the shifted sound in.</td><td>AMOUNT, RATE, DRIFT, VOLUME</td></tr>
+<tr><td><span class="dot" aria-hidden="true" style="background: oklch(0.78 0.2 145)"></span>Diffusion</td><td><kbd>DLY</kbd></td><td><strong>Cascade:</strong> a dark echo that bends when TIME moves and runs away at full AMOUNT. <strong>Reels:</strong> a brighter, wobbly echo in the manner of tape. <strong>Space:</strong> a reverb from a small room to a very long tail; AMOUNT is its mix. <strong>Collage:</strong> a loop that records over itself; TIME sets its length. <strong>Reverse:</strong> a backwards echo; TIME sets its speed and pitch.</td><td>AMOUNT, TIME, DRIFT, VOLUME (the effect's part only)</td></tr>
+<tr><td><span class="dot" aria-hidden="true" style="background: oklch(0.72 0.14 240)"></span>Texture</td><td><kbd>CAB</kbd></td><td><strong>Filter:</strong> one knob: below the centre it cuts highs, above it lows. STYLE makes it a plain low-pass or high-pass. <strong>Squash:</strong> a heavy compressor that distorts near the top. <strong>Cassette:</strong> wow, flutter, saturation, dull highs and hiss. <strong>Broken:</strong> a failing motor: the pitch drops and wobbles. <strong>Interference:</strong> fewer samples and bits, ring modulation, noise and stutters.</td><td>AMOUNT, STYLE, VOLUME</td></tr>
+</tbody>
+</table>
+</div>
+<p>MIX blends the guitar with the whole chain. LEVEL is the output level of the chain. Both are on the HOME page.</p>
+
+<h2 id="controls">3. The controls</h2>
+<div class="scroll" role="region" aria-label="What each control does" tabindex="0">
+<table>
+<thead><tr><th scope="col">Control</th><th scope="col">A press</th><th scope="col">Held</th></tr></thead>
+<tbody>
+<tr><td><kbd>AMP</kbd> <kbd>MOD</kbd> <kbd>DLY</kbd> <kbd>CAB</kbd></td><td>Selects the module: its page shows, and the knob is its AMOUNT. Pressed again: the module's next effect, and the rows list its five effects for a moment.</td><td>0.6 s: the module off, or on again.</td></tr>
+<tr><td>The knob</td><td colspan="2">Turned: the value of the lit line. Turned quickly, it goes in steps of 5.</td></tr>
+<tr><td><kbd>PUSH</kbd> (the knob)</td><td>The next line.</td><td>0.8 s: SAVE the sound to its slot.</td></tr>
+<tr><td><kbd>HOME</kbd></td><td>The sound's page: PRESET, MIX, LEVEL, TEMPO. It also leaves ORDER and PRESETS.</td><td>Nothing.</td></tr>
+<tr><td><kbd>FX</kbd></td><td>ORDER: then press the four module buttons in the order you want. FX again leaves the order as it was.</td><td>Nothing.</td></tr>
+<tr><td>The right footswitch</td><td>Bypass, and engage again. It acts when the footswitch comes up.</td><td>0.7 s: PRESETS. Held again: back.</td></tr>
+<tr><td>The left footswitch</td><td>A tap. Two taps set the tempo. It acts when the footswitch goes down.</td><td>Nothing yet.</td></tr>
+<tr><td><kbd>REV</kbd></td><td>A tap as well.</td><td>0.8 s: free time, no tempo.</td></tr>
+<tr><td>MASTER</td><td colspan="2">The volume.</td></tr>
+</tbody>
+</table>
+</div>
+<h3>In ORDER</h3>
+<ul>
+  <li>Each module button you press takes the next place in the chain. The screen puts it at the top and numbers it. A module pressed twice keeps its place. The fourth press sets the order and ends ORDER.</li>
+  <li>With the right footswitch held, a module button does something else: it chooses whether bypass leaves that module on. Its tile then says STAYS ON.</li>
+  <li>The knob does nothing. <kbd>FX</kbd>, <kbd>HOME</kbd>, or <kbd>PUSH</kbd> leaves without a change to the order.</li>
+</ul>
+<h3>In PRESETS</h3>
+<ul>
+  <li>The right footswitch goes to the next slot that holds a sound, the left one to the one before. A press loads the sound at once.</li>
+  <li>The knob goes through every slot, the empty ones too.</li>
+  <li><kbd>AMP</kbd>, <kbd>MOD</kbd>, <kbd>DLY</kbd> and <kbd>CAB</kbd> go to the same place in bank A, B, C and D.</li>
+  <li><kbd>PUSH</kbd>, <kbd>HOME</kbd>, or the right footswitch held again leaves PRESETS on the slot you are at.</li>
+</ul>
+
+<h2 id="knob">4. The knob and its lines</h2>
+<p>The pedal has one knob for all sixteen settings of a sound. Select a module, and the knob is that module's. <kbd>PUSH</kbd> goes down the lines of the page and back to the top.</p>
+<div class="scroll" role="region" aria-label="The lines of each page" tabindex="0">
+<table>
+<thead><tr><th scope="col">Page</th><th scope="col">Lines, top to bottom</th><th scope="col">The line that is lit when the page opens</th></tr></thead>
+<tbody>
+<tr><td><kbd>HOME</kbd></td><td>PRESET, MIX, LEVEL, TEMPO</td><td>PRESET</td></tr>
+<tr><td><kbd>AMP</kbd></td><td>EFFECT, AMOUNT, TILT, SENSITIVITY, VOLUME</td><td>AMOUNT</td></tr>
+<tr><td><kbd>MOD</kbd></td><td>EFFECT, AMOUNT, RATE, DRIFT, VOLUME</td><td>AMOUNT</td></tr>
+<tr><td><kbd>DLY</kbd></td><td>EFFECT, AMOUNT, TIME, DRIFT, VOLUME</td><td>AMOUNT</td></tr>
+<tr><td><kbd>CAB</kbd></td><td>EFFECT, AMOUNT, STYLE, VOLUME</td><td>AMOUNT</td></tr>
+</tbody>
+</table>
+</div>
+<ul>
+  <li>Every value goes from 0 to 100. TILT, SENSITIVITY, VOLUME and LEVEL are neutral at 50.</li>
+  <li>SENSITIVITY moves the point where the Character effects break up, and the level at which Swell answers.</li>
+  <li>DRIFT adds instability. What it does is different for each effect.</li>
+  <li>On the EFFECT line the knob goes through the module's five effects, and on Texture's STYLE line through the filter's three styles: TILT, LOW-PASS, HIGH-PASS.</li>
+  <li>On the PRESET line the knob goes through the presets. On the TEMPO line it sets the tempo, from 30 to 300 beats a minute. Below 30 the tempo is FREE.</li>
+</ul>
+
+<h2 id="examples">5. Worked examples</h2>
+<p>The ideas for these examples come from the demo video of the instrument PALETTE is modelled on (Hologram Electronics, <a href="https://www.youtube.com/watch?v=NnKPP8fTlc4">"Chroma Console"</a>). The steps are PALETTE's own controls, and the pictures are PALETTE's own screen.</p>
+
+<section class="walk" aria-labelledby="ex1">
+<h3 id="ex1">Choose an effect</h3>
+<p class="goal">Goal: step through a module's five effects and stop at the one you want.</p>
+<ol>
+  <li>Press <kbd>AMP</kbd>. Character's tile lights, and the rows show its lines. Nothing in the sound has changed yet.</li>
+  <li>Press <kbd>AMP</kbd> again. Character goes to its next effect. For a moment the rows list its five effects, with the new one lit.</li>
+  <li>Keep pressing until the effect you want is lit. After the fifth, the next press is the first again.</li>
+</ol>
+<div class="shots">
+  <figure><img src="screens/palette/02-module-page.png" width="480" height="480" alt="Character's tile is lit and the AMOUNT line is selected"><figcaption>Step 1: Character is selected.</figcaption></figure>
+  <figure><img src="screens/palette/03-effect-list.png" width="480" height="480" alt="The rows list Drive, Sweeten, Fuzz, Howl and Swell, with Fuzz lit"><figcaption>Step 2: the next effect, in the list of five.</figcaption></figure>
+</div>
+<p>A module that is off switches on when you step its effect. The first press on another module only selects it: one knob serves four modules, so there has to be a way to reach a module without changing it.</p>
+</section>
+
+<section class="walk" aria-labelledby="ex2">
+<h3 id="ex2">Shape the effect with its module's knobs</h3>
+<p class="goal">Goal: set how strong an effect is, and its tone.</p>
+<ol>
+  <li>Press the module's button once, for example <kbd>AMP</kbd>. The AMOUNT line is lit.</li>
+  <li>Turn the knob. AMOUNT changes, on the line and on the tile.</li>
+  <li>Press <kbd>PUSH</kbd>. The next line is lit: TILT for Character, RATE for Movement, TIME for Diffusion. Turn the knob.</li>
+  <li>Press <kbd>PUSH</kbd> again for the lines below: SENSITIVITY or DRIFT, then VOLUME.</li>
+</ol>
+</section>
+
+<section class="walk" aria-labelledby="ex3">
+<h3 id="ex3">Put the modules in another order</h3>
+<p class="goal">Goal: run the echo into the fuzz, so that the repeats are fuzzed too.</p>
+<ol>
+  <li>Press <kbd>FX</kbd>. The last line says ORDER, and every tile is dim.</li>
+  <li>Press <kbd>DLY</kbd>. Diffusion goes to the top with a 1.</li>
+  <li>Press <kbd>AMP</kbd>. Character is 2.</li>
+  <li>Press <kbd>MOD</kbd>, then <kbd>CAB</kbd>. The fourth press sets the order. The last line says THE ORDER IS SET, and the sound changes without a click.</li>
+</ol>
+<div class="shots">
+  <figure><img src="screens/palette/04-order.png" width="480" height="480" alt="ORDER: the rows say to press AMP, MOD, DLY and CAB in the order you want"><figcaption>Step 1: ORDER.</figcaption></figure>
+  <figure><img src="screens/palette/05-order-two-placed.png" width="480" height="480" alt="Diffusion is numbered 1 and Character 2"><figcaption>Step 3: two modules placed.</figcaption></figure>
+  <figure><img src="screens/palette/07-order-set.png" width="480" height="480" alt="The tiles read Diffusion, Character, Movement, Texture"><figcaption>Step 4: the new chain.</figcaption></figure>
+</div>
+<p>The order is part of the sound, and a preset keeps it. Factory presets 18 and 19 have orders of their own.</p>
+</section>
+
+<section class="walk" aria-labelledby="ex4">
+<h3 id="ex4">Drive one module with another, or push the whole chain</h3>
+<p class="goal">Goal: make a module hit the next one harder, or make the whole chain clip softly.</p>
+<ol>
+  <li>Press <kbd>AMP</kbd>, then <kbd>PUSH</kbd> until the VOLUME line is lit.</li>
+  <li>Turn the knob above 50. Character's output is now louder, so the modules after it are driven harder. An effect that compresses or saturates, such as Squash or Cassette, changes with the level it gets.</li>
+  <li>For the whole chain: press <kbd>HOME</kbd>, <kbd>PUSH</kbd> twice for LEVEL, and turn it up. The output has a soft ceiling that starts at half of full scale: a loud chain is rounded off there.</li>
+</ol>
+</section>
+
+<section class="walk" aria-labelledby="ex5">
+<h3 id="ex5">Bypass, and the modules it leaves on</h3>
+<p class="goal">Goal: switch the effects off with your foot, but let the reverb ring on.</p>
+<ol>
+  <li>Press the right footswitch. Every module that was on says BYP, and the guitar passes as it is. Press it again to engage.</li>
+  <li>To leave a module on: press <kbd>FX</kbd>, hold the right footswitch, and press <kbd>DLY</kbd>. Diffusion's tile says STAYS ON. Let the footswitch go and press <kbd>FX</kbd>.</li>
+  <li>Press the right footswitch now. Every module but Diffusion goes off, and Diffusion keeps sounding. The last line says BYPASS: SOME MODULES STAY ON.</li>
+  <li>To undo it, do step 2 once more.</li>
+</ol>
+<div class="shots">
+  <figure><img src="screens/palette/12-bypass.png" width="480" height="480" alt="Every tile says BYP and the last line says BYPASS"><figcaption>Step 1: the whole pedal bypassed.</figcaption></figure>
+  <figure><img src="screens/palette/06-dual-bypass-choice.png" width="480" height="480" alt="In ORDER, Diffusion's tile says STAYS ON"><figcaption>Step 2: bypass will leave Diffusion on.</figcaption></figure>
+  <figure><img src="screens/palette/08-dual-bypass.png" width="480" height="480" alt="Character says BYP while Diffusion still shows its AMOUNT"><figcaption>Step 3: the rest is off, Diffusion plays.</figcaption></figure>
+</div>
+<p>The choice is part of the sound and is saved with it. A module's own switch is separate: hold its button for 0.6 s.</p>
+</section>
+
+<section class="walk" aria-labelledby="ex6">
+<h3 id="ex6">Find a preset, and save your own</h3>
+<p class="goal">Goal: step through the sounds by foot, then keep a sound you made.</p>
+<ol>
+  <li>Hold the right footswitch for 0.7 s. The rows become a list of presets, with the loaded one lit.</li>
+  <li>Press the right footswitch for the next sound, the left one for the one before. Each loads at once.</li>
+  <li>Press <kbd>CAB</kbd> for bank D, where the slots are empty, or turn the knob to any slot.</li>
+  <li>Press <kbd>PUSH</kbd> to leave the list. Make your sound.</li>
+  <li>Hold <kbd>PUSH</kbd> for 0.8 s. The last line says SAVED. The sound is now that slot's, and the pedal starts on it the next time.</li>
+</ol>
+<div class="shots">
+  <figure><img src="screens/palette/09-presets.png" width="480" height="480" alt="The rows list five presets, each with its bank's letter, the loaded one lit"><figcaption>Step 1: PRESETS.</figcaption></figure>
+  <figure><img src="screens/palette/13-saved.png" width="480" height="480" alt="The last line says SAVED"><figcaption>Step 5: saved.</figcaption></figure>
+</div>
+<p>A change of preset drops what you did not save. The star after the name tells you that there is something to lose.</p>
+</section>
+
+<section class="walk" aria-labelledby="ex7">
+<h3 id="ex7">Tap a tempo</h3>
+<p class="goal">Goal: make the echo and the tremolo follow the song.</p>
+<ol>
+  <li>Tap the left footswitch twice, a quarter note apart. <kbd>REV</kbd> does the same by hand.</li>
+  <li>Press <kbd>HOME</kbd>: the TEMPO line shows the tempo in beats a minute.</li>
+  <li>Turn RATE or TIME: with a tempo they choose a note value. <a href="#tempo">Section 7</a> has the values.</li>
+  <li>Hold <kbd>REV</kbd> for 0.8 s to go back to free time.</li>
+</ol>
+<div class="shots">
+  <figure><img src="screens/palette/10-tap-tempo.png" width="480" height="480" alt="The TEMPO line is lit and shows 120 BPM"><figcaption>After two taps half a second apart.</figcaption></figure>
+</div>
+</section>
+
+<section class="walk" aria-labelledby="ex8">
+<h3 id="ex8">What the video also shows, and PALETTE does not do yet</h3>
+<ul>
+  <li><strong>Recording a knob's movement and looping it.</strong> Not built.</li>
+  <li><strong>Capturing a loop by holding the left footswitch.</strong> Not built. Holding the left footswitch does nothing.</li>
+</ul>
+</section>
+
+<figure class="gif"><img src="recordings/palette-controls.gif" width="480" height="548" alt="An animation of 25 steps through the controls, each with a caption under the screen"><figcaption>The controls in sequence, 25 steps. Each frame has its caption.</figcaption></figure>
+
+<h2 id="presets">6. Presets</h2>
+<p>There are 80 slots in four banks of twenty, A to D. The first twenty have factory sounds until you save over them. A slot that was never saved and has no factory sound is EMPTY. A sound saved to an empty slot gets the name USER and the slot's number. Saving does not touch OpenPocket's presets, and OpenPocket does not touch these.</p>
+<div class="scroll" role="region" aria-label="The twenty factory presets" tabindex="0">
+<table>
+<thead><tr><th scope="col">Slot</th><th scope="col">Name</th><th scope="col">What is on, in the chain's order</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td>CLEAN ROOM</td><td>Sweeten, Space</td></tr>
+<tr><td class="num">2</td><td>WARM DRIVE</td><td>Drive, Cascade</td></tr>
+<tr><td class="num">3</td><td>WIDE DOUBLE</td><td>Doubler, Squash</td></tr>
+<tr><td class="num">4</td><td>TAPE ECHO</td><td>Reels, Cassette</td></tr>
+<tr><td class="num">5</td><td>BIG SPACE</td><td>Sweeten, Vibrato, Space</td></tr>
+<tr><td class="num">6</td><td>FUZZ WALL</td><td>Fuzz, Space</td></tr>
+<tr><td class="num">7</td><td>HOWLER</td><td>Howl, Phaser, Cascade</td></tr>
+<tr><td class="num">8</td><td>SLOW SWELL</td><td>Swell, Space</td></tr>
+<tr><td class="num">9</td><td>PHASE 12</td><td>Phaser at twelve stages, Squash</td></tr>
+<tr><td class="num">10</td><td>TREM CHOP</td><td>Drive, Tremolo</td></tr>
+<tr><td class="num">11</td><td>OCTAVE UP</td><td>Pitch an octave up, Cascade</td></tr>
+<tr><td class="num">12</td><td>SUB DRIFT</td><td>Pitch an octave down with DRIFT, Filter as a low-pass</td></tr>
+<tr><td class="num">13</td><td>COLLAGE</td><td>Doubler, Collage</td></tr>
+<tr><td class="num">14</td><td>BACKWARDS</td><td>Vibrato, Reverse</td></tr>
+<tr><td class="num">15</td><td>WORN TAPE</td><td>Sweeten, Cassette</td></tr>
+<tr><td class="num">16</td><td>BAD MOTOR</td><td>Reels, Broken</td></tr>
+<tr><td class="num">17</td><td>BAD SIGNAL</td><td>Cascade, Interference</td></tr>
+<tr><td class="num">18</td><td>ECHO&gt;FUZZ</td><td>Cascade, then Fuzz: Diffusion is first in the chain</td></tr>
+<tr><td class="num">19</td><td>SPACE&gt;TREM</td><td>Space, then Tremolo: Diffusion is first in the chain</td></tr>
+<tr><td class="num">20</td><td>FULL CHAIN</td><td>Drive, Phaser, Reels, Cassette, at 120 beats a minute</td></tr>
+</tbody>
+</table>
+</div>
+<div class="shots">
+  <figure><img src="screens/palette/11-full-chain.png" width="480" height="480" alt="Preset 20, FULL CHAIN, with the four modules on and a tempo of 120"><figcaption>Preset 20: the four modules on.</figcaption></figure>
+</div>
+
+<h2 id="tempo">7. Tempo</h2>
+<p>A sound has a tempo or runs in free time. The tempo comes from two taps, from the TEMPO line, or from a MIDI clock while one runs. It is saved with the sound. With a tempo, these knobs choose note values:</p>
+<div class="scroll" role="region" aria-label="What RATE and TIME choose when a tempo is set" tabindex="0">
+<table>
+<thead><tr><th scope="col">Effect</th><th scope="col">Knob</th><th scope="col">From 0 to 100</th></tr></thead>
+<tbody>
+<tr><td>Vibrato, Phaser, Tremolo</td><td>RATE</td><td>One cycle in four bars, two bars, one bar, a half note, a quarter, an eighth, an eighth triplet, a sixteenth</td></tr>
+<tr><td>Cascade, Reels</td><td>TIME</td><td>A repeat every sixteenth, eighth triplet, eighth, dotted eighth, quarter</td></tr>
+<tr><td>Collage</td><td>TIME</td><td>A loop of a sixteenth, an eighth, a quarter, a half note, one bar (1.96 s at most)</td></tr>
+<tr><td>Reverse</td><td>none</td><td>Each backwards piece lasts a quarter note, halved until it is 0.6 s or less. TIME stays its speed</td></tr>
+</tbody>
+</table>
+</div>
+<p>In free time RATE goes from one cycle in five seconds to about ten a second, and the TIME of Cascade and Reels from 40 ms to one second.</p>
+
+<h2 id="midi">8. MIDI</h2>
+<p>PALETTE listens on USB MIDI. Its map is the reference instrument's, so a controller set up for that one works.</p>
+<div class="scroll" role="region" aria-label="The MIDI map" tabindex="0">
+<table>
+<thead><tr><th scope="col">Message</th><th scope="col">Meaning</th></tr></thead>
+<tbody>
+<tr><td>Program Change 0 to 79</td><td>Presets 1 to 80</td></tr>
+<tr><td>Control Change 64, 66, 68, 70</td><td>TILT, RATE, TIME, MIX</td></tr>
+<tr><td>Control Change 65, 67, 69, 71</td><td>AMOUNT of Character, Movement, Diffusion, Texture</td></tr>
+<tr><td>Control Change 72, 74, 76, 78</td><td>SENSITIVITY, Movement's DRIFT, Diffusion's DRIFT, LEVEL</td></tr>
+<tr><td>Control Change 73, 75, 77, 79</td><td>VOLUME of Character, Movement, Diffusion, Texture</td></tr>
+<tr><td>Control Change 16 to 19</td><td>The effect of Character, Movement, Diffusion, Texture: 0 to 109 in five steps of 22, and from 110 the module off</td></tr>
+<tr><td>Control Change 103 to 106</td><td>A module off (below 64) and on</td></tr>
+<tr><td>Control Change 91</td><td>Bypass (below 64) and engage</td></tr>
+<tr><td>Control Change 92</td><td>Below 32 every module bypassed; below 64 bypass as the footswitch does it; from 64 engaged</td></tr>
+<tr><td>Control Change 84</td><td>The filter's STYLE: low-pass (below 44), tilt (below 88), high-pass</td></tr>
+<tr><td>Control Change 93</td><td>A tap</td></tr>
+<tr><td>Clock, Start, Stop</td><td>The tempo while the clock runs. Half a second without a clock, or a Stop, gives the sound its own tempo back</td></tr>
+</tbody>
+</table>
+</div>
+<p>A knob value from 0 to 127 becomes 0 to 100.</p>
+
+<h2 id="safe">9. Safe mode and the way back</h2>
+<ul>
+  <li><strong>Overload.</strong> If the sound stays above 85 % load, the pedal bypasses it and the last line says OVERLOAD. The guitar passes.</li>
+  <li><strong>Safe mode.</strong> After a crash, or a start that did not finish, the next start is in safe mode: the last line says SAFE MODE, the effects stay off, the guitar passes, and USB answers. From there, install again or go back to OpenPocket.</li>
+  <li><strong>Back to OpenPocket.</strong> Run <code>node tools/op.mjs flash --confirm-flash</code>, or open the installer page and press "Back to OpenPocket". OpenPocket's presets, amp models and cabinets are still there, and PALETTE's presets stay for the next time.</li>
+  <li><strong>Everything else about install and recovery</strong> is in <a href="ALT-FIRMWARE.md">ALT-FIRMWARE.md</a>. STARTER, the other alternative firmware, keeps its data in the same part of the flash as PALETTE, so a save on one replaces the other's sounds. Going back to the official firmware is its section 5.</li>
+</ul>
+
+<h2 id="try">10. Try it without a pedal</h2>
+<ul>
+  <li><code>node tools/op.mjs sim --app palette</code> opens a page with this screen and every control. Its Listen button plays a guitar loop through the firmware's own code.</li>
+  <li><a href="audio/README.md">The audio samples</a> are guitar recordings through the engine on a computer and an amplifier simulation. They are not recordings of a pedal.</li>
+  <li><a href="PALETTE.md">PALETTE.md</a> is the design note, and <a href="PALETTE-CONTROLS-REFERENCE.md">PALETTE-CONTROLS-REFERENCE.md</a> says where these controls come from.</li>
+</ul>
+</main>
+<footer>
+  <p>PALETTE is part of this repository and under its licence, GPL-3.0-only. It is an independent work: every algorithm is written from the public description of how the reference instrument behaves, and nothing of that product is in it.</p>
+</footer>
+</body>
+</html>

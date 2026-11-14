@@ -213,7 +213,8 @@ A web page needs no more than these.
 ## 9. Merging upstream changes
 
 PALETTE is files of its own: `firmware/apps/palette/`, `tests/test_palette.c`, `tests/test_palette_sim.mjs`,
-`tests/palette_render.c`, `tools/cyclecount.py`, and these two documents. It changes no file of the base firmware
+`tests/palette_render.c`, `tools/cyclecount.py`, and its documents (`docs/PALETTE*.md`, `docs/palette-guide.html`,
+`docs/audio/`, `docs/screens/palette/`, `docs/recordings/palette-controls.gif`). It changes no file of the base firmware
 (`firmware/base/`, `px_usb.h`, `app.ld`, `build.sh`) and none of OpenPocket's.
 
 It adds lines to five files that upstream also edits: `README.md` (one sentence), `docs/SIMULATOR.md` (in its
