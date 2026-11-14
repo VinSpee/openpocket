@@ -142,6 +142,14 @@ replaces the files with this folder's.
 To play with the simulated pedal yourself (screen, footswitches, knob, the installer and editor pages, and its sound,
 with bundled guitar loops, a file or an input of your computer), run `make sim` and open `http://127.0.0.1:8766/`; see [`docs/SIMULATOR.md`](docs/SIMULATOR.md).
 
+This fork validates each change with the [no-mistakes](https://github.com/kunchenguid/no-mistakes) pipeline before it
+opens a pull request. [`.no-mistakes.yaml`](.no-mistakes.yaml) holds its commands (the container image, the build,
+the host tests) and the runbook its test agent follows: the build's byte checks, the host tests, the pages in headless
+Chromium and the simulated pedal. Anything that needs a real pedal (flashing, sound, DSP load, USB, Bluetooth) stays
+outside the pipeline and is checked by hand with the pull request's pedal drill checklist. The pipeline reads this
+file from `main`, so a change to it applies from the run after it merges. The file belongs to this fork and is not
+proposed upstream.
+
 ## Layout
 
 | | |
