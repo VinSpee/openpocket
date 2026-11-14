@@ -81,8 +81,10 @@ fixed count.
 the right side only, and no effect inverts one side against the other, so the left output alone and the sum of both
 are each a complete sound. Whether the pedal's output jack carries two channels is not known.
 
-**Safety.** A tiny alternating offset at the input keeps the feedback paths out of denormal numbers. Every write to a
-delay line is clamped. Every feedback path goes through a soft clipper. The engine's output has a soft ceiling that
+**Safety.** The pedal's FPU slows on denormal numbers, and silence through a filter that feeds back decays into
+them. Each module's input gets a tiny alternating offset, a filter fed from 16-bit memory gets a tiny constant at
+each step, and a glide that ends at zero ends there exactly. A test scans what the engine keeps for denormals through
+eight seconds of silence after each effect. Every write to a delay line is clamped. Every feedback path goes through a soft clipper. The engine's output has a soft ceiling that
 starts at half of full scale, which is the loudest the guitar itself can be, and the base adds its own knee after the
 MASTER volume. The base silences a NaN and resets the engine.
 
@@ -142,7 +144,8 @@ A web page needs no more than these.
 
 - `tests/test_palette.c` runs the engine's own code with the firmware's math library: every effect is finite, not
   silent, and bounded on loud, quiet, and silent input, at every knob's ends; an effect change, an order change, and a
-  bypass make no step in the output; a sound that fails the check is refused.
+  bypass make no step in the output; nothing the engine keeps decays into a denormal; a sound that fails the check is
+  refused.
 - `tests/test_palette_sim.mjs` drives the app in the simulator: its identity, controls, screen, MIDI map, editor
   requests, store, and safe mode.
 - `tests/palette_render.c` renders each effect on a standard signal and prints the tables of the report: loudness,

@@ -94,7 +94,7 @@ echo "== base store (firmware/base/store.h: an app's own data in flash, kept by 
 base_test test_base_store $CC -O1 -Wall -Wno-unused-function -Ifirmware tests/test_base_store.c
 echo "== PALETTE's engine (firmware/apps/palette/engine.c: twenty effects in four modules, changes without a step)"
 base_test test_palette $CC -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -Wall -Ifirmware/apps/palette tests/test_palette.c firmware/apps/palette/engine.c firmware/px_math.c -lm
-$CC -O2 -Wall -fno-vectorize -fno-slp-vectorize -Ifirmware/apps/palette -o build/palette_render tests/palette_render.c firmware/apps/palette/engine.c firmware/px_math.c -lm
+$CC -O2 -Wall -Ifirmware/apps/palette -o build/palette_render tests/palette_render.c firmware/apps/palette/engine.c firmware/px_math.c -lm
 build/palette_render --runs 1 > build/palette_render.log || { cat build/palette_render.log; exit 1; }; echo "palette render: each effect on the standard signal is finite, under full scale and not silent (build/palette_render.log)"
 echo "== USB audio (the device code and the audio glue against a model of the controller and a computer)"
 UAF="-O1 -Wall -Wno-unused-function -Wno-int-to-pointer-cast -Iengine -Ifirmware -Ifirmware/bsp/chip"

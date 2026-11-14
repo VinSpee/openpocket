@@ -3,8 +3,9 @@
  * engine's own code and the firmware's math library, as a table for docs/PALETTE-REPORT.md: the loudness against the
  * guitar's with AMOUNT at 0, 50 and 100, the highest peak of the three, and the time a sample takes on this computer
  * with AMOUNT at 50. With a folder it also writes each effect, AMOUNT at 50, as a WAV.
- *   cc -O2 -fno-vectorize -fno-slp-vectorize -Ifirmware/apps/palette -o build/palette_render tests/palette_render.c \
- *      firmware/apps/palette/engine.c firmware/px_math.c -lm
+ *   cc -O2 -Ifirmware/apps/palette -o build/palette_render tests/palette_render.c firmware/apps/palette/engine.c \
+ *      firmware/px_math.c -lm        (for the report's times, with clang: -fno-vectorize -fno-slp-vectorize, as the
+ *                                     pedal's compiler has no vector unit to use)
  *   build/palette_render [--wav DIR] [--runs N]
  * The signal is the base firmware's test guitar (firmware/base/audio.h, OP_TESTSIG): a note and its fifth, sawtooth,
  * plucked every 0.4 s at about -12 dBFS and decaying, the notes walking two octaves. Twelve seconds of it; the first

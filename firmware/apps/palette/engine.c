@@ -9,6 +9,11 @@
 #define I16 (1.0f / 32768.0f)
 #define AINL static inline __attribute__((always_inline))
 #define XF (1.0f / 256.0f)                      /* a blend's step a sample: 5.8 ms from end to end, as the base's change fade */
+/* Denormals: the pedal's FPU slows on them (docs/HARDWARE-HANDBOOK.md), and digital silence through a filter that
+ * feeds back decays into them. Three rules keep every number the engine keeps out of them (tests/test_palette.c):
+ * a module's input gets +-1e-15 (pl_run); a filter fed from 16-bit memory, which holds exact zeros, gets DN at each
+ * step; a glide that ends at zero ends there exactly. */
+#define DN 1e-18f
 AINL float f_abs(float x) { return x < 0.0f ? -x : x; }
 AINL float f_sat(float x) { return x / (1.0f + f_abs(x)); }                  /* a soft clip: one division, never beyond 1 */
 AINL int16_t f_q(float x) { x *= 32767.0f; if (x > 32767.0f) x = 32767.0f; if (x < -32767.0f) x = -32767.0f; return (int16_t)x; }
@@ -62,7 +67,7 @@ static void fx_drive(pl_engine_t *e, float *l, float *r)
             const float u0 = f_sat(f_ap(&o->ua, HB_A, v) + bias), u1 = f_sat(f_ap(&o->ub, HB_B, v) + bias);
             float y = 0.5f * (f_ap(&o->da, HB_A, u0) + f_ap(&o->db, HB_B, o->podd)); o->podd = u1;
             dc += 0.0007f * (y - dc); y -= dc;
-            lo += kt * (y - lo); x[i] = (lo * gl + (y - lo) * gh) * lvl;
+            lo += kt * (y - lo) + DN; x[i] = (lo * gl + (y - lo) * gh) * lvl;
         }
         s->hp[c] = hp; s->dc[c] = dc; s->lo[c] = lo;
     }
@@ -91,7 +96,7 @@ AINL void fuzz_core(pl_engine_t *e, float *l, float *r, const int howl)
                 a1 = k->a1, a2 = k->a2, a3 = k->a3, sq = k->sq;
     for (int c = 0; c < 2; c++) {
         float *x = c ? r : l; pl_os2_t *o = &s->os[c];
-        float hp = s->hp[c], dc = s->dc[c], lo = s->lo[c], be = s->be[c], ic1 = s->ic1[c], ic2 = s->ic2[c];
+        float hp = s->hp[c], dc = s->dc[c], lo = s->lo[c], be = s->be[c], ic1 = s->ic1[c], ic2 = s->ic2[c], dn = 1e-15f;
         for (uint32_t i = 0; i < PL_FR; i++) {
             float v = x[i]; hp += khp * (v - hp); v = (v - hp) * g;
             be += kb * (f_abs(v) - be);
@@ -99,10 +104,10 @@ AINL void fuzz_core(pl_engine_t *e, float *l, float *r, const int howl)
             const float u0 = f_sat(f_sat(f_ap(&o->ua, HB_A, v) + b) * g2), u1 = f_sat(f_sat(f_ap(&o->ub, HB_B, v) + b) * g2);
             float y = 0.5f * (f_ap(&o->da, HB_A, u0) + f_ap(&o->db, HB_B, o->podd)); o->podd = u1;
             dc += 0.0007f * (y - dc); y -= dc;
-            lo += kt * (y - lo); y = lo;
+            lo += kt * (y - lo) + DN; y = lo;
             if (howl) {                                             /* a resonant state-variable filter after the fuzz */
-                const float v3 = y - ic2, v1 = a1 * ic1 + a2 * v3, v2 = ic2 + a2 * ic1 + a3 * v3;
-                ic1 = 2.0f * v1 - ic1; ic2 = 2.0f * v2 - ic2; y = v2 + sq * v1;
+                const float v3 = y + dn - ic2, v1 = a1 * ic1 + a2 * v3, v2 = ic2 + a2 * ic1 + a3 * v3;
+                ic1 = 2.0f * v1 - ic1; ic2 = 2.0f * v2 - ic2; y = v2 + sq * v1; dn = -dn;
             }
             x[i] = y * lvl;
         }
@@ -121,7 +126,7 @@ static void fx_swell(pl_engine_t *e, float *l, float *r)
         env += (a > env ? katt : krel) * (a - env); slow += 0.0004f * (env - slow);
         if (arm && env > thr && env > ratio * slow) { gate = 0.0f; arm = 0; }   /* a new note: start from silence */
         if (env < 1.25f * slow) arm = 1;                            /* its attack is over: the next one may trigger */
-        const float tgt = env > thr ? 1.0f : 0.0f;
+        const float tgt = env > thr ? 1.0f : 1e-9f;                 /* (closed: -180 dB, and never a denormal) */
         gate += (tgt > gate ? kup : kdn) * (tgt - gate);
         l[i] *= gate; r[i] *= gate;
     }
@@ -208,7 +213,9 @@ AINL void pitch_core(pl_engine_t *e, float *l, float *r, const int lofi)
     int16_t *bl = e->mvb, *br = e->mvb + PL_MV_N / 2; const int32_t M = PL_MV_N / 2 - 1; int32_t w = s->w & M;
     const float W = k->W, amt = k->amt * (2.0f - k->amt) * 1.13f, dry = 1.0f - k->amt * k->amt;
     /* the ratio glides to where RATE put it; at RATE's centre the two heads give way to the signal as it is (rest) */
-    const float pinc = s->r0 + 0.08f * (k->pinc * (1.0f + k->dfk * drift_step(&s->dft[0], 0.2f)) - s->r0);
+    const float ptgt = k->pinc * (1.0f + k->dfk * drift_step(&s->dft[0], 0.2f));
+    float pinc = s->r0 + 0.08f * (ptgt - s->r0);
+    if (f_abs(ptgt - pinc) < 1e-9f) pinc = ptgt;
     float u = s->rest; const float u1 = f_step(u, k->rest, 0.25f), du = (u1 - u) * (1.0f / (float)PL_FR);
     float ph = s->pph, hl = s->held[0], hr = s->held[1]; int32_t hc = s->hc; const int32_t hold = k->hold;
     for (uint32_t i = 0; i < PL_FR; i++) {
@@ -244,7 +251,7 @@ AINL void tape_core(pl_engine_t *e, float *l, float *r, const int reels)
         const float dd = d + wow * f_psin(ph1) + flut * f_psin(ph2);
         ph1 = f_wrap(ph1 + inc1); ph2 = f_wrap(ph2 + inc2);
         const float t1 = f_rdn(b, w, N, dd), t2 = f_rdn(b, w, N, dd + off);
-        lp += klp * (t1 - lp); hp += khp * (lp - hp);
+        lp += klp * (t1 - lp) + DN; hp += khp * (lp - hp);
         float f = (lp - hp) * fb;
         if (reels) f = (f + nz * f_noise(&rnd)) * drop;
         b[w] = f_q(xin + f_sat(f)); if (++w >= N) w = 0;
@@ -281,7 +288,7 @@ static void fx_space(pl_engine_t *e, float *l, float *r)
                 const int32_t q = p + B[4 + j] + L[4 + j] - 8 + i0;
                 const float a = (float)b[q & M], c = (float)b[(q + 1) & M]; v = (a + f * (c - a)) * I16;
             } else v = (float)b[(p + B[4 + j] + L[4 + j]) & M] * I16;
-            st[j] += kd * (v - st[j]); o[j] = st[j]; sum += o[j];
+            st[j] += kd * (v - st[j]) + DN; o[j] = st[j]; sum += o[j];
         }
         sum *= 0.25f;                                               /* Householder feedback: each line minus 2/8 of the sum */
         for (int j = 0; j < 8; j++) b[(p + B[4 + j]) & M] = f_q(x + (o[j] - sum) * g);
@@ -382,7 +389,7 @@ static void fx_cassette(pl_engine_t *e, float *l, float *r)
     for (uint32_t i = 0; i < PL_FR; i++) {
         bl[w] = f_q(l[i]); br[w] = f_q(r[i]);
         const float fl = flut * f_psin(ph2);
-        float yl = f_rd(bl, w, M, base + wow * f_psin(ph1) + fl), yr = f_rd(br, w, M, base + wow * f_psin(f_wrap(ph1 + 0.07f)) + fl);
+        float yl = f_rd(bl, w, M, base + wow * f_psin(ph1) + fl) + 1e-15f, yr = f_rd(br, w, M, base + wow * f_psin(f_wrap(ph1 + 0.07f)) + fl) + 1e-15f;
         ph1 = f_wrap(ph1 + inc1); ph2 = f_wrap(ph2 + inc2);
         float a = f_abs(yl); const float b = f_abs(yr); a = a > b ? a : b;
         env += (a > env ? katt : krel) * (a - env);
@@ -517,9 +524,7 @@ void pl_run(pl_engine_t *e, const float *in, float *out)
         e->fresh = 0;
         return;
     }
-    for (uint32_t i = 0; i + 1u < PL_FR; i += 2u) {                 /* +-1e-15: no denormals in the feedback paths */
-        e->dryb[i] = l[i] = r[i] = in[i] + 1e-15f; e->dryb[i + 1u] = l[i + 1u] = r[i + 1u] = in[i + 1u] - 1e-15f;
-    }
+    for (uint32_t i = 0; i < PL_FR; i++) e->dryb[i] = l[i] = r[i] = in[i];
     for (uint32_t m = 0; m < PL_NMOD; m++) differs |= (uint32_t)(e->order[m] ^ nx->order[m]);
     if (differs && e->og == 0.0f) {                                 /* the chain is silent: the new order */
         for (uint32_t m = 0; m < PL_NMOD; m++) e->order[m] = nx->order[m];
@@ -530,6 +535,9 @@ void pl_run(pl_engine_t *e, const float *in, float *out)
         if (e->run[m] != want) { if (e->mg[m] == 0.0f) pl_swap(e, m, want); }
         else if (e->fresh) pl_adopt(e, m);
         if (e->run[m] == PL_OFF) continue;
+        for (uint32_t i = 0; i + 1u < PL_FR; i += 2u) {             /* +-1e-15: silence, or the exact zeros of the module before */
+            l[i] += 1e-15f; r[i] += 1e-15f; l[i + 1u] -= 1e-15f; r[i + 1u] -= 1e-15f;
+        }
         const float tgt = e->run[m] == want ? 1.0f : 0.0f;
         const int blend = e->mg[m] != 1.0f || tgt != 1.0f;
         if (blend) for (uint32_t i = 0; i < PL_FR; i++) { e->tl[i] = l[i]; e->tr[i] = r[i]; }

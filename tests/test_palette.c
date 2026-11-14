@@ -4,10 +4,11 @@
  * under full scale and is not silent; a change of effect, of order, of a module's switch, of bypass and of the whole
  * sound makes no step in the output, where a cleared engine does; bypass is the guitar bit for bit; the order is heard;
  * a tempo sets the delay's time; the left output alone and the sum of both are each a whole sound; a sound that is out
- * of range is refused.
+ * of range is refused; after a note no number the engine keeps decays into a denormal (the pedal's FPU slows on them).
  *   cc -O1 -Wall -Ifirmware/apps/palette tests/test_palette.c firmware/apps/palette/engine.c firmware/px_math.c -lm -o build/test_palette
  */
 #include <math.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include "engine.h"
@@ -58,6 +59,23 @@ static run_t run(int kind, uint32_t n)
     const double k = 1.0 / ((double)n * PL_FR);
     v.rms[0] = sqrt(e[0] * k); v.rms[1] = sqrt(e[1] * k); v.mid = sqrt(em * k); v.in = sqrt(ei * k);
     return v;
+}
+/* the floats the engine keeps from one block to the next, a module's between two of its fields: how many of them are
+ * denormal now (smaller than the smallest normal number, and not zero) */
+static int denormals_in(const void *from, const void *to)
+{
+    int n = 0;
+    for (const float *f = from; f < (const float *)to; f++) if (*f != 0.0f && fabsf(*f) < 1.17549435e-38f) n++;
+    return n;
+}
+static int denormals(void)
+{
+    int n = denormals_in(&eng.mg, &eng.rnd);    /* the blends and the gains as they glide */
+    n += denormals_in(&eng.cs.os, &eng.cs.arm) + denormals_in(&eng.ms.ph, &eng.ms.dft) + denormals_in(&eng.ds.yl, &eng.ds.dft)
+       + denormals_in(&eng.ts.ic1, &eng.ts.dft);
+    for (int k = 0; k < 2; k++) n += denormals_in(&eng.ms.dft[k].v, &eng.ms.dft[k].rnd) + denormals_in(&eng.ds.dft[k].v, &eng.ds.dft[k].rnd)
+                                   + denormals_in(&eng.ts.dft[k].v, &eng.ts.dft[k].rnd);
+    return n;
 }
 static const char *const FX[PL_NMOD][PL_NFX] = {
     {"Drive", "Sweeten", "Fuzz", "Howl", "Swell"}, {"Doubler", "Vibrato", "Phaser", "Tremolo", "Pitch"},
@@ -213,6 +231,24 @@ int main(void)
         }
         snprintf(what, sizeof what, "Cascade's repeat: free time 40 ms (%.1f); at 120 a quarter note (%.1f) and an eighth (%.1f); at 75 a sixteenth (%.1f)", got[0], got[1], got[2], got[3]);
         CHECK(good == 4, what);
+    }
+
+    /* ---- after a note, in silence: nothing the engine keeps decays into a denormal ---- */
+    {
+        int bad = 0;
+        for (uint32_t m = 0; m < PL_NMOD; m++) for (uint32_t fx = 0; fx < PL_NFX; fx++) for (int v2 = 0; v2 < 3; v2++) {
+            float x[PL_FR]; int n = 0;
+            pl_default(&t); t.on = 15; t.fx[m] = (uint8_t)fx;
+            t.fx[(m + 1u) % PL_NMOD] = (uint8_t)(v2 == 2 ? 4u : 0u);            /* (with another module after or before it) */
+            t.order[0] = (uint8_t)(v2 ? m : (m + 1u) % PL_NMOD); t.order[1] = (uint8_t)(v2 ? (m + 1u) % PL_NMOD : m);
+            t.order[2] = (uint8_t)((m + 2u) % PL_NMOD); t.order[3] = (uint8_t)((m + 3u) % PL_NMOD);
+            t.knob[PL_K_RATE] = v2 == 1 ? 80 : 50; t.knob[PL_K_AMT(m)] = v2 == 1 ? 100 : 50; t.knob[PL_K_DRIFT_MOVE] = v2 == 2 ? 60 : 0;
+            start(&t, 0); run(IN_LOUD, 200);
+            if (v2 == 1) { t.knob[PL_K_RATE] = 50; t.knob[PL_K_DRIFT_MOVE] = 0; t.knob[PL_K_MIX] = 0; t.knob[PL_K_VOL(m)] = 0; set(&t, 0, 0); }   /* (glides that end at nothing) */
+            for (uint32_t b = 0; b < 2800u; b++) { input(IN_SILENT, x); pl_run(&eng, x, out); n += denormals(); }
+            if (n) { bad++; printf("   %s, case %d: %d denormal(s) in 8 s of silence\n", FX[m][fx], v2, n); }
+        }
+        CHECK(!bad, "each effect, with other modules before and after it, 8 s of silence after loud playing: no denormal in what the engine keeps");
     }
 
     /* ---- one output alone, and both summed, are each a whole sound ---- */
