@@ -29,6 +29,10 @@
  *   8 SAVE       -> 0 saved, 1 not
  *   9 NAME k     -> k, flags (bit 0 the slot holds a sound, bit 1 it was saved), its name
  *   10 RENAME c.. -> the sound's name is those characters (11 at most); answered as STATE is
+ *   11 LOAD      -> the load in % (127 at most), its peak since the sound last changed, the blocks that came late
+ *                   (low 7 bits, the bits above), the blocks that reached the output's knee (the same), the NaNs,
+ *                   1 when the base bypassed an overload
+ * The screen's last line shows the first three: DSP, PEAK, LATE.
  */
 #pragma once
 #include "engine.h"
@@ -110,6 +114,7 @@ static void ap_apply(void)
     fm1_irq_mask(FM1_IRQ_ALNK0);
     pl_commit(&ap_eng, &c);
     fm1_irq_unmask(FM1_IRQ_ALNK0);
+    a_peak = 0;                                 /* (the peak shown is this sound's, the change itself included) */
 }
 static void ap_say(const char *s) { ap_note_s = s; ap_note_ms = 1500u; }
 static int ap_saved(uint32_t k) { return (ap_st.saved[k / 8u] >> (k % 8u)) & 1u; }
@@ -291,6 +296,13 @@ static void app_editor(uint32_t cmd, const uint8_t *a, uint32_t n)
         for (; i < n && i < 11u && a[i] >= 32u && a[i] <= 126u; i++) ap_now.name[i] = (char)a[i];
         for (; i < sizeof ap_now.name; i++) ap_now.name[i] = 0;
         ap_ed_state(cmd);
+    } else if (cmd == 11u) {
+        const uint32_t late = a_xrun > 16383u ? 16383u : a_xrun, clip = a_clip > 16383u ? 16383u : a_clip;
+        ed_begin(cmd);
+        ed_b(a_load > 127u ? 127u : a_load); ed_b(a_peak > 127u ? 127u : a_peak);
+        ed_b(late & 127u); ed_b(late >> 7); ed_b(clip & 127u); ed_b(clip >> 7);
+        ed_b(a_nan_count > 127u ? 127u : a_nan_count); ed_b(a_bypass);
+        ed_send();
     }
 }
 
@@ -352,8 +364,7 @@ static void ap_draw(uint32_t now)
         ft_box(6, y, 124, ln->name ? ln->name : "", &FT_SM, sel ? UI_BG : UI_DIM, bg, 0);
         ft_box(130, y, 104, l, &FT_SM, fg, bg, 2);
     }
-    if (now - t_status >= 250u || seen[10] == ~0u) {   /* four times a second: a note, or the load and the tempo */
-        const uint32_t qn = ap_quarter();
+    if (now - t_status >= 250u || seen[10] == ~0u) {   /* four times a second: a note, or the load, its peak, the late blocks */
         t_status = now ? now : 1u;
         l[0] = 0;
         if (ap_note_ms) b_str(l, ap_note_s);
@@ -361,7 +372,7 @@ static void ap_draw(uint32_t now)
         else if (a_bypass) b_str(l, "OVERLOAD: THE GUITAR AS IT IS");
         else if (ap_move) b_str(l, "MOVE: TURN, THEN FX OR PUSH");
         else if (ap_bypass) b_str(l, "BYPASS: HOLD A FOOTSWITCH");
-        else { b_str(l, "DSP "); b_num(l, a_load); b_str(l, "%"); if (qn) { b_str(l, "   "); b_num(l, (60000u + qn / 2u) / qn); b_str(l, " BPM"); } }
+        else { b_str(l, "DSP "); b_num(l, a_load); b_str(l, "%  PEAK "); b_num(l, a_peak); b_str(l, "%  LATE "); b_num(l, a_xrun); }
         h = ap_hash(ap_note_ms ? 1u : 0u, l);
         if (h != seen[10]) { seen[10] = h; ft_box(0, 224, 240, l, &FT_SM, ap_note_ms || ap_bypass || ap_move ? UI_ACC : UI_DIM, UI_BG, 1); }
     }

@@ -224,6 +224,8 @@ m = await req(9, 4);
 ok(m && m[5] === 4 && m[6] === 1 && String.fromCharCode(...m.slice(7, -2)) === "BIG SPACE", "NAME 4: the slot holds a factory sound, BIG SPACE");
 m = await req(9, 40);
 ok(m && m[6] === 0, "NAME 40: an empty slot");
+m = await req(11);
+ok(m && m.length === 14 && m[4] === 11 && m[7] === 0 && m[8] === 0 && m[11] === 0 && m[12] === 0, "LOAD: the load, its peak, no late block, no NaN, no overload bypass");
 
 // ---- a save, a restart ----
 await req(7, 30);

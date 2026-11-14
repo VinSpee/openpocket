@@ -11,6 +11,9 @@
  * two are left out of the levels (the effect fades in, its tail builds up).
  * The time is this process's CPU time, the least of N runs (default 9) of the whole signal, less the same engine with
  * every module off: the least, because another program on the same computer can only make a run slower.
+ * Built with -DPL_REFERENCE -Iengine and engine/px_dsp.c it also times three blocks of OpenPocket's engine in the same
+ * run, whose loads on a pedal are known (an earlier task read them with `node tools/op.mjs dsp` on v40): what turns
+ * this computer's time into a share of the pedal's block.
  */
 #include <math.h>
 #include <stdio.h>
@@ -18,6 +21,9 @@
 #include <string.h>
 #include <time.h>
 #include "engine.h"
+#ifdef PL_REFERENCE
+#include "px_dsp.h"
+#endif
 
 #define SECONDS 12u
 #define SKIP 2u
@@ -97,6 +103,46 @@ static void wav(const char *dir, const char *name)
     fclose(f);
 }
 
+#ifdef PL_REFERENCE
+/* one block type of OpenPocket's engine alone, every knob at 50, on the same signal: ns a sample, less the engine with
+ * every block off */
+static px_engine ref_eng;
+static double ref_run(const px_preset_t *p, int runs)
+{
+    static float o[PX_MAX_BLOCK];
+    double best = 1e30;
+    for (int k = 0; k < runs; k++) {
+        px_engine_init(&ref_eng, 44100.0f);
+        px_engine_set(&ref_eng, p);
+        const double t0 = now_ns();
+        for (uint32_t b = 0; b < 2u * NB; b++) px_engine_process(&ref_eng, sig + b * PX_MAX_BLOCK, o, PX_MAX_BLOCK);   /* (a block as two halves, as the firmware) */
+        const double t = (now_ns() - t0) / (double)(NB * PL_FR);
+        if (t < best) best = t;
+    }
+    return best;
+}
+static void reference(int runs)
+{
+    static const struct { int blk; const char *type; int pedal; } REF[3] = {
+        {PX_B_REVERB, "ROOM", 9}, {PX_B_DELAY, "TAPE", 3}, {PX_B_MOD, "CHORUS", 4} };
+    px_preset_t p;
+    memset(&p, 0, sizeof p);
+    px_order_default(p.order);
+    for (int b = 0; b < PX_NBLK; b++) for (int k = 0; k < PX_NPAR; k++) p.p[b][k] = 50;
+    const double off = ref_run(&p, runs);
+    printf("\n| OpenPocket's block | Host, ns a sample | On a pedal, %% of a block | %% a ns |\n| --- | --- | --- | --- |\n");
+    for (int r = 0; r < 3; r++) {
+        px_preset_t q = p;
+        int type = -1;
+        for (int t = 0; t < px_ntypes(REF[r].blk) && type < 0; t++) if (strstr(px_type_name(REF[r].blk, t), REF[r].type)) type = t;
+        if (type < 0) { printf("| %s | not found | | |\n", REF[r].type); continue; }
+        q.on[REF[r].blk] = 1; q.type[REF[r].blk] = (uint8_t)type;
+        const double t = ref_run(&q, runs) - off;
+        printf("| %s %s | %.2f | %d | %.2f |\n", px_block_name(REF[r].blk), px_type_name(REF[r].blk, type), t, REF[r].pedal, (double)REF[r].pedal / t);
+    }
+}
+#endif
+
 static const char *const MOD[PL_NMOD] = {"Character", "Movement", "Diffusion", "Texture"};
 static const char *const FX[PL_NMOD][PL_NFX] = {
     {"Drive", "Sweeten", "Fuzz", "Howl", "Swell"}, {"Doubler", "Vibrato", "Phaser", "Tremolo", "Pitch"},
@@ -160,6 +206,9 @@ int main(int argc, char **argv)
                    FX[s.order[2]][s.fx[s.order[2]]], FX[s.order[3]][s.fx[s.order[3]]], t);
         }
     }
+#ifdef PL_REFERENCE
+    reference(runs);
+#endif
     if (bad) { printf("\n%d row(s) not finite, silent or above full scale\n", bad); return 1; }
     return 0;
 }
