@@ -8,7 +8,7 @@ STARTER (`firmware/apps/starter`) is a small alternative firmware that exists to
 start your own from it, how it is installed and replaced, and what the recovery paths are. PALETTE
 (`firmware/apps/palette`, [PALETTE.md](PALETTE.md)) is a whole product built this way.
 
-Nothing here has run on a pedal yet. Section 7 lists what was checked without one and what still needs one.
+STARTER has been flashed to a pedal by its owner, who reports that it works; the section 8 list has not been recorded as run. PALETTE has not run on a pedal. Section 7 lists what was checked without one and what still needs one.
 
 ## 1. What STARTER is
 
