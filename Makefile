@@ -3,6 +3,7 @@
 #   make doctor     check the prerequisites (Node, Docker, the image)
 #   make build      firmware/openpocket.bin, the update loader and docs/firmware/*.fwsc + manifest.json
 #   make ble        the Bluetooth MIDI test image: firmware/openpocket-ble.bin, build/ble/*.fwsc (docs/BLE-TEST.md)
+#   make app APP=thru   another app on the base firmware (firmware/apps/thru): build/apps/thru/ (docs/BASE-FIRMWARE.md)
 #   make test       the host tests (tests/run_tests.sh)
 #   make package    build + build/SHA256SUMS of the outputs
 #   make package-test   the MIDI test channel package (docs/firmware/midi-test/, never the installer default)
@@ -22,9 +23,11 @@
 #   make rescue-write [ARGS=..]   the same, writing the official firmware back (run `make rescue` first)
 #   make rescue-check   the UBOOT rescue tool (tools/uboot_rescue.py) against a simulated pedal; needs only Python 3
 # `make NATIVE=1 build` skips Docker (toolchain installed with firmware/setup.sh).
-.PHONY: doctor build ble test package package-test clean shell image serve serve-ble wasm render appimage flash flash-rescue log rescue rescue-write rescue-check sim
+.PHONY: doctor build ble app test package package-test clean shell image serve serve-ble wasm render appimage flash flash-rescue log rescue rescue-write rescue-check sim
 doctor build ble test package package-test clean shell image serve wasm rescue-check:
 	@node tools/op.mjs $@
+app:
+	@node tools/op.mjs app "$(APP)"
 serve-ble:
 	@node tools/op.mjs serve ble
 render:

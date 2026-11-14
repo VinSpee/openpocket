@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * OpenPocket — the tuner: the interrupt stores the input decimated by 4 (11025 Hz); the main loop estimates the note.
  *
- * The including file provides TN_MEM (where the buffers live) and TN_READY (whether they can be used) (px_audio.h);
+ * The including file provides TN_MEM (where the buffers live) and TN_READY (whether they can be used) (base/audio.h);
  * tests/test_tuner.c runs this file on a PC.
  */
 #pragma once

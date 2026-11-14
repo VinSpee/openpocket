@@ -3,6 +3,7 @@
 // The one host-side entry point of the OpenPocket build (macOS, Linux, Windows; Node 18+). The Makefile and the
 // .bat files only call this. Every Docker command line lives here.
 //   node tools/op.mjs doctor | build | ble | test | package | clean | shell | image | serve [editor|build|ble]
+//   node tools/op.mjs app NAME   another app on the base firmware (firmware/apps/NAME, docs/BASE-FIRMWARE.md) -> build/apps/NAME/
 //   node tools/op.mjs flash --dry-run | --confirm-flash [--rescue] [--package FILE]   (writes to a connected pedal: docs/BUILDING.md)
 //   node tools/op.mjs log [--follow] [--json] [--wait SEC] [--scan SEC]   (reads a connected pedal's state: docs/BLE-TEST.md)
 //   node tools/op.mjs dsp [--presets A,B] [--seconds SEC] [--json]   (the DSP's load, late blocks and bypass per preset, over USB)
@@ -87,6 +88,11 @@ const commands = {
   image,
   build: () => inContainer(["sh", "firmware/build.sh"]),
   ble: () => inContainer(["sh", "-c", "OP_BLE=1 sh firmware/build.sh && sha256sum firmware/openpocket-ble.bin build/ble/*.fwsc"]),   // the Bluetooth MIDI test image (docs/BLE-TEST.md)
+  app([name]) {                                // an app on the base firmware other than OpenPocket: its own outputs, build/apps/<name>/
+    if (!/^[a-z0-9-]+$/.test(name || "")) fail("usage: app NAME   (a folder of firmware/apps, such as thru). See docs/BASE-FIRMWARE.md.");
+    if (!existsSync(resolve(root, "firmware/apps", name, "app.sh"))) fail(`firmware/apps/${name}/app.sh not found.`);
+    return inContainer(["sh", "-c", `OP_APP=${name} sh firmware/build.sh && sha256sum build/apps/${name}/${name}.bin build/apps/${name}/*.fwsc`]);
+  },
   test: () => inContainer(["sh", "tests/run_tests.sh"]),
   package: () => inContainer(["sh", "-c", `sh firmware/build.sh && mkdir -p build && sha256sum ${OUTS} > build/SHA256SUMS && cat build/SHA256SUMS`]),
   "package-test": () => inContainer(["sh", "-c", `OP_CHANNEL=midi-test sh firmware/build.sh && mkdir -p build && sha256sum ${TEST} > build/SHA256SUMS-midi-test && cat build/SHA256SUMS-midi-test`]),
