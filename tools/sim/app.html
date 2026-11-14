@@ -30,6 +30,7 @@ label{font-size:13px;color:var(--dim)}
   <div class="row"><button data-knob="-1">Knob −</button><button data-knob="1">Knob +</button>
     <label>MASTER <input id="vol" type="range" min="0" max="100" value="80"> <span id="volv">80</span></label></div>
   <div class="row"><button id="sound">Play a 440 Hz guitar and measure</button><span id="level"></span></div>
+  <div class="row"><label>Guitar loop <select id="loop"></select></label><button id="listen">Listen</button><span id="heard"></span></div>
   <dl id="facts"></dl>
   <div class="row"><a href="/api/flash" download="app-sim-flash.bin">Download flash</a><button id="reset">Erase flash and restart</button></div>
 </div>
@@ -55,10 +56,44 @@ document.body.addEventListener("click", async (e) => {
   if (!b) return;
   if (b.dataset.press) await call("/api/press/" + b.dataset.press + (e.shiftKey ? "_long" : ""));
   else if (b.dataset.knob) await call("/api/knob/" + b.dataset.knob);
+  else if (b.id === "listen") { await listen(!ctx); return; }
   else if (b.id === "sound") { const l = await call("/api/sound/440"); $("level").textContent = `left ${l.left.toFixed(3)}, right ${l.right.toFixed(3)} of full scale (RMS)`; }
   else if (b.id === "reset" && confirm("Erase the simulated pedal's flash (its saved sounds)?")) { await call("/api/reset"); frame = -1; }
   refresh();
 });
+// ---- the app's sound: a bundled loop through the pedal's own code, pulled a part at a time and played in order ----
+const RATE = 44100, PART_MS = 250, AHEAD = 0.6;
+const LISTEN_GAIN = 4;                                    // the loop is at a guitar's level, far under full scale
+let ctx = null, loud = null, playAt = 0, pump = null;
+fetch("/loops/manifest.json").then((r) => r.json()).then((m) => { $("loop").innerHTML = m.loops.map((l) => `<option value="${l.file.replace(/\.wav$/, "")}">${l.title}</option>`).join(""); });
+async function part() {
+  if (!ctx || ctx.currentTime + AHEAD < playAt) return;
+  const pcm = new Int16Array(await (await fetch(`/api/audio/${PART_MS}`, { method: "POST" })).arrayBuffer());
+  if (!ctx || pcm.length < 2) return;
+  const buf = ctx.createBuffer(2, pcm.length / 2, RATE), l = buf.getChannelData(0), r = buf.getChannelData(1);
+  for (let i = 0; i < l.length; i++) { l[i] = pcm[2 * i] / 32768; r[i] = pcm[2 * i + 1] / 32768; }
+  const src = new AudioBufferSourceNode(ctx, { buffer: buf });
+  src.connect(loud);
+  playAt = Math.max(playAt, ctx.currentTime + 0.05);
+  src.start(playAt);
+  playAt += buf.duration;
+}
+async function listen(on) {
+  clearInterval(pump); pump = null;
+  if (ctx) { await ctx.close(); ctx = null; }
+  if (!on) { await fetch("/api/audio/0", { method: "POST" }); await call("/api/loop/none"); }   // (the pedal's own time again; the tone)
+  else {
+    await call("/api/loop/" + $("loop").value);
+    ctx = new AudioContext(); playAt = 0;
+    loud = new GainNode(ctx, { gain: LISTEN_GAIN });
+    loud.connect(ctx.destination);
+    let busy = false;
+    pump = setInterval(async () => { if (busy) return; busy = true; try { await part(); } finally { busy = false; } }, 50);
+  }
+  $("listen").textContent = on ? "Stop" : "Listen";
+  $("heard").textContent = on ? "A control is heard about half a second later." : "";
+}
+$("loop").onchange = () => { if (ctx) call("/api/loop/" + $("loop").value); };
 $("vol").oninput = async () => { $("volv").textContent = $("vol").value; await call("/api/volume/" + $("vol").value); refresh(); };
 document.addEventListener("keydown", async (e) => {
   const m = { ArrowLeft: "/api/knob/-1", ArrowRight: "/api/knob/1", ArrowUp: "/api/press/fs_up", ArrowDown: "/api/press/fs_dn", Enter: "/api/press/push" }[e.key];

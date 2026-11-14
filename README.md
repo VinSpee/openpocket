@@ -56,6 +56,8 @@ Everything learnt about the AC791N chip (CPU, memory, flash, second core, audio,
 building on it (FM-1 included): [docs/HARDWARE-HANDBOOK.md](docs/HARDWARE-HANDBOOK.md). To build a firmware of your own
 on the same base as OpenPocket, with your own engine and memory layout: [docs/ALT-FIRMWARE.md](docs/ALT-FIRMWARE.md) is
 the how-to, with a starter to copy, and [docs/BASE-FIRMWARE.md](docs/BASE-FIRMWARE.md) is the reference.
+PALETTE, a four-module stereo instrument, is an alternative firmware built that way: [docs/PALETTE.md](docs/PALETTE.md),
+with a user's guide to open in a browser, [docs/palette-guide.html](docs/palette-guide.html).
 What the stock BlackBox firmware does on the audio side, and what OpenPocket can take from it:
 [docs/STOCK-FIRMWARE.md](docs/STOCK-FIRMWARE.md).
 
