@@ -99,12 +99,11 @@ int main(void)
         t = s; t.fx[PL_DIFF] = PL_NFX; refused += !pl_sound_ok(&t);
         t = s; t.order[1] = 0; refused += !pl_sound_ok(&t);
         t = s; t.order[3] = 4; refused += !pl_sound_ok(&t);
-        t = s; t.on = 16; refused += !pl_sound_ok(&t);
         t = s; t.style = PL_NSTYLE; refused += !pl_sound_ok(&t);
         t = s; t.tempo = PL_TEMPO_MIN - 1; refused += !pl_sound_ok(&t);
         t = s; t.tempo = PL_TEMPO_MAX + 1; refused += !pl_sound_ok(&t);
-        t = s; t.tempo = 120; t.order[0] = 3; t.order[3] = 0; refused += pl_sound_ok(&t) ? 0 : 100;
-        CHECK(refused == 8, "a knob above 100, an effect, an order, a switch, a style or a tempo out of range: refused; a tempo and another order: taken");
+        t = s; t.tempo = 120; t.order[0] = 3; t.order[3] = 0; t.on = 0xA5; refused += pl_sound_ok(&t) ? 0 : 100;
+        CHECK(refused == 7, "a knob above 100, an effect, an order, a style or a tempo out of range: refused; a tempo, another order and the app's bits of the switches: taken");
     }
     CHECK(sizeof(pl_engine_t) <= 128u * 1024u, "the engine's memory is under 128 KiB of the app's 304 KiB POOL");
 

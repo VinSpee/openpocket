@@ -181,22 +181,25 @@ Sound, load, and late blocks:
    LATE. LATE must stay at 0 through this whole list.
 7. Listen with headphones, then at the output jack. Note whether the jack carries two channels: preset 3, WIDE
    DOUBLE, is wide in headphones.
-8. Step through the 20 factory presets with the right footswitch. For each, note DSP and PEAK, and note a click or a
-   gap at the change. No preset may show OVERLOAD.
+8. On the HOME page the PRESET line is selected: turn the knob through the 20 factory presets. For each, note DSP and
+   PEAK, and note a click or a gap at the change. No preset may show OVERLOAD.
 9. Press AMP, then press it again four times, playing all the while. Each press is the next Character effect, without
-   a click. Note DSP for each. Do the same with MOD, DLY, and CAB. Section 2 has the estimate for each effect: A and B
+   a click, and the screen lists the five effects for a moment. Note DSP for each. Do the same with MOD, DLY, and CAB. Section 2 has the estimate for each effect: A and B
    are per cent of a block, as DSP is.
 10. Build the heaviest chain: on any preset, set Howl, Phaser, Space, and Cassette, all on. Note DSP and PEAK. The
     estimate is 27 % to 44 %, or 30 % to 49 % under m-bootloader 1.2. Send Control Change 78 at 127 and play hard: the
     output must distort softly, not crackle.
-11. Hold a footswitch: BYPASS shows and the guitar is as it is. Hold it again: the effects are back without a click.
-    Note PEAK after this step: it includes the block that clears every module.
-12. Press DLY, then FX, turn the knob: Diffusion moves along the chain, and the sound changes without a click. Press FX.
-13. Tap REV twice: the screen's TEMPO line on the HOME page shows the tempo, and a Cascade repeat follows it.
+11. Press the right footswitch: BYPASS shows and the guitar is as it is. Press it again: the effects are back without
+    a click. Note PEAK after this step: it includes the block that clears every module. Then press FX, hold the right
+    footswitch and press DLY, and press FX again. Now the right footswitch switches every module but Diffusion, whose
+    tail rings on. Undo the choice the same way.
+12. Press FX, then DLY, AMP, MOD, and CAB: Diffusion is first in the chain, and the sound changes without a click.
+13. Tap the left footswitch twice: the TEMPO line on the HOME page shows the tempo, and a Cascade repeat follows it.
 
 Controls, presets, and MIDI:
 
-14. Hold AMP: Character goes off and its tile dims. Hold it again.
+14. Hold AMP: Character goes off and its tile dims. Hold it again. Hold the right footswitch: PRESETS shows. Step with
+    both footswitches, press CAB for the fourth bank and AMP for the first, and hold the right footswitch again.
 15. Change a sound, hold PUSH for a second: SAVED shows. Switch the pedal off and on: it starts on that preset as saved.
 16. From a computer, send Program Change 5, Control Change 69 at 127, and Control Change 16 at 50: the preset, Diffusion's
     AMOUNT, and Character's effect (Fuzz) follow. Send a MIDI clock: the TEMPO line shows CLOCK and its tempo.

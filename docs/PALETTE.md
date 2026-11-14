@@ -20,7 +20,8 @@ Nothing here has run on a pedal yet.
 | The product on the base: descriptor, identity, install guard, recovery | A web editor page (the requests it needs exist: section 7) |
 | The engine: four modules in series, one of five effects each, any order, stereo throughout | Voicing every effect by ear with a pedal (the levels here are measured, not judged) |
 | All twenty effects | Capture (the looper and sustainer) and Gesture (recorded knob movements) |
-| The sixteen knob functions, each module's effect, on and off, the order, the filter style, a tempo | Dual bypass, bypass with trails, calibration levels |
+| The sixteen knob functions, each module's effect, on and off, the order, the filter style, a tempo | Bypass with trails, calibration levels |
+| Bypass for the whole pedal, or a dual bypass that leaves chosen modules on | |
 | Tap tempo, MIDI clock, and the tempo-synced effects | The button lights, the tuner |
 | 80 presets in the app's own store, 20 factory sounds | An expression control over MIDI |
 | The pedal's controls and screen, the MIDI map of the reference, its own editor requests | Running a mono part of the chain once (a saving, the report's section 3) |
@@ -37,7 +38,7 @@ what the engine is set from.
 | `knob[16]` | The sixteen knob functions, each 0 to 100, in the order of the reference's Control Changes 64 to 79 |
 | `fx[4]` | The effect of each module, 0 to 4 |
 | `order[4]` | The serial order: a permutation of the four modules |
-| `on` | Bit `m` is set when module `m` is on. A module that is off keeps its effect |
+| `on` | Bit `m` is set when module `m` is on. A module that is off keeps its effect. Bits 4 to 7 are the app's: the modules a dual bypass leaves on |
 | `style` | The Filter effect's style: tilt, low-pass, high-pass |
 | `tempo` | 0 for free time, or 30 to 300 beats a minute |
 
@@ -77,7 +78,8 @@ between its input and its output.
   do their tails.
 - Another order: the chain's output fades out, the order changes, and it fades in. No memory is cleared.
 - Bypass: the output crossfades to the guitar. While bypassed, no module runs. On the way back each module starts
-  clear.
+  clear. A dual bypass is not the engine's: the app switches the modules it does not leave on, as a module's own
+  switch does.
 - A preset is those cases together. A module whose effect stays the same keeps its tail.
 
 **Memory.** A module's five effects share one buffer, because one runs at a time. Movement and Texture each have
@@ -105,26 +107,48 @@ clock's while a clock runs.
 
 ## 4. Controls
 
+The mechanisms follow the reference instrument's, as its maker's demo video shows them, where a pedal with one knob
+allows. [PALETTE-CONTROLS-REFERENCE.md](PALETTE-CONTROLS-REFERENCE.md) records what the video shows and where PALETTE
+differs. [palette-guide.html](palette-guide.html) is the user's guide, with worked examples.
+
 | Control | What it does |
 | --- | --- |
-| AMP, MOD, DLY, CAB | Character, Movement, Diffusion, Texture: the module's page. Pressed again: its next effect. Held: the module off and on |
-| HOME | The sound's page: PRESET, MIX, OUTPUT LEVEL, TEMPO |
+| AMP, MOD, DLY, CAB | Character, Movement, Diffusion, Texture. A press selects the module: its page, the knob its AMOUNT. Pressed again: its next effect, and the screen lists its five effects for a moment. Held: the module off and on |
 | The knob | The selected line's value. Turned quickly, it goes in steps of 5 |
-| PUSH | The next line. Held: SAVE the sound to its slot |
-| FX | MOVE: the selected module is picked up, the knob moves it along the chain, FX or PUSH drops it |
-| REV | TAP: two taps or more set the tempo. Held: free time |
-| The footswitches | The preset before, the preset after. Held: bypass, off and on |
+| PUSH | The next line: AMOUNT, then the module's other knobs. Held: SAVE the sound to its slot |
+| HOME | The sound's page: PRESET, MIX, OUTPUT LEVEL, TEMPO. It also leaves ORDER and PRESETS |
+| FX | ORDER: then press the four module buttons in the order the chain is to have. The fourth press sets it. FX again leaves the order as it was |
+| The right footswitch | Bypass and engage. Held: PRESETS, and held again: back |
+| The left footswitch | TAP: two taps set the tempo |
+| REV | TAP as well. Held: free time |
 | MASTER | The volume |
 
-A footswitch changes the preset when it comes up, because a hold means bypass. The footswitches skip the slots that
-hold no sound. The knob on the PRESET line reaches every slot.
+**ORDER.** The screen puts each module at the top as it is pressed and numbers it. A module pressed twice keeps its
+place. The knob does nothing there.
+
+**Dual bypass.** In ORDER, hold the right footswitch and press a module's button: bypass will leave that module on,
+and its tile says STAYS ON. Press it the same way again to undo it. With no module chosen, bypass is the whole
+pedal's. The choice is part of the sound and is saved with it.
+
+**PRESETS.** The rows show the slots around the loaded one, with the bank's letter (A to D, twenty slots each). The
+right footswitch goes to the next slot that holds a sound, the left one to the one before. The knob goes through
+every slot. AMP, MOD, DLY, and CAB go to the same place in the first, second, third, and fourth bank. PUSH, HOME, or
+the right footswitch held again leaves PRESETS on the slot it is at.
+
+The right footswitch acts when it comes up, because a hold means PRESETS. The left footswitch acts when it goes
+down, so a tap is on time. A press that ORDER or PRESETS took does nothing more when the mode ends under it.
+
+Two things of the reference are not here, because they are not built: holding the left footswitch (its looper) and
+pressing two buttons together (its recorded knob movements).
 
 ## 5. The screen
 
 The preset's number and name are at the top. Below them are four tiles in the chain's order, one a module: its name
-in its colour, its effect, and its AMOUNT. A module that is off is dim. Under the tiles are the lines of the selected
-page, with the selected line lit. The last line shows the load (DSP), its peak since the sound last changed (PEAK),
-and the number of blocks that came late (LATE), or a note such as SAVED or BYPASS.
+in its colour, its effect, and its AMOUNT. A module that is off is dim and says OFF. One that bypass has switched
+says BYP. Under the tiles are five rows: the lines of the selected page, with the selected line lit. For a moment
+after an effect change they list the module's five effects, the new one lit. In ORDER they say what to press, and in
+PRESETS they are the list of slots. The last line shows the load (DSP), its peak since the sound last changed
+(PEAK), and the number of blocks that came late (LATE), or the mode, or a note such as SAVED or BYPASS.
 
 These pictures are the pedal's 240 x 240 screen, drawn by the app's own code in the simulator
 (`node tools/op.mjs sim --app palette`, `GET /api/screen.rgb565`), with each pixel doubled. The simulator's time does
@@ -132,13 +156,15 @@ not pass inside the audio interrupt, so DSP and PEAK read 0 there.
 
 | | | |
 | --- | --- | --- |
-| <img src="screens/palette/01-home.png" width="240" alt="Preset 1 with four module tiles and the sound's page"><br>Preset 1: four tiles in the chain's order, the sound's page | <img src="screens/palette/02-module-page.png" width="240" alt="Character's page with AMOUNT selected"><br>AMP: Character's page, on AMOUNT | <img src="screens/palette/03-effect-change.png" width="240" alt="Character now runs Fuzz"><br>AMP again: the next effect, FUZZ |
-| <img src="screens/palette/04-order-move.png" width="240" alt="Diffusion moved to the first place of the chain"><br>DLY, FX, the knob: Diffusion moved to the front | <img src="screens/palette/05-preset-change.png" width="240" alt="Preset 2, WARM DRIVE"><br>The right footswitch: preset 2 | <img src="screens/palette/06-bypass.png" width="240" alt="Bypass: the header is dim and the last line says BYPASS"><br>A footswitch held: bypass |
-| <img src="screens/palette/07-tap-tempo.png" width="240" alt="The TEMPO line shows 120 BPM"><br>REV twice: the tap sets the tempo | <img src="screens/palette/08-full-chain.png" width="240" alt="Preset 20 with the four modules on"><br>Preset 20: the four modules on | |
+| <img src="screens/palette/01-home.png" width="240" alt="Preset 1 with four module tiles and the sound's page"><br>Preset 1: four tiles in the chain's order, the sound's page | <img src="screens/palette/02-module-page.png" width="240" alt="Character's page with AMOUNT selected"><br>AMP: Character is selected, the knob is its AMOUNT | <img src="screens/palette/03-effect-list.png" width="240" alt="The rows list Character's five effects with Fuzz lit"><br>AMP again: the next effect, in the list of five |
+| <img src="screens/palette/04-order.png" width="240" alt="ORDER with no module placed yet"><br>FX: ORDER | <img src="screens/palette/05-order-two-placed.png" width="240" alt="Diffusion is 1 and Character is 2"><br>DLY, then AMP: placed and numbered | <img src="screens/palette/07-order-set.png" width="240" alt="The chain is Diffusion, Character, Movement, Texture"><br>MOD, then CAB: the fourth press sets the order |
+| <img src="screens/palette/06-dual-bypass-choice.png" width="240" alt="Diffusion's tile says STAYS ON"><br>In ORDER, the right footswitch held and DLY: bypass leaves Diffusion on | <img src="screens/palette/08-dual-bypass.png" width="240" alt="Character says BYP and Diffusion still shows its AMOUNT"><br>The right footswitch: the dual bypass | <img src="screens/palette/12-bypass.png" width="240" alt="Every tile says BYP"><br>With no module chosen: the whole pedal |
+| <img src="screens/palette/09-presets.png" width="240" alt="The rows list five presets with the loaded one lit"><br>The right footswitch held: PRESETS | <img src="screens/palette/10-tap-tempo.png" width="240" alt="The TEMPO line shows 120 BPM"><br>The left footswitch twice: the tempo | <img src="screens/palette/13-saved.png" width="240" alt="The last line says SAVED"><br>PUSH held: SAVED |
+| <img src="screens/palette/11-full-chain.png" width="240" alt="Preset 20 with the four modules on"><br>Preset 20: the four modules on | | |
 
-The same controls in sequence, 24 steps, each with a caption:
+The same controls in sequence, 25 steps, each with a caption:
 
-![PALETTE's controls in the simulator: 24 captioned steps](recordings/palette-controls.gif)
+![PALETTE's controls in the simulator: 25 captioned steps](recordings/palette-controls.gif)
 
 ## 6. Presets
 
@@ -157,6 +183,7 @@ The MIDI map is the reference's, so a controller set up for it works.
 | Control Change 16 to 19 | A module's effect: 0 to 109 in five steps, 110 and above off |
 | Control Change 103 to 106 | A module off (below 64) and on |
 | Control Change 91 | Bypass (below 64) and engage |
+| Control Change 92 | Below 32 every module bypassed, below 64 bypass as the footswitch does it, else engaged |
 | Control Change 84 | The filter style: low-pass, tilt, high-pass |
 | Control Change 93 | A tap |
 | Clock, Start, Stop | The tempo while the clock runs |

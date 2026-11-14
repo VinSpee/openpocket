@@ -634,7 +634,7 @@ int pl_sound_ok(const pl_sound_t *s)
         if (s->fx[m] >= PL_NFX || s->order[m] >= PL_NMOD) return 0;
         seen |= 1u << s->order[m];
     }
-    if (seen != 15u || s->on > 15u || s->style >= PL_NSTYLE) return 0;
+    if (seen != 15u || s->style >= PL_NSTYLE) return 0;       /* (on: every value; its high bits are the app's) */
     return s->tempo == 0u || (s->tempo >= PL_TEMPO_MIN && s->tempo <= PL_TEMPO_MAX);
 }
 static float f01(uint8_t v) { return (float)v * 0.01f; }

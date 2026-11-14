@@ -3,8 +3,10 @@
 // The program under test is the app's own C file, its app.h and its engine, compiled for this computer with tests/host
 // as the chip; the base firmware's start and main loop, controls, audio stages, store, MIDI reader and product reply
 // are the pedal's own code. Driven over the simulator's HTTP interface: who it says it is, its twenty factory sounds,
-// each control, its sound at the two outputs, the reference's MIDI map, the MIDI clock, its own editor requests, a save
-// that survives a restart and stays inside its flash range, a store that fails its check, safe mode, a guitar loop.
+// each control (a module's button and its effect list, the order pressed on the module buttons, bypass and the dual
+// bypass on the right footswitch, the presets on its hold, the tap on the left one), its sound at the two outputs, the
+// reference's MIDI map, the MIDI clock, its own editor requests, a save that survives a restart and stays inside its
+// flash range, a store that fails its check, safe mode, a guitar loop.
 //   node tests/test_palette_sim.mjs
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -33,7 +35,7 @@ async function state() {
   const m = await req(5), a = [...m.slice(5, -1)];
   const s = { slot: a[0], dirty: a[1] & 1, saved: a[1] >> 1 & 1, bypass: a[1] >> 2 & 1, clock: a[1] >> 3 & 1, page: a[2], line: a[3],
     name: String.fromCharCode(...a.slice(4, 16)).replace(/\0.*$/, ""), knob: a.slice(16, 32), fx: a.slice(32, 36), order: a.slice(36, 40),
-    on: a[40], style: a[41], tempo: a[42] + 128 * a[43], bytes: a.length };
+    on: a[40], style: a[41], tempo: a[42] + 128 * a[43], keep: a[44], mode: a[45], bytes: a.length };
   KNOB.forEach((k, i) => { s[k] = s.knob[i]; });
   return s;
 }
@@ -56,7 +58,7 @@ ok(st.hold === 0 && st.guard_pending === 0 && st.start === "OK" && st.safe === 0
 
 // ---- the factory sounds, the empty slots ----
 let s = await state();
-ok(s.bytes === 44 && s.slot === 0 && s.name === "CLEAN ROOM" && s.on === (C | D) && s.fx[0] === 1 && s.fx[2] === 2 && !s.dirty && !s.saved && s.page === 0 && s.line === 0,
+ok(s.bytes === 46 && s.mode === 0 && s.keep === 0 && s.slot === 0 && s.name === "CLEAN ROOM" && s.on === (C | D) && s.fx[0] === 1 && s.fx[2] === 2 && !s.dirty && !s.saved && s.page === 0 && s.line === 0,
   "it starts on its first factory sound: CLEAN ROOM, Sweeten and Space on, the sound's page");
 {
   const names = [], bad = [];
@@ -91,6 +93,21 @@ ok((await state()).amtChar < 45, "turned quickly: steps of 5");
 await press("amp");
 s = await state();
 ok(s.fx[0] === 1 && s.on === C, "AMP again: Character's next effect (Sweeten), and the module is on");
+{
+  const shot = async () => Buffer.from(await (await fetch(sim.url + "/api/screen.rgb565")).arrayBuffer());
+  const rows = (b) => b.subarray(136 * 240 * 2, 222 * 240 * 2);  // the five rows under the tiles
+  await act("/api/wait/1700");
+  const lines = rows(await shot());
+  await press("amp"); const list = rows(await shot());
+  await act("/api/wait/1700"); const again = rows(await shot());
+  const amount = (await state()).amtChar;
+  await press("amp"); await knob(1); const turned = rows(await shot());
+  s = await state();
+  ok(!list.equals(lines) && s.fx[0] === 3, "after a press the rows list the module's effects in place of its lines");
+  ok(!again.equals(list) && !turned.equals(list) && !turned.equals(again) && s.amtChar === amount + 1, "the lines come back by themselves after a moment, and at once when the knob turns (it is AMOUNT's still)");
+  await press("amp"); await press("amp"); await press("amp");    // (Howl, Swell, Drive, Sweeten: where it was)
+  await knob(-1);
+}
 for (let k = 0; k < 4; k++) await press("amp");
 ok((await state()).fx[0] === 0, "four more times: back to its first effect, Drive");
 await press("amp_long");
@@ -123,20 +140,52 @@ await knob(1);
 s = await state();
 ok(s.slot === 21 && s.name === "EMPTY", "the knob on PRESET reaches every slot, the empty ones too");
 
-// ---- MOVE: a module along the chain ----
+// ---- ORDER: FX, then the module buttons in the order the chain is to have ----
 await midi(0xC0, 1);                                            // WARM DRIVE: Drive, then Cascade
 const before = Buffer.from(await (await fetch(sim.url + "/api/screen.rgb565")).arrayBuffer());
+await press("amp");                                             // (Character's page)
 await press("fx");
-ok((await state()).order.join() === "0,1,2,3", "FX on the sound's page moves nothing: a module's page first");
-await press("dly"); await press("fx"); await knob(-2);
 s = await state();
-ok(s.order.join() === "2,0,1,3" && s.dirty === 1, "DLY, FX, the knob two detents back: Diffusion is first in the chain");
-await knob(-3);
-ok((await state()).order.join() === "2,0,1,3", "it stops at the chain's end");
-await press("push"); await knob(3);
-s = await state();
-ok(s.order.join() === "2,0,1,3" && s.amtDiff === 28, "PUSH drops it: the knob is AMOUNT's again");
+ok(s.mode === 1 && s.order.join() === "0,1,2,3" && !s.dirty, "FX: ORDER; nothing of the sound changes yet");
 ok(!before.equals(Buffer.from(await (await fetch(sim.url + "/api/screen.rgb565")).arrayBuffer())), "the screen was drawn again");
+await press("dly"); await press("dly"); await knob(3); await press("amp"); await press("mod");
+s = await state();
+ok(s.mode === 1 && s.order.join() === "0,1,2,3" && s.fx.join() === "0,0,0,0" && s.amtChar === 45, "three modules pressed, one of them twice, the knob turned: still the old order, no effect stepped, no knob moved");
+await press("cab");
+s = await state();
+ok(s.mode === 0 && s.order.join() === "2,0,1,3" && s.dirty === 1 && s.page === 1 && s.fx[3] === 0 && s.on === (C | D),
+  "the fourth press sets the order (Diffusion, Character, Movement, Texture) and ends ORDER; that press does not go on to select or step Texture");
+await press("fx"); await press("cab"); await press("mod"); await press("fx");
+s = await state();
+ok(s.mode === 0 && s.order.join() === "2,0,1,3", "FX, two modules, FX again: the order stays as it was");
+await press("fx"); await press("cab"); await press("home");
+s = await state();
+ok(s.mode === 0 && s.page === 0 && s.order.join() === "2,0,1,3", "HOME leaves ORDER too");
+
+// ---- bypass on the right footswitch, and the modules it leaves on (a dual bypass) ----
+await midi(0xC0, 20);                                           // an empty slot
+await press("cab"); await press("cab_long"); await press("push"); await knob(2); await press("push"); await press("push"); await press("push"); await knob(10, true);
+s = await state(); l = await level();
+ok(s.on === T && s.style === 2 && s.amtText > 90 && l.left < 0.3 * dry, "Texture as a high-pass far up: the 440 Hz guitar is nearly gone");
+await press("fs_up");
+s = await state(); l = await level();
+ok(s.bypass === 1 && s.on === T && near(l.left, dry, 0.003) && near(l.right, dry, 0.003), "the right footswitch: bypass, the guitar as it is on both outputs; the sound itself is unchanged");
+await press("fs_up");
+s = await state(); l = await level();
+ok(s.bypass === 0 && l.left < 0.3 * dry, "again: engaged");
+await press("fx"); await act("/api/down/fs_up"); await press("cab"); await act("/api/up/fs_up");
+s = await state();
+ok(s.mode === 1 && s.keep === T && s.bypass === 0 && s.order.join() === "0,1,2,3", "in ORDER, the right footswitch held and CAB: bypass is to leave Texture on; no place in the order is taken, and the held footswitch does not bypass");
+await press("fx"); await press("fs_up");
+s = await state(); l = await level();
+ok(s.mode === 0 && s.bypass === 1 && l.left < 0.3 * dry, "bypass now leaves Texture sounding: the dual bypass");
+await midi(0xB0, 92, 10); l = await level();
+ok((await state()).bypass === 1 && near(l.left, dry, 0.003), "Control Change 92 below 32: every module bypassed, that one too");
+await midi(0xB0, 92, 40); l = await level();
+ok(l.left < 0.3 * dry, "92 below 64: bypass as the footswitch does it");
+await midi(0xB0, 92, 100);
+ok((await state()).bypass === 0, "92 from 64: engaged");
+await act("/api/wait/800");                                     // (so that the footswitch's last press is no tap's partner)
 
 // ---- the tempo: TAP, the TEMPO line, the MIDI clock ----
 await press("rev"); await act("/api/wait/400"); await press("rev");
@@ -144,6 +193,10 @@ s = await state();
 ok(s.tempo >= 95 && s.tempo <= 121, `REV twice, half a second apart or a little more: a tempo of about 120 (${s.tempo})`);
 await press("rev_long");
 ok((await state()).tempo === 0, "REV held: free time");
+await press("fs_dn"); await act("/api/wait/400"); await press("fs_dn");
+s = await state();
+ok(s.tempo >= 95 && s.tempo <= 121 && s.bypass === 0 && s.slot === 20, `the left footswitch twice: a tap too (${s.tempo}); it changes no preset`);
+await press("rev_long");
 await press("home"); for (let k = 0; k < 3; k++) await press("push");
 await knob(1); s = await state();
 ok(s.line === 3 && s.tempo === 30, "the knob on the TEMPO line: from free time to 30");
@@ -160,18 +213,34 @@ await midi(0xB0, 93, 127); await act("/api/wait/495"); await midi(0xB0, 93, 127)
 s = await state();
 ok(s.tempo >= 95 && s.tempo <= 121, `Control Change 93 twice, half a second apart or a little more: a tap (${s.tempo})`);
 
-// ---- the footswitches: the presets that hold a sound; held: bypass ----
+// ---- PRESETS: the right footswitch held; there the footswitches step, the knob scrolls, the module buttons pick a bank ----
 await midi(0xC0, 19);
-await press("fs_up");
-ok((await state()).slot === 0, "the right footswitch past the last factory sound: the first, the empty slots skipped");
-await press("fs_dn");
-ok((await state()).slot === 19, "the left footswitch: back to the last");
+const line0 = (await state()).line;
 await press("fs_up_long");
-s = await state(); l = await level();
-ok(s.bypass === 1 && s.slot === 19 && near(l.left, dry, 0.003) && near(l.right, dry, 0.003), "a footswitch held: bypass, the guitar on both outputs; the preset stays");
-await press("fs_dn_long");
-s = await state(); l = await level();
-ok(s.bypass === 0 && l.left > 0.005 && l.right > 0.005, "held again: engaged");
+s = await state();
+ok(s.mode === 2 && s.slot === 19 && s.bypass === 0, "the right footswitch held: PRESETS; it does not bypass");
+await press("fs_up");
+ok((await state()).slot === 0, "there the right footswitch goes past the last factory sound to the first, the empty slots skipped");
+await press("fs_dn");
+s = await state();
+ok(s.slot === 19 && s.tempo === 120, "the left one goes back to the last; it taps no tempo here");
+await knob(1);
+ok((await state()).slot === 20, "the knob goes through every slot, the empty ones too");
+await press("mod"); s = await state();
+ok(s.slot === 20 && s.mode === 2, "MOD: the second bank of twenty, the same place in it (21, where it is)");
+await press("amp"); s = await state();
+ok(s.slot === 0 && s.name === "CLEAN ROOM" && s.page === 0, "AMP: the first bank, the same place (1); no module is selected by it");
+await press("cab");
+ok((await state()).slot === 60, "CAB: the fourth bank (61)");
+await press("push");
+s = await state();
+ok(s.mode === 0 && s.slot === 60 && s.line === line0, "PUSH leaves PRESETS, on the slot it is at; it does not go on to the next line");
+await press("fs_up_long"); await press("amp"); await press("fs_up_long");
+s = await state();
+ok(s.mode === 0 && s.slot === 0, "held, AMP, held again: back out, on preset 1");
+await press("fs_up_long"); await press("home");
+ok((await state()).mode === 0, "HOME leaves it too");
+await midi(0xC0, 19);
 
 // ---- MIDI: the reference's map ----
 await midi(0xC0, 20);                                           // an empty slot: every knob neutral
@@ -220,6 +289,13 @@ ok(m[6] === 1 && (await state()).order.join() === "3,2,1,0", "an order that is n
 m = await req(6, 26, 1);
 ok((await state()).bypass === 1, "SET 26: bypass");
 await req(6, 26, 0);
+m = await req(6, 26, 3);
+ok(m[6] === 1 && (await state()).bypass === 0, "a bypass state that does not exist: refused");
+m = await req(6, 28, 5); s = await state();
+ok(m[6] === 0 && s.keep === 5 && s.on === 0, "SET 28: the modules bypass leaves on (Character and Diffusion); the switches themselves are not touched");
+m = await req(6, 28, 16);
+ok(m[6] === 1 && (await state()).keep === 5, "a set beyond the four modules: refused");
+await req(6, 28, 0);
 m = await req(9, 4);
 ok(m && m[5] === 4 && m[6] === 1 && String.fromCharCode(...m.slice(7, -2)) === "BIG SPACE", "NAME 4: the slot holds a factory sound, BIG SPACE");
 m = await req(9, 40);
@@ -242,10 +318,11 @@ s = await state();
 ok(m && m[5] === 0 && s.saved === 1 && s.name === "USER 32", "its SAVE request on an empty slot: saved, and named after the slot");
 st = await get("/api/state");
 ok(st.writes_ok === true, "every flash write was inside the app's own range, with the sound held");
-await press("fs_up");
-ok((await state()).slot === 0, "the footswitch from the last saved slot: the first factory sound");
+await press("fs_up_long"); await press("fs_up");
+ok((await state()).slot === 0, "in PRESETS the footswitch from the last saved slot: the first factory sound");
 await press("fs_dn"); await press("fs_dn");
 ok((await state()).slot === 30, "and back twice: the two saved slots are reached, the empty ones between skipped");
+await press("fs_up_long");
 await sim.close();
 let nor = readFileSync(flash);
 const outside = [...nor.subarray(0, 0xE5000), ...nor.subarray(0xEF000)].every((b) => b === 0xFF);

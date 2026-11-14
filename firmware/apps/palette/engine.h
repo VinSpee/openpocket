@@ -39,7 +39,7 @@ typedef struct {                                /* a sound: what a preset keeps,
     uint8_t knob[PL_NKNOB];
     uint8_t fx[PL_NMOD];                        /* each module's effect, 0..4 */
     uint8_t order[PL_NMOD];                     /* the serial order: a permutation of the modules */
-    uint8_t on;                                 /* bit m: module m is on (off, it keeps its effect) */
+    uint8_t on;                                 /* bit m: module m is on (off, it keeps its effect); bits 4..7 are the app's */
     uint8_t style;                              /* the Filter effect's: PL_TILT_STYLE .. */
     uint16_t tempo;                             /* 0: free time; else beats a minute, PL_TEMPO_MIN..PL_TEMPO_MAX */
 } pl_sound_t;

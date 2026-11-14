@@ -3,28 +3,37 @@
  * requests do. The pedal's file (palette.c) and the simulator (`node tools/op.mjs sim --app palette`) both include it,
  * after the base firmware's parts it uses. Its sound is engine.c.
  *
- * What a control does (app_turn, app_button, app_master: base/input.h):
- *   AMP MOD DLY CAB     Character, Movement, Diffusion, Texture: the module's page; pressed again: its next effect;
- *                       held 0.6 s: the module off and on
- *   HOME                the sound's page: PRESET, MIX, LEVEL, TEMPO
+ * What a control does (app_turn, app_button, app_master: base/input.h). The mechanisms are the reference instrument's
+ * where this pedal's one knob allows (docs/PALETTE-CONTROLS-REFERENCE.md):
+ *   AMP MOD DLY CAB     Character, Movement, Diffusion, Texture. A press selects the module: its page, the knob its
+ *                       AMOUNT. Pressed again: its next effect, and its five effects are listed for a moment.
+ *                       Held 0.6 s: the module off and on
  *   the knob            the selected line's value; turned quickly, in steps of 5
- *   PUSH                the next line; held 0.8 s: SAVE the sound to its slot
- *   FX                  MOVE: the page's module is picked up, the knob moves it along the chain, FX or PUSH drops it
- *   REV                 TAP: the time between two taps is a quarter note; held 0.8 s: free time
- *   the footswitches    the preset before, the preset after (when they come up); held 0.7 s: bypass, off and on
+ *   PUSH                the next line (AMOUNT, then the module's other knobs); held 0.8 s: SAVE the sound to its slot
+ *   HOME                the sound's page: PRESET, MIX, LEVEL, TEMPO. It also leaves ORDER and PRESETS
+ *   FX                  ORDER: then the four module buttons, pressed in the order the chain is to have; the fourth
+ *                       press sets it. FX again leaves the order as it was. In ORDER, with the right footswitch held,
+ *                       a module's button chooses whether bypass leaves that module on (a dual bypass)
+ *   the right footswitch   bypass and engage (when it comes up); held 0.7 s: PRESETS, and held again: back
+ *   the left footswitch    TAP: the time between two taps is a quarter note
+ *   in PRESETS          the footswitches step to the slot before and after that holds a sound, the knob goes through
+ *                       every slot, AMP MOD DLY CAB go to the four banks of twenty, PUSH leaves
+ *   REV                 TAP as well; held 0.8 s: free time
  *   MASTER              the volume
  * MIDI (app_midi: base/midi.h), the reference instrument's map:
  *   Program Change 0..79 a preset; Control Change 64..79 the sixteen knob functions (engine.h's order);
  *   16..19 a module's effect (0..109 in five steps, from 110: off); 103..106 a module off (below 64) and on;
- *   91 bypass (below 64) and engage; 84 the filter style (low-pass, tilt, high-pass); 93 a tap; the clock's tempo
- *   while a clock runs.
+ *   91 bypass (below 64) and engage; 92 the same in three steps: below 32 every module bypassed, below 64 bypass
+ *   as the footswitch does it, else engaged; 84 the filter style (low-pass, tilt, high-pass); 93 a tap; the clock's
+ *   tempo while a clock runs.
  * Its own editor requests (app_editor: base/product.h), protocol 1, beside INFO. A value is 0..127:
  *   5 STATE      -> slot, flags (bit 0 the sound differs from its slot's, 1 the slot was saved, 2 bypass, 3 the MIDI
  *                   clock sets the tempo), page, line, then the sound: its name (12), knob (16), fx (4), order (4), on,
- *                   style, tempo (low 7 bits, the bits above)
+ *                   style, tempo (low 7 bits, the bits above), the modules bypass leaves on (bit m), the mode (0 play,
+ *                   1 ORDER, 2 PRESETS)
  *   6 SET f v..  -> f, 0 taken or 1 refused. f 0..15 a knob = v (0..100); 16..19 a module's effect = v; 20..23 a
- *                   module off / on; 24 the filter style; 25 the tempo = v + 128 * v2 (0: free); 26 bypass;
- *                   27 the order = v v2 v3 v4
+ *                   module off / on; 24 the filter style; 25 the tempo = v + 128 * v2 (0: free); 26 bypass (0 engaged,
+ *                   1 as the footswitch, 2 every module); 27 the order = v v2 v3 v4; 28 the modules bypass leaves on
  *   7 PRESET k   -> k: slot k is loaded
  *   8 SAVE       -> 0 saved, 1 not
  *   9 NAME k     -> k, flags (bit 0 the slot holds a sound, bit 1 it was saved), its name
@@ -94,7 +103,12 @@ static const ap_line_t AP_LINES[1u + PL_NMOD][AP_NLINE] = {
 static pl_engine_t ap_eng OP_POOL;              /* the engine, in the POOL region (memory.ld) */
 static ap_store_t ap_st;
 static ap_preset_t ap_now;                      /* the sound that plays */
-static uint32_t ap_slot, ap_page, ap_line, ap_move, ap_bypass;   /* ap_page: 0 the sound's, 1 + m module m's */
+enum { AP_PLAY, AP_ORDER, AP_PRESETS };         /* what the module buttons, the footswitches and the lines are for */
+static uint32_t ap_slot, ap_page, ap_line, ap_mode;   /* ap_page: 0 the sound's, 1 + m module m's */
+static uint32_t ap_bypass;                      /* 0 engaged; 1 bypassed as the footswitch does it; 2 every module bypassed */
+static uint8_t ap_pick[PL_NMOD];                /* ORDER: the modules pressed so far, ap_npick of them */
+static uint32_t ap_npick, ap_list_ms;           /* ap_list_ms: the module's five effects are listed until then */
+static uint32_t ap_eat;                         /* buttons (bit b) whose press ORDER or PRESETS took: what follows of it is dropped */
 static uint32_t ap_clock_q, ap_clock_ms;        /* the MIDI clock's quarter note in ms (0: no clock runs), its last clock */
 static uint32_t ap_tap_ms, ap_tap_ok;           /* the last tap */
 static uint32_t ap_note_ms;                     /* a word in the status line's place until then */
@@ -104,6 +118,14 @@ static midi_tempo_t ap_clk;
 /* ---- the sound ---- */
 static void app_sound(const float *in, float *out) { pl_run(&ap_eng, in, out); }   /* in the I2S interrupt (base/audio_plain.h) */
 static void app_sound_reset(void) { pl_reset(&ap_eng); }
+#define AP_KEEP(s) ((uint32_t)(s)->on >> 4)     /* the modules a bypass leaves on (bit m): none, and bypass is the whole pedal's */
+/* module m sounds now: it is on, and no bypass has it */
+static int ap_sounds(uint32_t m)
+{
+    const pl_sound_t *s = &ap_now.s;
+    if (!((s->on >> m) & 1u)) return 0;
+    return ap_bypass == 0u || (ap_bypass == 1u && ((AP_KEEP(s) >> m) & 1u));
+}
 static uint32_t ap_quarter(void) { return ap_clock_q ? ap_clock_q : ap_now.s.tempo ? 60000u / ap_now.s.tempo : 0u; }
 /* the sound, the tempo or bypass changed: the engine's numbers are made here, and handed over between two blocks. The
  * engine makes the change without a step (engine.h). jump: the knobs are another sound's (another preset, another
@@ -112,7 +134,10 @@ static uint32_t ap_quarter(void) { return ap_clock_q ? ap_clock_q : ap_now.s.tem
 static void ap_apply(int jump)
 {
     pl_coef_t c;
-    pl_coefs(&ap_now.s, ap_quarter(), (int)ap_bypass, &c);
+    pl_sound_t s = ap_now.s;
+    int all = ap_bypass != 0u;
+    if (ap_bypass == 1u && AP_KEEP(&s)) { s.on &= (uint8_t)(AP_KEEP(&s) | 0xF0u); all = 0; }   /* a dual bypass: those modules stay on */
+    pl_coefs(&s, ap_quarter(), all, &c);
     c.hard = (uint8_t)(jump != 0);
     fm1_irq_mask(FM1_IRQ_ALNK0);
     pl_commit(&ap_eng, &c);
@@ -133,7 +158,7 @@ static void ap_slot_get(uint32_t k, ap_preset_t *p)     /* slot k's sound: the s
 static int ap_dirty(void) { ap_preset_t ref; ap_slot_get(ap_slot, &ref); return memcmp(&ref, &ap_now, sizeof ap_now) != 0; }
 static void ap_load(uint32_t k)
 {
-    ap_slot = k; ap_move = 0;
+    ap_slot = k;
     ap_slot_get(k, &ap_now);
     ap_apply(1);
 }
@@ -158,7 +183,7 @@ static int ap_save(void)
     return rc;
 }
 /* one field of the sound, as MIDI, the editor and the controls set it (the editor's SET numbers); 0 = taken */
-enum { AP_F_FX = 16, AP_F_ON = 20, AP_F_STYLE = 24, AP_F_TEMPO, AP_F_BYPASS, AP_F_ORDER };
+enum { AP_F_FX = 16, AP_F_ON = 20, AP_F_STYLE = 24, AP_F_TEMPO, AP_F_BYPASS, AP_F_ORDER, AP_F_KEEP };
 static int ap_set(uint32_t f, uint32_t v)
 {
     pl_sound_t *s = &ap_now.s;
@@ -168,7 +193,8 @@ static int ap_set(uint32_t f, uint32_t v)
     else if (f < AP_F_ON + PL_NMOD) s->on = (uint8_t)((s->on & ~(1u << (f - AP_F_ON))) | (v ? 1u << (f - AP_F_ON) : 0u));
     else if (f == AP_F_STYLE) { if (v >= PL_NSTYLE) return 1; s->style = (uint8_t)v; jump = 1; }
     else if (f == AP_F_TEMPO) s->tempo = (uint16_t)(v == 0u ? 0u : v < PL_TEMPO_MIN ? PL_TEMPO_MIN : v > PL_TEMPO_MAX ? PL_TEMPO_MAX : v);
-    else if (f == AP_F_BYPASS) ap_bypass = v ? 1u : 0u;
+    else if (f == AP_F_BYPASS) { if (v > 2u) return 1; ap_bypass = v; }
+    else if (f == AP_F_KEEP) { if (v > 15u) return 1; s->on = (uint8_t)((s->on & 15u) | v << 4); }
     else return 1;
     ap_apply(jump);
     return 0;
@@ -179,19 +205,19 @@ static void ap_tap(uint32_t ms)                 /* a tap at time ms: with the ta
     if (ap_tap_ok && dt >= 200u && dt <= 2000u) ap_set(AP_F_TEMPO, (60000u + dt / 2u) / dt);
     ap_tap_ms = ms; ap_tap_ok = 1;
 }
-static void ap_shift(uint32_t m, int dd)        /* module m one place along the chain */
+static void ap_order_pick(uint32_t m)           /* ORDER: module m is the next of the chain; the fourth one sets the order */
 {
-    uint8_t *o = ap_now.s.order;
-    uint32_t at = 0;
-    while (at < PL_NMOD && o[at] != m) at++;
-    const uint32_t to = at + (uint32_t)dd;      /* (dd -1 at place 0 wraps beyond PL_NMOD: refused) */
-    if (at >= PL_NMOD || to >= PL_NMOD) return;
-    o[at] = o[to]; o[to] = (uint8_t)m;
+    for (uint32_t k = 0; k < ap_npick; k++) if (ap_pick[k] == m) return;   /* (it has its place already) */
+    ap_pick[ap_npick++] = (uint8_t)m;
+    if (ap_npick < PL_NMOD) return;
+    for (uint32_t k = 0; k < PL_NMOD; k++) ap_now.s.order[k] = ap_pick[k];
+    ap_mode = AP_PLAY;
+    ap_say("THE ORDER IS SET");
     ap_apply(0);
 }
 
 /* ---- the controls (base/input.h) ---- */
-static const uint16_t AP_HOLD[IN_N] = { [IN_PUSH] = 800, [IN_REV] = 800, [IN_FSUP] = 700, [IN_FSDN] = 700,
+static const uint16_t AP_HOLD[IN_N] = { [IN_PUSH] = 800, [IN_REV] = 800, [IN_FSUP] = 700,
                                         [IN_AMP] = 600, [IN_MOD] = 600, [IN_DLY] = 600, [IN_CAB] = 600 };
 static const uint8_t AP_BTN_MOD[IN_N] = { [IN_AMP] = 1u + PL_CHAR, [IN_MOD] = 1u + PL_MOVE, [IN_DLY] = 1u + PL_DIFF, [IN_CAB] = 1u + PL_TEXT };
 static void app_turn(int dd, int fast)
@@ -199,7 +225,9 @@ static void app_turn(int dd, int fast)
     const ap_line_t *ln = &AP_LINES[ap_page][ap_line];
     const int step = dd * (fast ? 5 : 1);
     pl_sound_t *s = &ap_now.s;
-    if (ap_move) { ap_shift(ap_page - 1u, dd); return; }
+    if (ap_mode == AP_ORDER) return;
+    if (ap_mode == AP_PRESETS) { ap_load((ap_slot + (dd > 0 ? 1u : AP_NSLOT - 1u)) % AP_NSLOT); return; }
+    ap_list_ms = 0;
     switch (ln->kind) {
     case AP_L_KNOB: { const int v = (int)s->knob[ln->knob] + step; ap_set(ln->knob, (uint32_t)(v < 0 ? 0 : v)); break; }
     case AP_L_PRESET: ap_load((ap_slot + (dd > 0 ? 1u : AP_NSLOT - 1u)) % AP_NSLOT); break;
@@ -211,29 +239,43 @@ static void app_turn(int dd, int fast)
 }
 static void app_button(uint32_t b, uint32_t ev, uint32_t held)
 {
-    const uint32_t pg = AP_BTN_MOD[b];
-    (void)held;
+    const uint32_t pg = AP_BTN_MOD[b], bit = 1u << b;
+    /* a press that ORDER or PRESETS took is theirs to its end, also when the mode ends under it (the fourth press of
+     * ORDER must not go on to select its module, nor the footswitch held in ORDER go on to bypass) */
+    if (ev == IN_DOWN) ap_eat = (ap_eat & ~bit) | ((pg && ap_mode != AP_PLAY) || (b == IN_FSUP && ap_mode == AP_ORDER) ? bit : 0u);
+    else if (ap_eat & bit) return;
     if (pg) {                                   /* a module's button */
         const uint32_t m = pg - 1u;
-        if (ev == IN_HOLD) ap_set(AP_F_ON + m, !((ap_now.s.on >> m) & 1u));
-        else if (ev == IN_CLICK && ap_page == pg && !ap_move) ap_set(AP_F_FX + m, (ap_now.s.fx[m] + 1u) % PL_NFX);
-        else if (ev == IN_CLICK) { ap_page = pg; ap_line = 1; ap_move = 0; }      /* its page, on AMOUNT */
+        if (ap_mode == AP_ORDER) {
+            if (ev != IN_DOWN) return;
+            if (held & (1u << IN_FSUP)) { ap_now.s.on ^= (uint8_t)(16u << m); ap_apply(0); }   /* bypass leaves it on, or not */
+            else ap_order_pick(m);
+        } else if (ap_mode == AP_PRESETS) {
+            if (ev == IN_DOWN) ap_load(m * 20u + ap_slot % 20u);                     /* the same place in bank m */
+        } else if (ev == IN_HOLD) ap_set(AP_F_ON + m, !((ap_now.s.on >> m) & 1u));
+        else if (ev == IN_CLICK && ap_page == pg) { ap_set(AP_F_FX + m, (ap_now.s.fx[m] + 1u) % PL_NFX); ap_list_ms = 1500u; }
+        else if (ev == IN_CLICK) { ap_page = pg; ap_line = 1; ap_list_ms = 0; }  /* selected: its page, on AMOUNT */
         return;
     }
-    if (b == IN_FSUP || b == IN_FSDN) {
-        if (ev == IN_CLICK) ap_step_preset(b == IN_FSUP ? 1 : -1);
-        else if (ev == IN_HOLD) ap_set(AP_F_BYPASS, !ap_bypass);
+    if (b == IN_FSUP) {                         /* the right footswitch (in ORDER it is only held, for the dual bypass) */
+        if (ev == IN_HOLD && ap_mode != AP_ORDER) ap_mode = ap_mode == AP_PRESETS ? AP_PLAY : AP_PRESETS;
+        else if (ev == IN_CLICK && ap_mode == AP_PRESETS) ap_step_preset(1);
+        else if (ev == IN_CLICK && ap_mode == AP_PLAY) ap_set(AP_F_BYPASS, !ap_bypass);
         return;
     }
-    if (b == IN_PUSH && ev == IN_HOLD) ap_save();
+    if (b == IN_FSDN) {                         /* the left footswitch */
+        if (ev == IN_DOWN) { if (ap_mode == AP_PRESETS) ap_step_preset(-1); else ap_tap(ms_now()); }
+        return;
+    }
+    if (b == IN_PUSH && ev == IN_HOLD && ap_mode == AP_PLAY) ap_save();
     if (b == IN_PUSH && ev == IN_CLICK) {
-        if (ap_move) ap_move = 0;
-        else { ap_line++; if (ap_line >= AP_NLINE || !AP_LINES[ap_page][ap_line].name) ap_line = 0; }
+        if (ap_mode != AP_PLAY) ap_mode = AP_PLAY;
+        else { ap_list_ms = 0; ap_line++; if (ap_line >= AP_NLINE || !AP_LINES[ap_page][ap_line].name) ap_line = 0; }
     }
     if (b == IN_REV && ev == IN_HOLD) { ap_tap_ok = 0; ap_set(AP_F_TEMPO, 0); }
     if (ev != IN_DOWN) return;
-    if (b == IN_HOME) { ap_page = 0; ap_line = 0; ap_move = 0; }
-    if (b == IN_FX) { if (ap_page) ap_move = !ap_move; else ap_say("MOVE: PICK A MODULE FIRST"); }
+    if (b == IN_HOME) { ap_mode = AP_PLAY; ap_page = 0; ap_line = 0; ap_list_ms = 0; }
+    if (b == IN_FX && ap_mode != AP_PRESETS) { ap_mode = ap_mode == AP_ORDER ? AP_PLAY : AP_ORDER; ap_npick = 0; }
     if (b == IN_REV) ap_tap(ms_now());
 }
 static void app_master(uint32_t vol) { audio_volume(vol); }
@@ -249,6 +291,7 @@ static void app_midi(const midi_msg_t *m, uint32_t ms)
         else if (m->d1 >= 16u && m->d1 < 16u + PL_NMOD) { if (m->d2 >= 110u) ap_set(AP_F_ON + m->d1 - 16u, 0); else ap_set(AP_F_FX + m->d1 - 16u, m->d2 / 22u); }
         else if (m->d1 >= 103u && m->d1 < 103u + PL_NMOD) ap_set(AP_F_ON + m->d1 - 103u, m->d2 >= 64u);
         else if (m->d1 == 91u) ap_set(AP_F_BYPASS, m->d2 < 64u);
+        else if (m->d1 == 92u) ap_set(AP_F_BYPASS, m->d2 < 32u ? 2u : m->d2 < 64u ? 1u : 0u);
         else if (m->d1 == 84u) ap_set(AP_F_STYLE, m->d2 < 44u ? PL_LP_STYLE : m->d2 < 88u ? PL_TILT_STYLE : PL_HP_STYLE);
         else if (m->d1 == 93u) ap_tap(ms);
         break;
@@ -274,7 +317,7 @@ static void ap_ed_state(uint32_t cmd)
     for (uint32_t i = 0; i < PL_NKNOB; i++) ed_b(s->knob[i]);
     for (uint32_t i = 0; i < PL_NMOD; i++) ed_b(s->fx[i]);
     for (uint32_t i = 0; i < PL_NMOD; i++) ed_b(s->order[i]);
-    ed_b(s->on); ed_b(s->style); ed_b(s->tempo & 127u); ed_b(s->tempo >> 7);
+    ed_b(s->on & 15u); ed_b(s->style); ed_b(s->tempo & 127u); ed_b(s->tempo >> 7); ed_b(AP_KEEP(s)); ed_b(ap_mode);
     ed_send();
 }
 static void app_editor(uint32_t cmd, const uint8_t *a, uint32_t n)
@@ -313,8 +356,9 @@ static void app_editor(uint32_t cmd, const uint8_t *a, uint32_t n)
     }
 }
 
-/* ---- the screen: the preset, four tiles in the chain's order, the page's lines, a status line. Only what changed is
- * drawn again ---- */
+/* ---- the screen: the preset, four tiles in the chain's order, five rows, a status line. The rows are the page's
+ * lines; for a moment after an effect change the module's five effects; in ORDER what to press; in PRESETS the slots
+ * around the loaded one. Only what changed is drawn again ---- */
 static uint32_t ap_hash(uint32_t h, const char *s) { while (*s) h = h * 31u + (uint8_t)*s++; return h * 31u + 7u; }
 static void ap_value(char *l, const ap_line_t *ln)      /* a line's value, as text */
 {
@@ -333,55 +377,100 @@ static void ap_value(char *l, const ap_line_t *ln)      /* a line's value, as te
     default: break;
     }
 }
+enum { AP_R_PLAIN, AP_R_LIT, AP_R_DIM };
+static int ap_row(uint32_t k, char *left, char *right)     /* row k's two texts (right: none, and left has the whole row) */
+{
+    const pl_sound_t *s = &ap_now.s;
+    left[0] = right[0] = 0;
+    if (ap_mode == AP_ORDER) {
+        static const char *const T[AP_NLINE] = {"PRESS AMP MOD DLY CAB", "IN THE ORDER YOU WANT", "", "WITH THE RIGHT FOOTSWITCH", "HELD: BYPASS LEAVES IT ON"};
+        b_str(left, T[k]);
+        return k < 2u ? AP_R_PLAIN : AP_R_DIM;
+    }
+    if (ap_mode == AP_PRESETS) {                /* five slots, the loaded one in the middle; its bank's letter */
+        const uint32_t slot = (ap_slot + AP_NSLOT + k - 2u) % AP_NSLOT;
+        ap_preset_t p;
+        ap_slot_get(slot, &p);
+        b_num(left, slot + 1u); b_str(left, "  "); b_str(left, k == 2u ? ap_now.name : p.name);
+        right[0] = (char)('A' + slot / 20u); right[1] = 0;
+        return k == 2u ? AP_R_LIT : ap_used(slot) ? AP_R_PLAIN : AP_R_DIM;
+    }
+    if (ap_list_ms && ap_page) {                /* the module's five effects, the one it runs lit */
+        b_str(left, AP_FX[ap_page - 1u][k]);
+        return k == s->fx[ap_page - 1u] ? AP_R_LIT : AP_R_DIM;
+    }
+    if (AP_LINES[ap_page][k].name) b_str(left, AP_LINES[ap_page][k].name);
+    ap_value(right, &AP_LINES[ap_page][k]);
+    return k == ap_line ? AP_R_LIT : AP_R_PLAIN;
+}
 static void ap_draw(uint32_t now)
 {
     static uint32_t seen[11], t_status, t_last, drawn;
     const pl_sound_t *s = &ap_now.s;
-    char l[48];
-    uint32_t h, k;
+    char l[48], r[24];
+    uint8_t show[PL_NMOD];
+    uint32_t h, k, n = 0;
     if (!drawn) { drawn = 1; for (k = 0; k < 11u; k++) seen[k] = ~0u; }
-    if (ap_note_ms) { const uint32_t dt = now - t_last; ap_note_ms = ap_note_ms > dt ? ap_note_ms - dt : 0u; }
-    t_last = now;
+    {
+        const uint32_t dt = now - t_last;
+        ap_note_ms = ap_note_ms > dt ? ap_note_ms - dt : 0u; ap_list_ms = ap_list_ms > dt ? ap_list_ms - dt : 0u;
+        t_last = now;
+    }
     /* the preset: its number, its name, a mark when it differs from its slot's */
     l[0] = 0; b_num(l, ap_slot + 1u); b_str(l, "  "); b_str(l, ap_now.name); if (ap_dirty()) b_str(l, " *");
     h = ap_hash(ap_bypass, l);
     if (h != seen[0]) { seen[0] = h; ft_box(0, 2, 240, l, &FT_MD, ap_bypass ? UI_DIM : UI_TXT, UI_BG, 1); }
-    for (k = 0; k < PL_NMOD; k++) {             /* a tile a module, in the chain's order */
-        const uint32_t m = s->order[k], on = (s->on >> m) & 1u, sel = ap_page == 1u + m, y = 28u + 26u * k;
-        const uint16_t bg = sel ? (ap_move ? UI_ACC : UI_SEL) : UI_PANEL, fg = sel ? UI_BG : on ? UI_TXT : UI_DIM;
-        h = m | s->fx[m] << 2 | on << 5 | sel << 6 | (sel ? ap_move : 0u) << 7 | (uint32_t)s->knob[PL_K_AMT(m)] << 8;
+    /* a tile a module, in the chain's order; in ORDER the modules pressed so far first, numbered, then the others */
+    if (ap_mode == AP_ORDER) for (k = 0; k < ap_npick; k++) show[n++] = ap_pick[k];
+    for (k = 0; k < PL_NMOD; k++) {
+        uint32_t placed = 0;
+        for (uint32_t i = 0; i < n && ap_mode == AP_ORDER; i++) if (show[i] == s->order[k]) placed = 1;
+        if (!placed && n < PL_NMOD) show[n++] = s->order[k];
+    }
+    for (k = 0; k < PL_NMOD; k++) {
+        const uint32_t m = show[k], order = ap_mode == AP_ORDER, on = order ? k < ap_npick : (uint32_t)ap_sounds(m);
+        const uint32_t sel = !order && ap_mode == AP_PLAY && ap_page == 1u + m, keep = (AP_KEEP(s) >> m) & 1u, y = 28u + 26u * k;
+        const uint16_t bg = sel ? UI_SEL : UI_PANEL, fg = sel ? UI_BG : on ? UI_TXT : UI_DIM;
+        l[0] = r[0] = 0;
+        if (order) { b_str(l, keep ? "STAYS ON" : AP_FX[m][s->fx[m]]); if (k < ap_npick) b_num(r, k + 1u); }
+        else { b_str(l, AP_FX[m][s->fx[m]]); if (on) b_num(r, s->knob[PL_K_AMT(m)]); else b_str(r, (s->on >> m) & 1u ? "BYP" : "OFF"); }
+        h = ap_hash(ap_hash(m | on << 2 | sel << 3 | order << 4, l), r);
         if (h == seen[1u + k]) continue;
         seen[1u + k] = h;
         lcd_rect(0, y, 6, 24, on ? AP_COL[m] : UI_OFF);
         lcd_rect(6, y, 234, 24, bg);
         ft_box(12, y + 4u, 88, AP_MOD[m], &FT_SM, sel ? UI_BG : on ? AP_COL[m] : UI_DIM, bg, 0);
-        ft_box(100, y + 4u, 108, AP_FX[m][s->fx[m]], &FT_SM, fg, bg, 0);
-        l[0] = 0; if (on) b_num(l, s->knob[PL_K_AMT(m)]); else b_str(l, "OFF");
-        ft_box(208, y + 4u, 28, l, &FT_SM, fg, bg, 2);
+        ft_box(100, y + 4u, 108, l, &FT_SM, fg, bg, 0);
+        ft_box(208, y + 4u, 28, r, &FT_SM, fg, bg, 2);
     }
-    for (k = 0; k < AP_NLINE; k++) {            /* the page's lines: a name, its value; the selected one lit */
-        const ap_line_t *ln = &AP_LINES[ap_page][k];
-        const uint32_t sel = k == ap_line && !ap_move, y = 136u + 17u * k;
-        const uint16_t bg = sel ? UI_SEL : UI_BG, fg = sel ? UI_BG : UI_TXT;
-        ap_value(l, ln);
-        h = ap_hash(ap_hash(ap_page << 4 | k << 1 | sel, ln->name ? ln->name : ""), l);
+    for (k = 0; k < AP_NLINE; k++) {            /* the five rows; the lit one is the knob's, or the choice made */
+        const int kind = ap_row(k, l, r);
+        const uint32_t y = 136u + 17u * k;
+        const uint16_t bg = kind == AP_R_LIT ? UI_SEL : UI_BG, fg = kind == AP_R_LIT ? UI_BG : kind == AP_R_DIM ? UI_DIM : UI_TXT;
+        h = ap_hash(ap_hash((uint32_t)kind | ap_mode << 2 | (ap_list_ms ? 16u : 0u), l), r);
         if (h == seen[5u + k]) continue;
         seen[5u + k] = h;
         lcd_rect(0, y, 6, 15, bg); lcd_rect(234, y, 6, 15, bg);
-        ft_box(6, y, 124, ln->name ? ln->name : "", &FT_SM, sel ? UI_BG : UI_DIM, bg, 0);
-        ft_box(130, y, 104, l, &FT_SM, fg, bg, 2);
+        if (!r[0]) ft_box(6, y, 228, l, &FT_SM, fg, bg, 0);
+        else {
+            ft_box(6, y, 124, l, &FT_SM, kind == AP_R_PLAIN && ap_mode == AP_PLAY ? UI_DIM : fg, bg, 0);
+            ft_box(130, y, 104, r, &FT_SM, fg, bg, 2);
+        }
     }
-    if (now - t_status >= 250u || seen[10] == ~0u) {   /* four times a second: a note, or the load, its peak, the late blocks */
+    if (now - t_status >= 250u || seen[10] == ~0u) {   /* four times a second: a note, the mode, or the load, its peak, the late blocks */
+        const uint32_t loud = ap_note_ms || ap_bypass || ap_mode != AP_PLAY;
         t_status = now ? now : 1u;
         l[0] = 0;
         if (ap_note_ms) b_str(l, ap_note_s);
         else if (base_safe) b_str(l, "SAFE MODE: THE GUITAR AS IT IS");
         else if (a_bypass) b_str(l, "OVERLOAD: THE GUITAR AS IT IS");
-        else if (ap_move) b_str(l, "MOVE: TURN, THEN FX OR PUSH");
-        else if (ap_bypass) b_str(l, "BYPASS: HOLD A FOOTSWITCH");
+        else if (ap_mode == AP_ORDER) { b_str(l, "ORDER: "); b_num(l, ap_npick); b_str(l, " OF 4    FX: LEAVE"); }
+        else if (ap_mode == AP_PRESETS) b_str(l, "PRESETS   HOLD RIGHT: BACK");
+        else if (ap_bypass == 1u && (AP_KEEP(s) & s->on)) b_str(l, "BYPASS: SOME MODULES STAY ON");
+        else if (ap_bypass) b_str(l, "BYPASS");
         else { b_str(l, "DSP "); b_num(l, a_load); b_str(l, "%  PEAK "); b_num(l, a_peak); b_str(l, "%  LATE "); b_num(l, a_xrun); }
-        h = ap_hash(ap_note_ms ? 1u : 0u, l);
-        if (h != seen[10]) { seen[10] = h; ft_box(0, 224, 240, l, &FT_SM, ap_note_ms || ap_bypass || ap_move ? UI_ACC : UI_DIM, UI_BG, 1); }
+        h = ap_hash(loud, l);
+        if (h != seen[10]) { seen[10] = h; ft_box(0, 224, 240, l, &FT_SM, loud ? UI_ACC : UI_DIM, UI_BG, 1); }
     }
 }
 
