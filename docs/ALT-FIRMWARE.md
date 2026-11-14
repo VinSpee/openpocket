@@ -5,7 +5,8 @@ An alternative firmware is another product for the same pedal, built from this t
 the other. It is installed with the same installer, and OpenPocket is put back the same way.
 
 STARTER (`firmware/apps/starter`) is a small alternative firmware that exists to be copied. This document says how to
-start your own from it, how it is installed and replaced, and what the recovery paths are.
+start your own from it, how it is installed and replaced, and what the recovery paths are. PALETTE
+(`firmware/apps/palette`, [PALETTE.md](PALETTE.md)) is a whole product built this way.
 
 Nothing here has run on a pedal yet. Section 7 lists what was checked without one and what still needs one.
 

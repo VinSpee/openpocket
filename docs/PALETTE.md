@@ -9,8 +9,9 @@ module and effect names are the plain words of that instrument. Every algorithm 
 description of behaviour and from textbook structures. No code, table, or constant comes from the reference product,
 and nobody compared the sound with a real unit.
 
-This document is the design note for the first version and the plan for the next ones. Section 9 has the measured
-costs. Section 10 lists what still needs a pedal.
+This document is the design note for the first version and the plan for the next ones.
+[PALETTE-REPORT.md](PALETTE-REPORT.md) has the measured levels and costs, and the checks that still need a pedal.
+Nothing here has run on a pedal yet.
 
 ## 1. What this version has, and what comes next
 
@@ -109,7 +110,8 @@ hold no sound. The knob on the PRESET line reaches every slot.
 
 The preset's number and name are at the top. Below them are four tiles in the chain's order, one a module: its name
 in its colour, its effect, and its AMOUNT. A module that is off is dim. Under the tiles are the lines of the selected
-page, with the selected line lit. The last line shows the load, the tempo, and a note such as SAVED or BYPASS.
+page, with the selected line lit. The last line shows the load (DSP), its peak since the sound last changed (PEAK),
+and the number of blocks that came late (LATE), or a note such as SAVED or BYPASS.
 
 ## 6. Presets
 
@@ -133,7 +135,8 @@ The MIDI map is the reference's, so a controller set up for it works.
 | Clock, Start, Stop | The tempo while the clock runs |
 
 The app's own editor requests (protocol 1) are in `app.h`: STATE reads the slot and the sound, SET changes one field,
-and there are requests to pick a preset, to save, and to read a slot's name. A web page needs no more than these.
+LOAD reads the load figures, and there are requests to pick a preset, to save, to rename, and to read a slot's name.
+A web page needs no more than these.
 
 ## 8. Verification without a pedal
 
@@ -142,13 +145,19 @@ and there are requests to pick a preset, to save, and to read a slot's name. A w
   bypass make no step in the output; a sound that fails the check is refused.
 - `tests/test_palette_sim.mjs` drives the app in the simulator: its identity, controls, screen, MIDI map, editor
   requests, store, and safe mode.
-- `tests/palette_render.c` renders each effect on a standard signal and writes the report of section 9.
-- `node tools/op.mjs sim --app palette` plays a guitar loop through the app's own code in the browser.
+- `tests/palette_render.c` renders each effect on a standard signal and prints the tables of the report: loudness,
+  peak, and time. It can write each effect as a WAV file.
+- `node tools/op.mjs sim --app palette` opens a page with the screen and the controls. Its Listen button plays a guitar
+  loop through the app's own code ([SIMULATOR.md](SIMULATOR.md), "An app on the base firmware").
+- `node tools/op.mjs all` builds the image and its packages next to OpenPocket's and STARTER's, installs the built
+  package on the simulated update pedal over OpenPocket and OpenPocket back, and ends with the release pin.
 
-## 9. Measured costs
+## 9. Merging upstream changes
 
-See [PALETTE-REPORT.md](PALETTE-REPORT.md).
+PALETTE is files of its own: `firmware/apps/palette/`, `tests/test_palette.c`, `tests/test_palette_sim.mjs`,
+`tests/palette_render.c`, `tools/cyclecount.py`, and these two documents. It changes no file of the base and none of
+OpenPocket's.
 
-## 10. Checks on a pedal
-
-See section 5 of [PALETTE-REPORT.md](PALETTE-REPORT.md).
+It adds lines to four files that upstream also edits: `README.md` (one sentence), `tools/sim.mjs` (the simulator's
+loop, audio, and clock requests), `tests/run_tests.sh`, and `.github/workflows/build.yml`. A conflict there is in the
+added lines, and upstream's side is kept as it is ([BASE-FIRMWARE.md](BASE-FIRMWARE.md), section 14).
