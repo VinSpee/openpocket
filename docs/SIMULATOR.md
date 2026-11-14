@@ -229,8 +229,8 @@ the MIDI reader, and the product's INFO reply.
 Time is the simulator's. Each main-loop pass is 1 ms, and an audio block is made every 2.9 ms of it. A button's pin moves
 as a hand moves it, and the pedal's code debounces it and times a hold.
 
-`/` is a plain page: the screen, a button for each control, MASTER, and the facts below. The API is the one above, with
-these differences:
+`/` is a plain page: the screen, a button for each control, MASTER, a guitar loop to listen to, and the facts below.
+The API is the one above, with these differences:
 
 | Request | What it does |
 | --- | --- |
@@ -239,11 +239,22 @@ these differences:
 | `POST /api/wait/MS` | `MS` milliseconds of the pedal's time pass at once |
 | `POST /api/sound/HZ` | a sine of `HZ` at a quarter of full scale as the guitar; answers `{left, right}`, the two outputs' RMS as a part of full scale, measured by the pedal's own audio stages |
 | `POST /api/nan` | the app's sound gives a NaN in its next block |
+| `POST /api/loop/NAME` | a loop of `assets/loops` (`riff`, `chords`, ...) as the guitar, around and around, in the tone's place. `none` ends it |
+| `POST /api/audio/MS` | `MS` milliseconds of the pedal's time pass at once, and its two outputs come back: 16-bit frames, left then right, at 44.1 kHz. From the first request on, the audio interrupt runs only inside these requests, so one request's sound continues the one before. `0`, or 3 s without a request, ends that |
+| `POST /api/clock/N/MS` | `N` MIDI clocks, `MS` + 1 milliseconds apart, with the even timing a test needs |
 | `POST /api/midi` | SysEx reaches the update code's handshake, INFO and the app's own requests; any other message goes through the MIDI ring to the app's map |
 
-`battery`, `tuner`, `load`, and `bypass` are the OpenPocket simulator's only. The app's sound is not played in the
-browser: the WebAssembly engine is OpenPocket's. `/site/index.html?app=NAME` is the installer page with the app
-offered, and it names the simulated pedal's product. `tests/test_app_sim.mjs` drives all of this for STARTER.
+`battery`, `tuner`, `load`, and `bypass` are the OpenPocket simulator's only.
+
+**The app's sound.** The page's Listen button plays the chosen guitar loop through the app. The sound is made by the
+app's own C code in the simulator program, not by a WebAssembly engine: the page asks for a quarter of a second at a
+time with `/api/audio` and plays the parts in order. A control is therefore heard about half a second after it is
+used. The loop goes in at the level a guitar has at the pedal's converter, and the page plays the result four times
+louder.
+
+`/site/index.html?app=NAME` is the installer page with the app offered, and it names the simulated pedal's product.
+`tests/test_app_sim.mjs` drives the simulator for STARTER, and `tests/test_palette_sim.mjs` for PALETTE
+([PALETTE.md](PALETTE.md)).
 
 ## Tests
 

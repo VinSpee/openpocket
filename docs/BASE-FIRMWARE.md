@@ -311,8 +311,8 @@ app's own C file and its engine with `tests/host` as the chip. Three files are s
 controls from the pins up, the audio stages, the store, MIDI, and INFO.
 
 The simulator gives the app's screen, its controls, MIDI and SysEx, its flash, and the level of the two outputs for a
-test tone. It does not play the app's sound in the browser. The WebAssembly engine of the OpenPocket simulator is
-OpenPocket's.
+test tone. Its page also plays a guitar loop through the app: the sound comes from the app's own C code, a part at a
+time. The WebAssembly engine of the OpenPocket simulator is OpenPocket's.
 
 ## 12. What the base leaves out
 
@@ -322,7 +322,6 @@ OpenPocket's.
 - **Two cores.** The base's schedule uses one core.
 - **The web editor for an app.** The editor edits OpenPocket only. An app's own requests reach the app, and no page
   speaks them yet.
-- **The app's sound in the browser.** See section 11.
 - **The Bluetooth test image and the test channel.** `OP_BLE` and `OP_CHANNEL` build OpenPocket only.
 - **USB audio in STARTER.** The base has it (`OP_UAUDIO`). STARTER does not turn it on.
 
