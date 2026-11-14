@@ -2,7 +2,7 @@
 
 ## Sub-features
 - The base (`firmware/base/`, `docs/BASE-FIRMWARE.md`): the code every image shares.
-- OpenPocket built on it: the same bytes as the published release (`tests/release.sha256`).
+- OpenPocket built on it: the same bytes as the pinned release (`tests/release.sha256`: v42 with the bass tuner fix).
 - STARTER (`firmware/apps/starter`, `docs/ALT-FIRMWARE.md`): an alternative firmware, a product of its own.
   `build/apps/starter/starter.bin`, its two packages, its manifest.
 - The product identity: an app's INFO reply, the installer's separate card, the flasher's `--app`, the editor's notice.

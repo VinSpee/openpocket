@@ -107,7 +107,7 @@ const commands = {
     for (const name of apps()) rc = rc || commands.app([name]);
     return rc || commands.test(["--built"]);
   },
-  // (the release pin, tests/release_pin.sh: OpenPocket's outputs must be the published release's bytes, or this fails)
+  // (the release pin, tests/release_pin.sh: OpenPocket's outputs must be the pinned release's bytes, or this fails)
   package: () => inContainer(["sh", "-c", `sh firmware/build.sh && mkdir -p build && sha256sum ${OUTS} > build/SHA256SUMS && sh tests/release_pin.sh`]),
   "package-test": () => inContainer(["sh", "-c", `OP_CHANNEL=midi-test sh firmware/build.sh && mkdir -p build && sha256sum ${TEST} > build/SHA256SUMS-midi-test && cat build/SHA256SUMS-midi-test`]),
   clean() {
