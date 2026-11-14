@@ -20,7 +20,7 @@ AINL int16_t f_q(float x) { x *= 32767.0f; if (x > 32767.0f) x = 32767.0f; if (x
 AINL float f_noise(uint32_t *r) { *r = *r * 1664525u + 1013904223u; return (float)(int32_t)*r * (1.0f / 2147483648.0f); }
 AINL float f_psin(float ph) { const float x = 2.0f * ph - 1.0f; return 4.0f * x * (1.0f - f_abs(x)); }   /* ph 0..1: a sine's shape */
 AINL float f_wrap(float ph) { return ph >= 1.0f ? ph - 1.0f : ph; }
-AINL float f_step(float v, float tgt, float st) { v += tgt > v ? st : -st; return (tgt > v ? tgt - v : v - tgt) < st ? tgt : v; }
+AINL float f_step(float v, float tgt, float st) { const float d = tgt - v; return d > st ? v + st : d < -st ? v - st : tgt; }   /* v towards tgt, st at most */
 /* the output's ceiling: as it is up to half of full scale (the loudest the guitar itself is), then bending towards 1 */
 AINL float f_ceil(float v)
 {
@@ -153,22 +153,27 @@ static void fx_vibrato(pl_engine_t *e, float *l, float *r)
 {
     const pl_mc_t *k = &e->mv; pl_ms_t *s = &e->ms;
     int16_t *bl = e->mvb, *br = e->mvb + PL_MV_N / 2; const int32_t M = PL_MV_N / 2 - 1; int32_t w = s->w & M;
-    const float inc = k->inc, depth = k->depth, base = k->base, off = k->off;
+    const float inc = k->inc, off = k->off;
     const float t0 = k->dfk * drift_step(&s->dft[0], 0.2f), t1 = k->dfk * drift_step(&s->dft[1], 0.2f);
-    float r0 = s->r0, r1 = s->r1, ph = s->ph;
+    float r0 = s->r0, r1 = s->r1, ph = s->ph, depth = s->dl;        /* the depth glides: a jump of it is a jump in the line */
     const float i0 = (t0 - r0) * (1.0f / (float)PL_FR), i1 = (t1 - r1) * (1.0f / (float)PL_FR);
+    const float dp1 = f_abs(k->depth - depth) < 0.01f ? k->depth : depth + 0.1f * (k->depth - depth), ddp = (dp1 - depth) * (1.0f / (float)PL_FR);
     for (uint32_t i = 0; i < PL_FR; i++) {
         bl[w] = f_q(l[i]); br[w] = f_q(r[i]);
+        depth += ddp;
+        const float base = 2.2f * depth + 4.0f;
         l[i] = f_rd(bl, w, M, base + depth * (f_psin(ph) + r0));
         r[i] = f_rd(br, w, M, base + depth * (f_psin(f_wrap(ph + off)) + r1));
         ph = f_wrap(ph + inc); r0 += i0; r1 += i1; w = (w + 1) & M;
     }
-    s->w = w; s->ph = ph; s->r0 = r0; s->r1 = r1;
+    s->w = w; s->ph = ph; s->r0 = r0; s->r1 = r1; s->dl = dp1;
 }
 static void fx_phaser(pl_engine_t *e, float *l, float *r)
 {
     const pl_mc_t *k = &e->mv; pl_ms_t *s = &e->ms;
-    const float fb = k->fb, w0 = k->w6[0], w1 = k->w6[1], w2 = k->w6[2], w3 = k->w6[3], w4 = k->w6[4], w5 = k->w6[5], hv = 0.5f * k->lvl;
+    for (int j = 0; j < 6; j++) s->w6[j] += 0.0625f * (k->w6[j] - s->w6[j]);    /* the stages cross over in a few blocks */
+    s->fb += 0.0625f * (k->fb - s->fb);
+    const float fb = s->fb, w0 = s->w6[0], w1 = s->w6[1], w2 = s->w6[2], w3 = s->w6[3], w4 = s->w6[4], w5 = s->w6[5], hv = 0.5f * k->lvl;
     const float ph = f_wrap(s->ph + k->inc * (float)PL_FR);
     float lf = 0.5f + 0.5f * f_psin(ph) + k->dfk * drift_step(&s->dft[0], 0.2f);
     lf = lf < 0.0f ? 0.0f : lf > 1.0f ? 1.0f : lf;
@@ -211,12 +216,17 @@ AINL void pitch_core(pl_engine_t *e, float *l, float *r, const int lofi)
 {
     const pl_mc_t *k = &e->mv; pl_ms_t *s = &e->ms;
     int16_t *bl = e->mvb, *br = e->mvb + PL_MV_N / 2; const int32_t M = PL_MV_N / 2 - 1; int32_t w = s->w & M;
-    const float W = k->W, amt = k->amt * (2.0f - k->amt) * 1.13f, dry = 1.0f - k->amt * k->amt;
+    const float W = k->W, a = k->amt;
     /* the ratio glides to where RATE put it; at RATE's centre the two heads give way to the signal as it is (rest) */
     const float ptgt = k->pinc * (1.0f + k->dfk * drift_step(&s->dft[0], 0.2f));
     float pinc = s->r0 + 0.08f * (ptgt - s->r0);
     if (f_abs(ptgt - pinc) < 1e-9f) pinc = ptgt;
     float u = s->rest; const float u1 = f_step(u, k->rest, 0.25f), du = (u1 - u) * (1.0f / (float)PL_FR);
+    /* AMOUNT's two gains: the shifted sound does not add up with the guitar, so they keep the loudness (dp, wp); at rest
+     * the two are the same signal, and they add up to 1 (1 - a, a) */
+    const float dp = 1.0f - a * a, wp = a * (2.0f - a) * 1.3f;
+    float dry = dp + u * (1.0f - a - dp), amt = wp + u * (a - wp);
+    const float ddry = (dp + u1 * (1.0f - a - dp) - dry) * (1.0f / (float)PL_FR), damt = (wp + u1 * (a - wp) - amt) * (1.0f / (float)PL_FR);
     float ph = s->pph, hl = s->held[0], hr = s->held[1]; int32_t hc = s->hc; const int32_t hold = k->hold;
     for (uint32_t i = 0; i < PL_FR; i++) {
         bl[w] = f_q(l[i]); br[w] = f_q(r[i]);
@@ -225,6 +235,7 @@ AINL void pitch_core(pl_engine_t *e, float *l, float *r, const int lofi)
         float yl = g0 * f_rd(bl, w, M, da) + g1 * f_rd(bl, w, M, db), yr = g0 * f_rd(br, w, M, da) + g1 * f_rd(br, w, M, db);
         yl += u * (l[i] - yl); yr += u * (r[i] - yr); u += du;
         if (lofi) { if (++hc >= hold) { hc = 0; hl = yl; hr = yr; } yl = hl; yr = hr; }   /* the shifter at a lower rate */
+        dry += ddry; amt += damt;
         l[i] = l[i] * dry + yl * amt; r[i] = r[i] * dry + yr * amt;
         ph += pinc; if (ph >= 1.0f) ph -= 1.0f; if (ph < 0.0f) ph += 1.0f;
         w = (w + 1) & M;
@@ -271,7 +282,7 @@ static void fx_space(pl_engine_t *e, float *l, float *r)
     float st[8], yl = s->yl, yr = s->yr, ph = s->sph;
     for (int j = 0; j < 8; j++) st[j] = s->st[j];
     for (uint32_t i = 0; i + 1u < PL_FR; i += 2u) {
-        float x = 0.25f * (l[i] + r[i] + l[i + 1u] + r[i + 1u]), o[8], sum = 0.0f;
+        float x = 0.0625f * (l[i] + r[i] + l[i + 1u] + r[i + 1u]), o[8], sum = 0.0f;    /* (a quarter: the lines ring up to 5 times their input) */
         {   /* TIME moved: one unit a tick goes one sample towards its new length (no step, a short bend) */
             const int32_t t = k->n[sk]; if (L[sk] < t) L[sk]++; else if (L[sk] > t) L[sk]--;
             if (++sk >= 12) sk = 0;
@@ -465,6 +476,7 @@ static const pl_fn PL_FX[PL_NMOD][PL_NFX] = {
 static const int16_t SP_LEN[12] = { 142, 107, 379, 277, 1117, 1321, 1493, 1657, 1811, 1997, 2131, 2311 };   /* space: ticks */
 #define SP_DIF_MAX 1.2f                         /* the diffusers' and the lines' longest, as a multiple of SP_LEN */
 #define SP_LIN_MAX 1.6f
+static const uint8_t PL_LEAD[PL_NMOD][PL_NFX] = { {2, 2, 2, 2, 2}, {2, 2, 2, 2, 9}, {2, 2, 2, 2, 2}, {2, 2, 3, 2, 2} };   /* blocks unheard at a start */
 
 /* module m takes pl_commit's numbers, and starts effect fx from nothing: its memory cleared, its glides where they go */
 static void pl_swap(pl_engine_t *e, uint32_t m, uint32_t fx)
@@ -476,7 +488,9 @@ static void pl_swap(pl_engine_t *e, uint32_t m, uint32_t fx)
         e->mv = e->next.mv;
         memset(&e->ms, 0, sizeof e->ms); memset(e->mvb, 0, sizeof e->mvb);
         e->ms.dft[0].rnd = 77u; e->ms.dft[1].rnd = 78u;
-        e->ms.dl = e->mv.dlt; e->ms.dr = e->mv.drt; e->ms.base = e->mv.a0; e->ms.rest = e->mv.rest;
+        e->ms.dl = fx == PL_VIBRATO ? e->mv.depth : e->mv.dlt; e->ms.dr = e->mv.drt; e->ms.base = e->mv.a0; e->ms.rest = e->mv.rest;
+        e->ms.fb = e->mv.fb;
+        for (int j = 0; j < 6; j++) e->ms.w6[j] = e->mv.w6[j];
         if (fx == PL_PITCH) e->ms.r0 = e->mv.pinc;
     } else if (m == PL_DIFF) {
         int32_t at = 0;
@@ -494,6 +508,9 @@ static void pl_swap(pl_engine_t *e, uint32_t m, uint32_t fx)
         e->ts.dft[0].rnd = 4242u; e->ts.dft[1].rnd = 4243u;
     }
     e->run[m] = (uint8_t)fx;
+    /* it runs unheard first: its input fades in (two blocks), and an effect that is only its line's output has no
+     * sound before the line has filled (Cassette reads 364 samples back at most, Pitch's second head 1026) */
+    e->lead[m] = fx < PL_NFX ? PL_LEAD[m][fx] : 0; e->fg[m] = 0.0f; e->redo[m] = 0;
 }
 static void pl_adopt(pl_engine_t *e, uint32_t m)    /* a knob moved: the running effect's numbers follow */
 {
@@ -501,6 +518,13 @@ static void pl_adopt(pl_engine_t *e, uint32_t m)    /* a knob moved: the running
     else if (m == PL_MOVE) e->mv = e->next.mv;
     else if (m == PL_DIFF) e->df = e->next.df;
     else e->tx = e->next.tx;
+}
+static int pl_moved(const pl_engine_t *e, uint32_t m)   /* pl_commit's numbers for module m are not the ones it runs on */
+{
+    if (m == PL_CHAR) return memcmp(&e->ch, &e->next.ch, sizeof e->ch) != 0;
+    if (m == PL_MOVE) return memcmp(&e->mv, &e->next.mv, sizeof e->mv) != 0;
+    if (m == PL_DIFF) return memcmp(&e->df, &e->next.df, sizeof e->df) != 0;
+    return memcmp(&e->tx, &e->next.tx, sizeof e->tx) != 0;
 }
 /* a gain that glides: a quarter of its way a block, as a straight line across the block */
 AINL void pl_gain(float *l, float *r, float *now, float tgt)
@@ -519,7 +543,7 @@ void pl_run(pl_engine_t *e, const float *in, float *out)
     const pl_coef_t *nx = &e->next;
     uint32_t differs = 0;
     if (nx->bypass && e->bg == 0.0f) {                              /* bypassed, and the crossfade is over: nothing runs */
-        for (uint32_t m = 0; m < PL_NMOD; m++) { e->run[m] = PL_OFF; e->mg[m] = 0.0f; e->order[m] = nx->order[m]; }
+        for (uint32_t m = 0; m < PL_NMOD; m++) { e->run[m] = PL_OFF; e->mg[m] = 0.0f; e->redo[m] = 0; e->order[m] = nx->order[m]; }
         for (uint32_t i = 0; i < PL_FR; i++) l[i] = r[i] = in[i];
         e->fresh = 0;
         return;
@@ -532,19 +556,28 @@ void pl_run(pl_engine_t *e, const float *in, float *out)
     }
     for (uint32_t k = 0; k < PL_NMOD; k++) {                        /* the four modules, in the sound's order */
         const uint32_t m = e->order[k], want = nx->fx[m];
-        if (e->run[m] != want) { if (e->mg[m] == 0.0f) pl_swap(e, m, want); }
-        else if (e->fresh) pl_adopt(e, m);
+        if (e->run[m] != want) { e->redo[m] = 0; if (e->mg[m] == 0.0f) pl_swap(e, m, want); }
+        else if (e->fresh && want != PL_OFF) {                      /* its knobs: a small move at once, a jump blended */
+            if (e->redo[m] || (nx->hard && pl_moved(e, m))) e->redo[m] = 1; else pl_adopt(e, m);
+        }
+        if (e->redo[m] && e->mg[m] == 0.0f) { pl_adopt(e, m); e->redo[m] = 0; }
         if (e->run[m] == PL_OFF) continue;
         for (uint32_t i = 0; i + 1u < PL_FR; i += 2u) {             /* +-1e-15: silence, or the exact zeros of the module before */
             l[i] += 1e-15f; r[i] += 1e-15f; l[i + 1u] -= 1e-15f; r[i + 1u] -= 1e-15f;
         }
-        const float tgt = e->run[m] == want ? 1.0f : 0.0f;
+        const float tgt = e->run[m] == want && !e->redo[m] ? 1.0f : 0.0f;
         const int blend = e->mg[m] != 1.0f || tgt != 1.0f;
         if (blend) for (uint32_t i = 0; i < PL_FR; i++) { e->tl[i] = l[i]; e->tr[i] = r[i]; }
+        if (e->fg[m] < 1.0f) {                                      /* it just started: what it takes in fades in */
+            float fg = e->fg[m];
+            for (uint32_t i = 0; i < PL_FR; i++) { fg += XF; if (fg > 1.0f) fg = 1.0f; l[i] *= fg; r[i] *= fg; }
+            e->fg[m] = fg;
+        }
         PL_FX[m][e->run[m]](e, l, r);
         pl_gain(l, r, &e->vol[m], nx->vol[m]);
         if (blend) {                                                /* between the module's input and its effect */
-            float g = e->mg[m]; const float st = tgt > 0.5f ? XF : -XF;
+            float g = e->mg[m]; float st = tgt > 0.5f ? XF : -XF;
+            if (e->lead[m]) { e->lead[m]--; if (st > 0.0f) st = 0.0f; }   /* (unheard still) */
             for (uint32_t i = 0; i < PL_FR; i++) {
                 g += st; if (g > 1.0f) g = 1.0f; if (g < 0.0f) g = 0.0f;
                 l[i] = e->tl[i] + g * (l[i] - e->tl[i]); r[i] = e->tr[i] + g * (r[i] - e->tr[i]);
@@ -664,7 +697,7 @@ void pl_coefs(const pl_sound_t *s, uint32_t quarter_ms, int bypass, pl_coef_t *c
         case PL_DOUBLER:
             k->dlt = (12.0f + 100.0f * rate) * 0.001f * sr; k->drt = k->dlt * 1.31f + 0.004f * sr; k->dfk = 0.02f * dm;
             k->lvl = 1.0f / (1.0f + 0.45f * am); break;
-        case PL_VIBRATO: k->depth = 60.0f * am * am + 1.0f; k->base = 2.2f * k->depth + 4.0f; k->dfk = 0.5f * dm; break;
+        case PL_VIBRATO: k->depth = 60.0f * am * am + 1.0f; k->dfk = 0.5f * dm; break;
         case PL_PHASER: {
             const float pos = am * 4.999f; const int j = (int)pos;
             k->w6[j] = 1.0f - (pos - (float)j); k->w6[j + 1] = pos - (float)j;
@@ -698,7 +731,7 @@ void pl_coefs(const pl_sound_t *s, uint32_t quarter_ms, int bypass, pl_coef_t *c
         case PL_SPACE:
             k->g = 0.55f + 0.43f * time; k->kd = k_hz(6000.0f - 3500.0f * time, hr); k->dg = 0.6f;
             k->md = 8.0f * dd; k->sinc = 0.6f / hr;
-            k->wet = am * (2.0f - am) * vol * 0.96f * sqrtf(1.0f - k->g * k->g); k->dryg = 1.0f - am * am; break;
+            k->wet = am * (2.0f - am) * vol * 4.0f * 0.96f * sqrtf(1.0f - k->g * k->g); k->dryg = 1.0f - am * am; break;
         case PL_COLLAGE: {
             float ms = quarter_ms ? q * note_of(s->knob[PL_K_TIME], LOOP_DIV, 5) : 60.0f + 1900.0f * time * time;
             if (ms > 1960.0f) ms = 1960.0f;

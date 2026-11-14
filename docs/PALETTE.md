@@ -23,7 +23,8 @@ Nothing here has run on a pedal yet.
 | The sixteen knob functions, each module's effect, on and off, the order, the filter style, a tempo | Dual bypass, bypass with trails, calibration levels |
 | Tap tempo, MIDI clock, and the tempo-synced effects | The button lights, the tuner |
 | 80 presets in the app's own store, 20 factory sounds | An expression control over MIDI |
-| The pedal's controls and screen, the MIDI map of the reference, its own editor requests | Running a mono part of the chain once (a saving, section 9) |
+| The pedal's controls and screen, the MIDI map of the reference, its own editor requests | Running a mono part of the chain once (a saving, the report's section 3) |
+| | A glide for every knob: a quick turn can tick where the knob sets a gain or a filter |
 | Host tests, the simulator with sound, the render report | |
 
 ## 2. The data model
@@ -64,9 +65,15 @@ EFFECT VOL.
 **Changes without clicks** are the engine's work, not the app's. A module holds the effect it runs and a blend
 between its input and its output.
 
-- A knob moves: the module takes the new numbers at the next block. Times and gains glide.
+- A knob moves a little: the module takes the new numbers at the next block. Delay times, volumes, Vibrato's depth,
+  and Phaser's stages glide.
+- A knob jumps under a running effect (another preset whose module keeps its effect, a value from MIDI or the editor
+  more than 5 away): the module's blend goes to its input, the module takes the new numbers, and the blend comes
+  back. Its memory is kept.
 - Another effect, or a module switched off or on: the module's blend goes to its input in 5.8 ms, its memory is
-  cleared, the new effect is set, and the blend comes back. The other modules keep sounding, and so do their tails.
+  cleared, and the new effect is set. The effect then runs unheard while its input fades in and its memory fills:
+  5.8 ms, 8.7 ms for Cassette, 26 ms for Pitch. Then the blend comes back. The other modules keep sounding, and so
+  do their tails.
 - Another order: the chain's output fades out, the order changes, and it fades in. No memory is cleared.
 - Bypass: the output crossfades to the guitar. While bypassed, no module runs. On the way back each module starts
   clear.
@@ -84,7 +91,10 @@ are each a complete sound. Whether the pedal's output jack carries two channels 
 **Safety.** The pedal's FPU slows on denormal numbers, and silence through a filter that feeds back decays into
 them. Each module's input gets a tiny alternating offset, a filter fed from 16-bit memory gets a tiny constant at
 each step, and a glide that ends at zero ends there exactly. A test scans what the engine keeps for denormals through
-eight seconds of silence after each effect. Every write to a delay line is clamped. Every feedback path goes through a soft clipper. The engine's output has a soft ceiling that
+eight seconds of silence after each effect. Every write to a delay line is clamped. The feedback of Cascade, Reels,
+and Collage goes through a soft clipper, so it can oscillate without overflow. Space's lines hold a quarter of the
+input's level, because they ring up to five times their input, and a test shows that they stay under the clamp at
+full input. The engine's output has a soft ceiling that
 starts at half of full scale, which is the loudest the guitar itself can be, and the base adds its own knee after the
 MASTER volume. The base silences a NaN and resets the engine.
 
@@ -158,9 +168,14 @@ A web page needs no more than these.
 ## 9. Merging upstream changes
 
 PALETTE is files of its own: `firmware/apps/palette/`, `tests/test_palette.c`, `tests/test_palette_sim.mjs`,
-`tests/palette_render.c`, `tools/cyclecount.py`, and these two documents. It changes no file of the base and none of
-OpenPocket's.
+`tests/palette_render.c`, `tools/cyclecount.py`, and these two documents. It changes no file of the base firmware
+(`firmware/base/`, `px_usb.h`, `app.ld`, `build.sh`) and none of OpenPocket's.
 
-It adds lines to four files that upstream also edits: `README.md` (one sentence), `tools/sim.mjs` (the simulator's
-loop, audio, and clock requests), `tests/run_tests.sh`, and `.github/workflows/build.yml`. A conflict there is in the
-added lines, and upstream's side is kept as it is ([BASE-FIRMWARE.md](BASE-FIRMWARE.md), section 14).
+It adds lines to five files that upstream also edits: `README.md` (one sentence), `docs/SIMULATOR.md` (in its
+section on apps, which upstream does not have), `tools/sim.mjs` (the simulator's loop, audio, and clock requests),
+`tests/run_tests.sh`, and `.github/workflows/build.yml`. A conflict there is in the added lines, and upstream's side
+is kept as it is ([BASE-FIRMWARE.md](BASE-FIRMWARE.md), section 14).
+
+It also changes files that only this fork has, so they cannot conflict with upstream: the app simulator's stand-in
+and page (`tests/host/base/start.h`, `tools/sim/app.html`), `tests/test_products.mjs` (its built-package check now
+runs for every app), and the documents `BASE-FIRMWARE.md` and `ALT-FIRMWARE.md`.

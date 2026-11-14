@@ -106,11 +106,13 @@ static void app_sound(const float *in, float *out) { pl_run(&ap_eng, in, out); }
 static void app_sound_reset(void) { pl_reset(&ap_eng); }
 static uint32_t ap_quarter(void) { return ap_clock_q ? ap_clock_q : ap_now.s.tempo ? 60000u / ap_now.s.tempo : 0u; }
 /* the sound, the tempo or bypass changed: the engine's numbers are made here, and handed over between two blocks. The
- * engine makes the change without a step (engine.h) */
-static void ap_apply(void)
+ * engine makes the change without a step (engine.h). jump: knobs changed by more than a turn of the knob does (another
+ * preset, a value from MIDI or the editor): the engine then blends each module that keeps its effect */
+static void ap_apply(int jump)
 {
     pl_coef_t c;
     pl_coefs(&ap_now.s, ap_quarter(), (int)ap_bypass, &c);
+    c.hard = (uint8_t)(jump != 0);
     fm1_irq_mask(FM1_IRQ_ALNK0);
     pl_commit(&ap_eng, &c);
     fm1_irq_unmask(FM1_IRQ_ALNK0);
@@ -132,7 +134,7 @@ static void ap_load(uint32_t k)
 {
     ap_slot = k; ap_move = 0;
     ap_slot_get(k, &ap_now);
-    ap_apply();
+    ap_apply(1);
 }
 static void ap_step_preset(int dd)              /* the footswitches: the next slot that holds a sound */
 {
@@ -146,24 +148,32 @@ static int ap_save(void)
         memcpy(ap_now.name, "USER ", 5);
         ap_now.name[5] = (char)('0' + (ap_slot + 1u) / 10u); ap_now.name[6] = (char)('0' + (ap_slot + 1u) % 10u); ap_now.name[7] = 0;
     }
+    const ap_preset_t was = ap_st.slot[ap_slot];
+    const uint8_t bits = ap_st.saved[ap_slot / 8u], last = ap_st.last;
     ap_st.slot[ap_slot] = ap_now; ap_st.saved[ap_slot / 8u] |= (uint8_t)(1u << (ap_slot % 8u)); ap_st.last = (uint8_t)ap_slot;
     const int rc = bs_save(AP_MAGIC, AP_VER, &ap_st, sizeof ap_st);
+    if (rc) { ap_st.slot[ap_slot] = was; ap_st.saved[ap_slot / 8u] = bits; ap_st.last = last; }   /* (not in the flash: not saved) */
     ap_say(rc ? "SAVE FAILED" : "SAVED");
     return rc;
 }
 /* one field of the sound, as MIDI, the editor and the controls set it (the editor's SET numbers); 0 = taken */
 enum { AP_F_FX = 16, AP_F_ON = 20, AP_F_STYLE = 24, AP_F_TEMPO, AP_F_BYPASS, AP_F_ORDER };
+#define AP_TURN 5u                              /* the most a knob moves in one step of the pedal's knob (turned quickly) */
 static int ap_set(uint32_t f, uint32_t v)
 {
     pl_sound_t *s = &ap_now.s;
-    if (f < PL_NKNOB) s->knob[f] = (uint8_t)(v > 100u ? 100u : v);
+    int jump = 0;
+    if (f < PL_NKNOB) {
+        const uint32_t to = v > 100u ? 100u : v, d = to > s->knob[f] ? to - s->knob[f] : s->knob[f] - to;
+        s->knob[f] = (uint8_t)to; jump = d > AP_TURN;
+    }
     else if (f < AP_F_FX + PL_NMOD) { if (v >= PL_NFX) return 1; s->fx[f - AP_F_FX] = (uint8_t)v; s->on |= (uint8_t)(1u << (f - AP_F_FX)); }
     else if (f < AP_F_ON + PL_NMOD) s->on = (uint8_t)((s->on & ~(1u << (f - AP_F_ON))) | (v ? 1u << (f - AP_F_ON) : 0u));
-    else if (f == AP_F_STYLE) { if (v >= PL_NSTYLE) return 1; s->style = (uint8_t)v; }
+    else if (f == AP_F_STYLE) { if (v >= PL_NSTYLE) return 1; s->style = (uint8_t)v; jump = 1; }
     else if (f == AP_F_TEMPO) s->tempo = (uint16_t)(v == 0u ? 0u : v < PL_TEMPO_MIN ? PL_TEMPO_MIN : v > PL_TEMPO_MAX ? PL_TEMPO_MAX : v);
     else if (f == AP_F_BYPASS) ap_bypass = v ? 1u : 0u;
     else return 1;
-    ap_apply();
+    ap_apply(jump);
     return 0;
 }
 static void ap_tap(uint32_t ms)                 /* a tap at time ms: with the tap before it, a quarter note (200 ms .. 2 s) */
@@ -180,7 +190,7 @@ static void ap_shift(uint32_t m, int dd)        /* module m one place along the 
     const uint32_t to = at + (uint32_t)dd;      /* (dd -1 at place 0 wraps beyond PL_NMOD: refused) */
     if (at >= PL_NMOD || to >= PL_NMOD) return;
     o[at] = o[to]; o[to] = (uint8_t)m;
-    ap_apply();
+    ap_apply(0);
 }
 
 /* ---- the controls (base/input.h) ---- */
@@ -248,11 +258,11 @@ static void app_midi(const midi_msg_t *m, uint32_t ms)
     case MIDI_CLOCK: {
         const uint32_t q = midi_tempo(&ap_clk, ms);
         ap_clock_ms = ms;
-        if (q && q != ap_clock_q) { ap_clock_q = q; ap_apply(); }
+        if (q && q != ap_clock_q) { ap_clock_q = q; ap_apply(0); }
         break;
     }
     case MIDI_START: midi_tempo_reset(&ap_clk); break;
-    case MIDI_STOP: midi_tempo_reset(&ap_clk); if (ap_clock_q) { ap_clock_q = 0; ap_apply(); } break;
+    case MIDI_STOP: midi_tempo_reset(&ap_clk); if (ap_clock_q) { ap_clock_q = 0; ap_apply(0); } break;
     }
 }
 
@@ -278,7 +288,7 @@ static void app_editor(uint32_t cmd, const uint8_t *a, uint32_t n)
         if (a[0] == AP_F_ORDER) {
             pl_sound_t t = ap_now.s;
             for (uint32_t i = 0; i < PL_NMOD && n >= 5u; i++) t.order[i] = a[1u + i];
-            if (n >= 5u && pl_sound_ok(&t)) { ap_now.s = t; ap_apply(); rc = 0; }
+            if (n >= 5u && pl_sound_ok(&t)) { ap_now.s = t; ap_apply(0); rc = 0; }
         } else rc = ap_set(a[0], a[0] == AP_F_TEMPO && n >= 3u ? a[1] + 128u * a[2] : a[1]);
         ed_begin(cmd); ed_b(a[0]); ed_b((uint32_t)rc); ed_send();
     } else if (cmd == 7u && n >= 1u && a[0] < AP_NSLOT) {
@@ -406,6 +416,6 @@ static void app_step(uint32_t now)              /* every main-loop pass, after b
 {
     in_poll(now);
     /* the clock stopped (a clock can be newer than `now`, which was read before this pass took it: a signed difference) */
-    if (ap_clock_q && (int32_t)(now - ap_clock_ms) > 500) { ap_clock_q = 0; midi_tempo_reset(&ap_clk); ap_apply(); }
+    if (ap_clock_q && (int32_t)(now - ap_clock_ms) > 500) { ap_clock_q = 0; midi_tempo_reset(&ap_clk); ap_apply(0); }
     ap_draw(now);
 }

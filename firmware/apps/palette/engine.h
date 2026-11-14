@@ -7,8 +7,10 @@
  *   pl_coefs   a sound -> the numbers a block runs on. Slow (powf, sinf) and pure: the main loop
  *   pl_commit  those numbers handed to the engine: with the audio interrupt held, so a block sees a whole change
  *   pl_run     one block, in the audio interrupt: the mono guitar in, a left block then a right block out
- * A change is never heard as a step: pl_run blends a module to its input, clears it, sets the other effect and blends
- * it back; it fades the chain around a new order, and crossfades to the guitar for bypass.
+ * A change is never heard as a step: pl_run blends a module to its input, clears it, sets the other effect, lets it
+ * run unheard until its memory holds sound, and blends it back; it fades the chain around a new order, and crossfades
+ * to the guitar for bypass. A knob that moves a little is taken at the next block; one that jumps under a running
+ * effect (pl_coef_t.hard: another preset) is taken with the module blended to its input, its memory kept.
  */
 #pragma once
 #include <stdint.h>
@@ -56,7 +58,7 @@ typedef struct {
 typedef struct {
     float inc, amt, dfk, off, lvl;
     float dlt, drt;                                         /* doubler: where the two taps go, in samples */
-    float depth, base;                                      /* vibrato */
+    float depth;                                            /* vibrato */
     float a0, a1, fb, w6[6];                                /* phaser: the sweep's ends, the taps' weights */
     float hard;                                             /* tremolo */
     float pinc, W, rest; int32_t hold;                      /* pitch */
@@ -79,7 +81,7 @@ typedef struct {
 typedef struct {
     uint8_t fx[PL_NMOD];                        /* what each module is to run: its effect, or PL_OFF */
     uint8_t order[PL_NMOD];
-    uint8_t bypass, pad[3];
+    uint8_t bypass, hard, pad[2];               /* hard: the knobs jumped (pl_coefs leaves it 0; the caller sets it) */
     float vol[PL_NMOD], wet, dry, level;        /* each module's volume; MIX's two gains; OUTPUT LEVEL */
     pl_cc_t ch; pl_mc_t mv; pl_dc_t df; pl_tc_t tx;
 } pl_coef_t;
@@ -95,7 +97,7 @@ typedef struct {
 } pl_cs_t;
 typedef struct {
     int32_t w, hc;
-    float ph, base, dl, dr, r0, r1, ap[2][12], last[2], pph, held[2], rest;
+    float ph, base, dl, dr, r0, r1, ap[2][12], last[2], w6[6], fb, pph, held[2], rest;
     pl_drift_t dft[2];
 } pl_ms_t;
 typedef struct {
@@ -115,7 +117,10 @@ typedef struct {
     /* the audio side's own, from here on */
     uint8_t run[PL_NMOD];                       /* the effect each module's memory belongs to, or PL_OFF */
     uint8_t order[PL_NMOD];
+    uint8_t lead[PL_NMOD];                      /* blocks an effect that just started still runs unheard */
+    uint8_t redo[PL_NMOD];                      /* the module is blending to its input to take knobs that jumped */
     float mg[PL_NMOD];                          /* each module's blend: 0 its input, 1 its effect */
+    float fg[PL_NMOD];                          /* an effect that just started: its input, fading in */
     float vol[PL_NMOD], og, bg, wet, dry, level;   /* as they glide: the chain's fade (og), bypass's (bg) */
     uint32_t rnd;
     pl_cc_t ch; pl_mc_t mv; pl_dc_t df; pl_tc_t tx;         /* the numbers the running effects use */

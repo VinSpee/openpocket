@@ -2,7 +2,8 @@
  * OpenPocket — host test of PALETTE's engine (firmware/apps/palette/engine.c, docs/PALETTE.md): the engine's own code
  * with the firmware's math library. Every effect on loud, quiet and silent input at each knob's ends stays finite and
  * under full scale and is not silent; a change of effect, of order, of a module's switch, of bypass and of the whole
- * sound makes no step in the output, where a cleared engine does; bypass is the guitar bit for bit; the order is heard;
+ * sound makes no step in the output, where a cleared engine does; each effect starts without a step, a knob that jumps
+ * under a running effect is blended, Vibrato's depth and Phaser's stages glide; bypass is the guitar bit for bit; the order is heard;
  * a tempo sets the delay's time; the left output alone and the sum of both are each a whole sound; a sound that is out
  * of range is refused; after a note no number the engine keeps decays into a denormal (the pedal's FPU slows on them).
  *   cc -O1 -Wall -Ifirmware/apps/palette tests/test_palette.c firmware/apps/palette/engine.c firmware/px_math.c -lm -o build/test_palette
@@ -164,6 +165,14 @@ int main(void)
         CHECK(!bad, "20 chains of four effects in four orders, every knob at 100, with and without a tempo: finite, under full scale, not silent");
     }
 
+    {   /* Space's lines ring up to several times their input: at its longest, on the loudest input, none reaches the clamp */
+        int at_clamp = 0;
+        one(&t, PL_DIFF, PL_SPACE); t.knob[PL_K_TIME] = 100; t.knob[PL_K_AMT_DIFF] = 100;
+        start(&t, 0);
+        for (int k = 0; k < 20; k++) { run(IN_LOUD, 100); for (uint32_t i = 0; i < 32768u; i++) if (eng.dfb[i] >= 32767 || eng.dfb[i] <= -32767) at_clamp++; }
+        CHECK(!at_clamp, "Space at its longest, AMOUNT 100, bursts at full input: no sample of its lines is at the 16-bit clamp");
+    }
+
     /* ---- changes make no step ---- */
     {
         /* what a step is: the same sine through an effect, then the output level changed with the engine cleared under
@@ -193,6 +202,57 @@ int main(void)
         set(&t, 0, 0); NO_STEP("engage");
         pl_default(&t); t.on = 2; t.fx[PL_MOVE] = PL_TREMOLO; t.knob[PL_K_MIX] = 60; t.knob[PL_K_LEVEL] = 70; set(&t, 0, 0); NO_STEP("another sound altogether");
         t.knob[PL_K_VOL_MOVE] = 0; t.knob[PL_K_LEVEL] = 20; set(&t, 0, 0); NO_STEP("a volume and the output level from one end to the other");
+    }
+    {   /* an effect that starts: each of the twenty, from its module off, and with the whole pedal coming back from
+         * bypass. What an effect does to a steady sine is its own (a fuzz has edges, a tremolo chops): the start may
+         * not move the output more in a sample than the effect itself does once it runs, the sine's own movement
+         * allowed for. (An effect with a delay line reads silence until the line has filled: a start that is only a
+         * short blend would end before the sound comes, and the sound would then come as a step.) */
+        int bad = 0;
+        const double sine = 0.2 * 6.2831853 * 110.0 / 44100.0;      /* the 110 Hz sine's largest movement a sample */
+        for (uint32_t m = 0; m < PL_NMOD; m++) for (uint32_t fx = 0; fx < PL_NFX; fx++) for (int a = 0; a < 2; a++) for (int by = 0; by < 2; by++) {
+            double steady, begin;
+            one(&t, m, fx); t.knob[PL_K_AMT(m)] = a ? 100 : 50; t.knob[PL_K_TIME] = 20; t.knob[PL_K_RATE] = fx == PL_PITCH ? 85 : 50;
+            start(&t, 0); run(IN_SINE, 400);
+            steady = run(IN_SINE, 800).step;
+            if (by) { set(&t, 0, 1); run(IN_SINE, 20); set(&t, 0, 0); }
+            else { s = t; s.on = 0; set(&s, 0, 0); run(IN_SINE, 20); set(&t, 0, 0); }
+            begin = run(IN_SINE, 200).step;
+            if (begin > 1.5 * steady + sine) { bad++; printf("   %s at AMOUNT %d, %s: %.4f a sample at its start, %.4f once it runs\n", FX[m][fx], a ? 100 : 50, by ? "from bypass" : "its module switched on", begin, steady); }
+        }
+        CHECK(!bad, "each of the 20 effects starting, its module switched on or the pedal back from bypass: no step beyond what the effect does once it runs");
+    }
+    {   /* a jump of a knob under a running effect (a preset whose module keeps its effect), and a quick turn */
+        static const struct { uint8_t m, fx; } J[6] = {{PL_MOVE, PL_VIBRATO}, {PL_MOVE, PL_PHASER}, {PL_CHAR, PL_SWEETEN}, {PL_TEXT, PL_SQUASH}, {PL_MOVE, PL_DOUBLER}, {PL_TEXT, PL_CASSETTE}};
+        int bad = 0;
+        for (int k = 0; k < 6; k++) {
+            double steady, jump;
+            pl_coef_t c;
+            one(&t, J[k].m, J[k].fx); t.knob[PL_K_AMT(J[k].m)] = 100;
+            start(&t, 0); run(IN_SINE, 400); steady = run(IN_SINE, 400).step;
+            t.knob[PL_K_AMT(J[k].m)] = 10; start(&t, 0); run(IN_SINE, 400); steady = fmax(steady, run(IN_SINE, 400).step);
+            t.knob[PL_K_AMT(J[k].m)] = 100; pl_coefs(&t, 0, 0, &c); c.hard = 1; pl_commit(&eng, &c);
+            jump = run(IN_SINE, 60).step;
+            if (jump > 1.5 * steady + 0.0032) { bad++; printf("   %s, AMOUNT 10 to 100 at once: %.4f a sample, %.4f once it runs\n", FX[J[k].m][J[k].fx], jump, steady); }
+        }
+        CHECK(!bad, "a knob that jumps under a running effect, handed over as a jump: the module blends out and back, no step");
+        bad = 0;
+        for (int k = 0; k < 2; k++) {
+            double steady, turn = 0;
+            one(&t, J[k].m, J[k].fx); t.knob[PL_K_AMT(J[k].m)] = 40;
+            start(&t, 0); run(IN_SINE, 400); steady = run(IN_SINE, 400).step;
+            for (int d = 0; d < 6; d++) { t.knob[PL_K_AMT(J[k].m)] = (uint8_t)(45 + 5 * d); set(&t, 0, 0); turn = fmax(turn, run(IN_SINE, 12).step); }
+            if (turn > 2.0 * steady + 0.0032) { bad++; printf("   %s, AMOUNT turned quickly: %.4f a sample, %.4f steady\n", FX[J[k].m][J[k].fx], turn, steady); }
+        }
+        CHECK(!bad, "Vibrato's and Phaser's AMOUNT turned quickly, five at a time: the depth and the stages glide, no step");
+    }
+    {   /* Pitch at RATE's centre: the signal as it is, whatever AMOUNT says */
+        float x[PL_FR]; double worst = 0;
+        one(&t, PL_MOVE, PL_PITCH);
+        start(&t, 0); run(IN_SINE, 100);
+        for (int b = 0; b < 100; b++) { input(IN_SINE, x); pl_run(&eng, x, out); for (uint32_t i = 0; i < PL_FR; i++) worst = fmax(worst, fmax(fabsf(out[i] - x[i]), fabsf(out[PL_FR + i] - x[i]))); }
+        snprintf(what, sizeof what, "Pitch with RATE at its centre: no shift, the guitar as it is (it differs by %.5f at most)", worst);
+        CHECK(worst < 1e-3, what);
     }
     {   /* a tail is kept by a module whose effect stays: the reverb rings on while another module's effect changes */
         pl_default(&s); s.on = 4 | 8; s.fx[PL_DIFF] = PL_SPACE; s.knob[PL_K_TIME] = 90; s.knob[PL_K_AMT_DIFF] = 60;
