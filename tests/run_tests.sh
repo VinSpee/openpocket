@@ -40,6 +40,9 @@
 #  - hosted simulator: tools/sim.mjs driven over HTTP (controls, held buttons, screen, flash file, SysEx, the Web MIDI shim)
 #  - an app in the hosted simulator: firmware/apps/starter's own C files with tests/host as the chip, over the same HTTP
 #    interface: its controls, its sound at the two outputs, MIDI, its store, safe mode, the boot guard
+#  - PALETTE (firmware/apps/palette, docs/PALETTE.md): its engine's own code with the firmware's math library, under the
+#    sanitizers (every effect at its knobs' ends, changes without a step, bypass, the tempo); each effect on the standard
+#    signal (tests/palette_render.c); the app in the hosted simulator (controls, MIDI map, editor requests, store)
 #  - pedal skin: its input mapping (tools/sim/pedal-input.js)
 #  - sound: the WebAssembly engine on known signals, against the native build; the bundled loops against their manifest
 #  - Chocolate Plus files: tools/chocolate/fcp.py against a made-up export
@@ -89,6 +92,10 @@ echo "== base controls (firmware/base/input.h over base/controls.h: the pins and
 base_test test_base_input $CC -O1 -Wall -Wno-unused-function -Wno-unused-variable -Itests/host -Ifirmware tests/test_base_input.c
 echo "== base store (firmware/base/store.h: an app's own data in flash, kept by every update loader)"
 base_test test_base_store $CC -O1 -Wall -Wno-unused-function -Ifirmware tests/test_base_store.c
+echo "== PALETTE's engine (firmware/apps/palette/engine.c: twenty effects in four modules, changes without a step)"
+base_test test_palette $CC -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -Wall -Ifirmware/apps/palette tests/test_palette.c firmware/apps/palette/engine.c firmware/px_math.c -lm
+$CC -O2 -Wall -fno-vectorize -fno-slp-vectorize -Ifirmware/apps/palette -o build/palette_render tests/palette_render.c firmware/apps/palette/engine.c firmware/px_math.c -lm
+build/palette_render --runs 1 > build/palette_render.log || { cat build/palette_render.log; exit 1; }; echo "palette render: each effect on the standard signal is finite, under full scale and not silent (build/palette_render.log)"
 echo "== USB audio (the device code and the audio glue against a model of the controller and a computer)"
 UAF="-O1 -Wall -Wno-unused-function -Wno-int-to-pointer-cast -Iengine -Ifirmware -Ifirmware/bsp/chip"
 $CC $UAF tests/test_usb_audio.c -lm -o build/test_usb_audio
@@ -139,6 +146,8 @@ echo "== hosted simulator (tools/sim.mjs)"
 node tests/test_sim.mjs
 echo "== an app on the base firmware in the simulator (firmware/apps/starter, from its own C files: tools/sim.mjs --app)"
 node tests/test_app_sim.mjs
+echo "== PALETTE in the simulator (firmware/apps/palette, from its own C files)"
+node tests/test_palette_sim.mjs
 echo "== Bluetooth test image sources (third_party/jieli-ble)"
 node tests/test_ble_sources.mjs
 echo "== Bluetooth test image status codes"
