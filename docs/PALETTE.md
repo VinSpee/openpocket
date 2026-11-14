@@ -24,7 +24,7 @@ Nothing here has run on a pedal yet.
 | Tap tempo, MIDI clock, and the tempo-synced effects | The button lights, the tuner |
 | 80 presets in the app's own store, 20 factory sounds | An expression control over MIDI |
 | The pedal's controls and screen, the MIDI map of the reference, its own editor requests | Running a mono part of the chain once (a saving, the report's section 3) |
-| | A glide for every knob: a quick turn can tick where the knob sets a gain or a filter |
+| | A glide for every knob: a quick turn, or a value that jumps over MIDI, can tick where the knob sets a gain or a filter |
 | Host tests, the simulator with sound, the render report | |
 
 ## 2. The data model
@@ -67,9 +67,10 @@ between its input and its output.
 
 - A knob moves a little: the module takes the new numbers at the next block. Delay times, volumes, Vibrato's depth,
   and Phaser's stages glide.
-- A knob jumps under a running effect (another preset whose module keeps its effect, a value from MIDI or the editor
-  more than 5 away): the module's blend goes to its input, the module takes the new numbers, and the blend comes
-  back. Its memory is kept.
+- The knobs jump under a running effect (another preset whose module keeps its effect, another filter style): the
+  module's blend goes to its input, the module takes the new numbers, and the blend comes back. Its memory is kept.
+  A single knob set from MIDI or the editor is never treated as a jump, so a controller swept quickly does not hold
+  the module at its input.
 - Another effect, or a module switched off or on: the module's blend goes to its input in 5.8 ms, its memory is
   cleared, and the new effect is set. The effect then runs unheard while its input fades in and its memory fills:
   5.8 ms, 8.7 ms for Cassette, 26 ms for Pitch. Then the blend comes back. The other modules keep sounding, and so

@@ -121,9 +121,9 @@ Four things are not in these figures:
 
 A pedal must confirm all of this (section 5).
 
-One limit is known and left for the voicing: a knob turned quickly, five at a time, can tick in an effect where it
-sets a gain or a filter's frequency. Delay times, volumes, Vibrato's depth, and Phaser's stages glide. A jump of more
-than five is blended.
+One limit is known and left for the voicing: a knob turned quickly, five at a time, or a value that jumps over MIDI,
+can tick in an effect where it sets a gain or a filter's frequency. Delay times, volumes, Vibrato's depth, and
+Phaser's stages glide. Another preset's knobs are blended.
 
 ## 4. Memory against the declared regions
 

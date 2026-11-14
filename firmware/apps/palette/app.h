@@ -106,8 +106,9 @@ static void app_sound(const float *in, float *out) { pl_run(&ap_eng, in, out); }
 static void app_sound_reset(void) { pl_reset(&ap_eng); }
 static uint32_t ap_quarter(void) { return ap_clock_q ? ap_clock_q : ap_now.s.tempo ? 60000u / ap_now.s.tempo : 0u; }
 /* the sound, the tempo or bypass changed: the engine's numbers are made here, and handed over between two blocks. The
- * engine makes the change without a step (engine.h). jump: knobs changed by more than a turn of the knob does (another
- * preset, a value from MIDI or the editor): the engine then blends each module that keeps its effect */
+ * engine makes the change without a step (engine.h). jump: the knobs are another sound's (another preset, another
+ * filter style): the engine then blends each module that keeps its effect. A knob that moves, from the pedal, MIDI or
+ * the editor, is not a jump: a controller swept quickly would otherwise hold the module at its input */
 static void ap_apply(int jump)
 {
     pl_coef_t c;
@@ -158,15 +159,11 @@ static int ap_save(void)
 }
 /* one field of the sound, as MIDI, the editor and the controls set it (the editor's SET numbers); 0 = taken */
 enum { AP_F_FX = 16, AP_F_ON = 20, AP_F_STYLE = 24, AP_F_TEMPO, AP_F_BYPASS, AP_F_ORDER };
-#define AP_TURN 5u                              /* the most a knob moves in one step of the pedal's knob (turned quickly) */
 static int ap_set(uint32_t f, uint32_t v)
 {
     pl_sound_t *s = &ap_now.s;
     int jump = 0;
-    if (f < PL_NKNOB) {
-        const uint32_t to = v > 100u ? 100u : v, d = to > s->knob[f] ? to - s->knob[f] : s->knob[f] - to;
-        s->knob[f] = (uint8_t)to; jump = d > AP_TURN;
-    }
+    if (f < PL_NKNOB) s->knob[f] = (uint8_t)(v > 100u ? 100u : v);
     else if (f < AP_F_FX + PL_NMOD) { if (v >= PL_NFX) return 1; s->fx[f - AP_F_FX] = (uint8_t)v; s->on |= (uint8_t)(1u << (f - AP_F_FX)); }
     else if (f < AP_F_ON + PL_NMOD) s->on = (uint8_t)((s->on & ~(1u << (f - AP_F_ON))) | (v ? 1u << (f - AP_F_ON) : 0u));
     else if (f == AP_F_STYLE) { if (v >= PL_NSTYLE) return 1; s->style = (uint8_t)v; jump = 1; }
