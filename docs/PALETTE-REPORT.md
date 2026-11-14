@@ -47,6 +47,10 @@ part of full scale. The guitar's own peak is 0.197. Section 3 explains the four 
 |  | Interference | 0.0 | -0.7 | -0.1 | 0.480 | 161 | 2.0 | 4.14 | 1.6 |
 | The chain | Copy, MIX, level, fades, ceiling, with four modules on | | | | | 202 | 2.5 | 3.41 | 1.3 |
 
+The same table as a chart:
+
+![Loudness, peak and estimated cost of each of the twenty effects](screens/palette/render-report.png)
+
 Three rows differ from the guitar's loudness on purpose:
 
 - **Swell** takes the start of each note away, which is the effect.

@@ -126,6 +126,20 @@ in its colour, its effect, and its AMOUNT. A module that is off is dim. Under th
 page, with the selected line lit. The last line shows the load (DSP), its peak since the sound last changed (PEAK),
 and the number of blocks that came late (LATE), or a note such as SAVED or BYPASS.
 
+These pictures are the pedal's 240 x 240 screen, drawn by the app's own code in the simulator
+(`node tools/op.mjs sim --app palette`, `GET /api/screen.rgb565`), with each pixel doubled. The simulator's time does
+not pass inside the audio interrupt, so DSP and PEAK read 0 there.
+
+| | | |
+| --- | --- | --- |
+| <img src="screens/palette/01-home.png" width="240" alt="Preset 1 with four module tiles and the sound's page"><br>Preset 1: four tiles in the chain's order, the sound's page | <img src="screens/palette/02-module-page.png" width="240" alt="Character's page with AMOUNT selected"><br>AMP: Character's page, on AMOUNT | <img src="screens/palette/03-effect-change.png" width="240" alt="Character now runs Fuzz"><br>AMP again: the next effect, FUZZ |
+| <img src="screens/palette/04-order-move.png" width="240" alt="Diffusion moved to the first place of the chain"><br>DLY, FX, the knob: Diffusion moved to the front | <img src="screens/palette/05-preset-change.png" width="240" alt="Preset 2, WARM DRIVE"><br>The right footswitch: preset 2 | <img src="screens/palette/06-bypass.png" width="240" alt="Bypass: the header is dim and the last line says BYPASS"><br>A footswitch held: bypass |
+| <img src="screens/palette/07-tap-tempo.png" width="240" alt="The TEMPO line shows 120 BPM"><br>REV twice: the tap sets the tempo | <img src="screens/palette/08-full-chain.png" width="240" alt="Preset 20 with the four modules on"><br>Preset 20: the four modules on | |
+
+The same controls in sequence, 24 steps, each with a caption:
+
+![PALETTE's controls in the simulator: 24 captioned steps](recordings/palette-controls.gif)
+
 ## 6. Presets
 
 The app keeps 80 slots through `base/store.h` under its own magic number. The first 20 slots have factory sounds
