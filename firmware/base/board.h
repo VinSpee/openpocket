@@ -43,7 +43,12 @@ enum { RED=0xF800, GRN=0x07E0, BLU=0x001F, WHT=0xFFFF, BLK=0x0000, CYN=0x07FF, Y
 extern uint32_t _data_start[], _data_end[], _data_load[], _bss_start[], _bss_end[];
 extern uint32_t _rt_start[], _rt_end[], _rt_load[], _bss_hi_start[], _bss_hi_end[], _pool_tail_start[], _pool_tail_end[],
                 _bss_lo_start[], _bss_lo_end[];
-static volatile struct { uint32_t magic, pending, failed; } guard __attribute__((section(".noinit")));
+/* where an object lives (the simulator of an app, tests/host, has no such sections: it defines both empty) */
+#ifndef OP_NOINIT
+#define OP_NOINIT __attribute__((section(".noinit")))   /* kept across a reset */
+#define OP_POOL   __attribute__((section(".pool")))     /* the app's POOL region (memory.ld): its engine's state, not zeroed at the start */
+#endif
+static volatile struct { uint32_t magic, pending, failed; } guard OP_NOINIT;
 
 static uint32_t ms_now(void) { return (uint32_t)(fm1_ticks() / (FM1_TICKS_PER_US * 1000u)); }
 

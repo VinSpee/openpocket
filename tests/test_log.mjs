@@ -138,6 +138,18 @@ r = await run(dev.access, fast);
 ok(r.code === 3 && r.last.level === "identity" && /identity/.test(r.last.verdict.reason), `stock firmware: ${r.last.verdict.reason}`);
 await dev.end();
 
+// an alternative firmware (an app on the base firmware) is named, not taken for OpenPocket or for the official firmware
+{
+  const fix = mkdtempSync(join(tmpdir(), "oplogfix-"));
+  (await import("node:child_process")).execFileSync("python3", [join(ROOT, "tests", "fixtures.py"), fix], { stdio: "ignore" });
+  const alt = simAccess([join(fix, "flash_alt.bin")]);
+  await alt.ready;
+  r = await run(alt.access, fast);
+  ok(r.code === 3 && r.last.level === "identity" && /runs STARTER v01, an alternative firmware, not OpenPocket/.test(r.last.verdict.reason) && /flash --confirm-flash/.test(r.last.verdict.reason),
+    `an alternative firmware: ${r.last.verdict.reason}`);
+  await alt.end();
+}
+
 const port = (name) => ({ name, state: "connected", onmidimessage: null, open: async () => {}, send: () => {} });
 const mute = { inputs: new Map([["OpenPocket", port("OpenPocket")]]), outputs: new Map([["OpenPocket", port("OpenPocket")]]) };
 r = await run(mute, fast);

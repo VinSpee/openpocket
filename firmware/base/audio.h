@@ -16,6 +16,9 @@
  *   dsp_out   a_out -> a_res: the NaN guard, the mutes, the change fade, the MASTER volume, the soft knee
  *   dsp_load  the block's load, and the safety bypass when it stays above the limit 8 blocks running
  *   a_output  a_res -> the I2S's output block, both channels; USB audio
+ * The guitar is mono (the converter's right input carries noise only). The app's sound is mono too, and then goes to
+ * both outputs alike, unless the app's file defines A_CH 2 before this one: a_out and a_res then hold the left block
+ * followed by the right block, and every stage here treats the two alike.
  * Between a_in and a_out is the app's sound. The app's file provides, after this one:
  *   a_block(data, len)  a guitar block arrived: a_input, then its sound made, or started on another core
  *   a_send(d, n)        an output block to fill: that sound finished, then a_output
@@ -57,12 +60,15 @@ void free(void *p) { (void)p; }
 #endif
 /* memset / memcpy: felucca-bsp libc.c (included by openpocket.c) */
 
+#ifndef JL_GPIO
+#define JL_GPIO 0x50000u                               /* the ports' registers (a host build has its own: tests/host) */
+#endif
 static volatile uint32_t *jl_preg(uint32_t gpio, uint32_t off)
 {
     uint32_t port = gpio >> 4;
     if (port == 3u || port > 7u) return 0;             /* no port D (flash) */
     if (port == 2u && (gpio & 15u) == 7u) return 0;    /* PC7 = display */
-    return (volatile uint32_t *)(0x50000u + port * 0x40u + off);
+    return (volatile uint32_t *)(JL_GPIO + port * 0x40u + off);
 }
 static void jl_rmw(uint32_t g, uint32_t off, int on)
 {
@@ -80,8 +86,12 @@ int gpio_set_pull_down(uint32_t g, int on)   { jl_rmw(g, 0x14, on); return 0; }
 #define A_FR     128u                                  /* frames per I2S block */
 #define A_BUDGET (A_FR * 1000000u / 44100u * FM1_TICKS_PER_US)   /* ticks available per block (~2.9 ms) */
 #define G_AMP_EN 9u                                    /* PA9: SGM8905 amp enable */
-static float a_in[A_FR], a_out[A_FR];
-static int32_t a_res[A_FR];                            /* output, 24-bit right-aligned */
+#ifndef A_CH
+#define A_CH 1u                                        /* the channels of the app's sound: 1, or 2 (left, then right) */
+#endif
+#define A_OUT_N (A_CH * A_FR)                          /* samples in a_out and a_res: channel c is at c * A_FR */
+static float a_in[A_FR], a_out[A_OUT_N];
+static int32_t a_res[A_OUT_N];                         /* output, 24-bit right-aligned */
 static volatile float a_lvl[2];                        /* input L / R: mean square, in 24-bit steps */
 /* input level in dB below full scale (dBFS), rounded; -199 = digital silence */
 static int a_level_db(int ch)
@@ -126,22 +136,39 @@ static void a_block(const uint8_t *data, int len);     /* the app's (see above) 
 static void a_send(int32_t *d, uint32_t n);
 static void a_collect(void);
 
-static void dsp_out(void)                              /* a_out -> a_res: safety net, mutes, volume */
+/* one sample through the output's soft knee (dsp_out says why); *clip is set when the sample reached it */
+static inline float a_knee(float v, int *clip)
+{
+    float m = v < 0.0f ? -v : v;
+    if (m > 0.8f) {
+        float t = (m - 0.8f) * 5.0f;
+        m = 0.8f + 0.2f * t / (1.0f + t);
+        v = v < 0.0f ? -m : m;
+        *clip = 1;
+    }
+    return v;
+}
+static void dsp_out(void)                              /* a_out -> a_res: safety net, mutes, volume (each channel alike) */
 {
     /* safety net: a NaN/Inf would poison the filters forever (silence). Output silence and
      * the main loop resets the engine (audio_poll). */
-    for (uint32_t i = 0; i < A_FR; i++) {
+    for (uint32_t i = 0; i < A_OUT_N; i++) {
         float v = a_out[i];
         if (v != v || v > 1.0e6f || v < -1.0e6f) { a_nan = 1; break; }
     }
-    if (a_nan) for (uint32_t i = 0; i < A_FR; i++) a_out[i] = 0.0f;
-    if (a_mute) for (uint32_t i = 0; i < A_FR; i++) a_out[i] = 0.0f;
+    if (a_nan) for (uint32_t i = 0; i < A_OUT_N; i++) a_out[i] = 0.0f;
+    if (a_mute) for (uint32_t i = 0; i < A_OUT_N; i++) a_out[i] = 0.0f;
     {   /* tuner mute, with a short ramp both ways (no click) */
         float tg = a_tmute ? 0.0f : 1.0f;
         if (a_mg != tg) {
-            for (uint32_t i = 0; i < A_FR; i++) { a_mg += (tg - a_mg) * 0.005f; a_out[i] *= a_mg; }
+            for (uint32_t i = 0; i < A_FR; i++) {
+                a_mg += (tg - a_mg) * 0.005f; a_out[i] *= a_mg;
+#if A_CH == 2
+                a_out[A_FR + i] *= a_mg;
+#endif
+            }
             if (tg > 0.5f ? a_mg > 0.999f : a_mg < 0.0005f) a_mg = tg;
-        } else if (tg == 0.0f) for (uint32_t i = 0; i < A_FR; i++) a_out[i] = 0.0f;
+        } else if (tg == 0.0f) for (uint32_t i = 0; i < A_OUT_N; i++) a_out[i] = 0.0f;
     }
     /* the output: a soft knee from 0.8 of full scale (the same slope there, then bending towards full scale, which it
      * never reaches) instead of a hard clip, whose corners crackle on the loudest notes */
@@ -154,24 +181,23 @@ static void dsp_out(void)                              /* a_out -> a_res: safety
                 xf += st;
                 if (st > 0.0f ? xf > 1.0f : xf < 0.0f) xf = tg;
                 a_out[i] *= xf;
+#if A_CH == 2
+                a_out[A_FR + i] *= xf;
+#endif
             }
             a_xf = xf;
             if (xf == 1.0f && a_swin) { a_sw1 = fm1_ticks(); a_swin = 0; }
-        } else if (tg == 0.0f) for (uint32_t i = 0; i < A_FR; i++) a_out[i] = 0.0f;
+        } else if (tg == 0.0f) for (uint32_t i = 0; i < A_OUT_N; i++) a_out[i] = 0.0f;
     }
     const float g = a_gain;                            /* v38: the volume glides there (~3 ms), no zipper */
     float gv = a_gv;
     int clip = 0;
     for (uint32_t i = 0; i < A_FR; i++) {
         gv += (g - gv) * 0.008f;
-        float v = a_out[i] * gv, m = v < 0.0f ? -v : v;
-        if (m > 0.8f) {
-            float t = (m - 0.8f) * 5.0f;
-            m = 0.8f + 0.2f * t / (1.0f + t);
-            v = v < 0.0f ? -m : m;
-            clip = 1;
-        }
-        a_res[i] = (int32_t)(v * 8388607.0f);
+        a_res[i] = (int32_t)(a_knee(a_out[i] * gv, &clip) * 8388607.0f);
+#if A_CH == 2
+        a_res[A_FR + i] = (int32_t)(a_knee(a_out[A_FR + i] * gv, &clip) * 8388607.0f);
+#endif
     }
     a_gv = gv;
     if (clip) a_clip++;
@@ -316,7 +342,11 @@ static void a_input(const uint8_t *data, int len)     /* a guitar block from the
 static void a_output(int32_t *d, uint32_t n)           /* a_res to an output block of n frames, both channels; USB audio */
 {
     if (n > A_FR) n = A_FR;
+#if A_CH == 2
+    for (uint32_t i = 0; i < n; i++) { d[2u * i] = a_res[i]; d[2u * i + 1u] = a_res[A_FR + i]; }
+#else
     for (uint32_t i = 0; i < n; i++) d[2u * i] = d[2u * i + 1u] = a_res[i];
+#endif
 #if OP_UAUDIO
     if (a_ua) {                                        /* v42: USB audio */
         const uint32_t t = fm1_ticks();
