@@ -3,7 +3,7 @@
 // bridged to the simulated pedal (tests/devsim.c): Connect, then Install, as a user would; screenshots in OUTDIR.
 //   node tests/test_page.mjs OUTDIR
 import { spawn, execFileSync } from "node:child_process";
-import { mkdtempSync, cpSync, readFileSync } from "node:fs";
+import { mkdtempSync, cpSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, extname } from "node:path";
@@ -131,6 +131,40 @@ ok(/sound bank/.test(await page.textContent("#msg")), "BlackBox V21: no bank rep
 await page.click("#factory-uboot");
 await page.waitForFunction(() => /USB recovery requested/.test(document.getElementById("msg").textContent));
 ok(simLog.includes("uboot") && !simLog.some((l) => /step[12]/.test(l)), "BlackBox V21: recovery asks for UBOOT without running an OTA");
+
+// an official firmware newer than any the page knows: Install refuses before the upgrade command, names the known one
+sim.stdin.end(); sim = null; simLog.length = 0; buf = "";
+await page.reload();
+startSim("--stock", "PocketX_017");
+await page.click("#connect");
+await page.waitForSelector("#install:enabled", { timeout: 15000 });
+await page.click("#install");
+await page.waitForSelector("#msg.err", { timeout: 15000 });
+ok(/official firmware 017.*nothing was sent.*PocketX_016/s.test(await page.textContent("#msg")), "official PocketX_017 (unknown): Install refused, the known 016 named");
+ok(!simLog.some((l) => /step[12]/.test(l)), "official PocketX_017: no update step ran on the pedal");
+await page.screenshot({ path: join(OUT, "page_4b_untested.png"), fullPage: true });
+
+// a package that is not the manifest's (one byte changed on the site): refused by its SHA-256, before the pedal is asked
+sim.stdin.end(); sim = null; simLog.length = 0; buf = "";
+{
+  const f = join(SITE, "firmware", "PocketX_924.fwsc"), good = readFileSync(f), bad = Buffer.from(good);
+  bad[bad.length >> 1] ^= 1;
+  writeFileSync(f, bad);
+  await page.reload();
+  startSim();
+  await page.click("#connect");
+  await page.waitForSelector("#install:enabled", { timeout: 15000 });
+  await page.click("#install");
+  await page.waitForSelector("#msg.err", { timeout: 15000 });
+  ok(/SHA-256 mismatch/.test(await page.textContent("#msg")), "a package that differs from the manifest: refused (SHA-256)");
+  ok(!simLog.some((l) => /step[12]/.test(l)), "the changed package: no update step ran on the pedal");
+  writeFileSync(f, good);
+}
+
+// the USB rescue for a pedal the page cannot reach: Mac and Windows steps, read-only first
+ok(/Windows/.test(await page.textContent("[data-t=rescuewinsteps]")) && /RESCUE\.bat/.test(await page.textContent("[data-t=rescuewinsteps]")) &&
+   /make rescue/.test(await page.textContent("[data-t=rescuemacsteps]")) && /read-only/.test(await page.textContent("[data-t=rescueusb]")),
+   "rescue section: the USB rescue from a Mac and from Windows, read-only first");
 
 // a test channel: only through ?channel=NAME, from its own folder, with its banner; the normal page has none
 cpSync(join(FIX, "firmware"), join(SITE, "firmware", "midi-test"), { recursive: true });

@@ -5,6 +5,7 @@
 // Step 1: the running firmware (the official one, or OpenPocket's ota.c) reads parts of the package and stages its
 // update loader, then resets into it. Step 2: the loader reads the whole image and writes it. In both steps the
 // device sends cmd 0x30 read requests on the package's logical image and the page answers them.
+import { OFFICIAL } from "./pxpkg.js";
 
 const HS_QUERY = [0xF0, 0x00, 0x32, 0x45, 0x00, 0x00, 0x00, 0x40, 0x7F, 0xF7];
 const UPGRADE = [0xF0, 0x22, 0x24, 0x35, 0x7F, 0xF7];
@@ -28,7 +29,7 @@ export const IS_OFFICIAL = (id) => MODELS.includes(id.model) && id.version < 900
 export const PORT_RE = /openpocket|pocket|blackbox|black.?box|ota|usb.?midi|composite|jieli|sinco|m-?vave|donner/i;
 
 // errors carry a code the page translates: notfound, model, stopped, noloader, lost, noreturn, mismatch, badreq,
-// foreign (detail: the loader's identity)
+// foreign (detail: the loader's identity), untested (detail: the pedal's identity)
 function fail(code, msg, detail = "") { const e = new Error(msg); e.code = code; e.detail = detail; return e; }
 
 export function pack7(data) {
@@ -96,6 +97,26 @@ export function parseInfo(pkt) {
     if (!/^[a-z0-9-]{1,15}$/.test(app) || app === OPENPOCKET || !name) return null;
     return { app, name, version, identity, proto: 0, caps: APP_CAPS.filter((_, k) => caps >> k & 1), editor };
   } catch (_) { return null; }
+}
+
+// The official firmware the page has been checked against, newest first per model (pxpkg.js OFFICIAL).
+const NEWEST_OFFICIAL = Object.fromEntries(MODELS.map((m) => [m, Math.max(...OFFICIAL.filter((o) => o.model === m)
+  .map((o) => parseInt(o.product.split("_")[1], 10)))]));
+
+// Why installing product must not start on the pedal that answered with identity id, or null when it may. The USB
+// rescue (tools/uboot_rescue.py) reads the pedal's flash head and refuses an image for another layout; over MIDI the
+// head cannot be read, so the firmware the pedal runs stands in for it. OpenPocket's update loader is written over
+// an official firmware only up to the newest one this page knows: a newer one may have moved what the loader relies
+// on, and a pedal left half-written by it does not start. The way back (an official package) is the vendor's own update.
+export function startRefusal(id, product) {
+  if (!IS_OFFICIAL(id) || parseInt(product.split("_")[1], 10) < 900) return null;
+  const newest = NEWEST_OFFICIAL[id.model];
+  if (id.version <= newest) return null;
+  const v = (n) => String(n).padStart(3, "0");
+  return `The pedal runs the official firmware ${v(id.version)} (${id.text}), newer than the official ${id.model} firmware ` +
+    `this installer has been checked with (up to ${v(newest)}). Installing ${product} over it could leave the pedal ` +
+    `unable to start, so nothing was sent. Install the official ${id.model}_${v(newest)} package first (the installer ` +
+    `page's step 3, "Back to the official firmware", or the vendor's updater), then install again.`;
 }
 
 // what a pedal runs, in words, from its identity and its product (null: it did not say)
@@ -172,6 +193,7 @@ export class Updater {
     this.access = access;
     this.log = log || (() => {});
     this.t = { ...TIMING, ...timing };
+    this.busy = new Set();            // pedal-like MIDI ports that would not open: another program holds them
   }
 
   // the first in/out pair (same port name) that answers the handshake and passes filter
@@ -182,7 +204,8 @@ export class Updater {
       if (!PORT_RE.test(input.name || "")) continue;
       const output = outs.find((o) => o.name === input.name) || (outs.length === 1 ? outs[0] : null);
       if (!output) continue;
-      try { await input.open(); await output.open(); } catch (_) { continue; }
+      // Windows lets one program at a time use a MIDI port: a port held by M-EFCS, a DAW or another tab fails to open
+      try { await input.open(); await output.open(); this.busy.delete(input.name); } catch (_) { this.busy.add(input.name); continue; }
       const link = new Link(input, output);
       const id = await handshake(link, 2);
       if (id && (!filter || filter(id))) return { link, id, name: input.name };
@@ -204,7 +227,9 @@ export class Updater {
 
   seen() {
     const names = [...this.access.inputs.values()].filter((p) => p.state !== "disconnected").map((p) => p.name || "?");
-    return names.length ? ` (MIDI: ${names.join(", ")})` : " (MIDI: -)";
+    const busy = [...this.busy].filter((n) => names.includes(n));
+    return (names.length ? ` (MIDI: ${names.join(", ")})` : " (MIDI: -)") +
+      (busy.length ? ` (in use by another program: ${busy.join(", ")}; close it, then try again)` : "");
   }
 
   async waitFor(filter, ms) {
@@ -295,7 +320,10 @@ export class Updater {
     }
   }
 
+  // every check comes before the first byte that changes anything: the upgrade command is the point of no return
   async installOn(dev, image, product, step, app) {
+    const why = startRefusal(dev.id, product);
+    if (why) { dev.link.close(); throw fail("untested", why, dev.id.text); }
     step("start", dev.id.text);
     dev.link.send(UPGRADE);
     await sleep(this.t.afterUpgrade);
@@ -325,7 +353,7 @@ export class Updater {
     step("reboot");
     await sleep(this.t.afterWrite);
     const back = await this.waitFor((id) => MODELS.includes(id.model), this.t.backWait);
-    if (!back) throw fail("noreturn", "the pedal did not come back: power-cycle it");
+    if (!back) throw fail("noreturn", "the update was written and checked, but the pedal did not come back: switching it off and on is safe now");
     const runs = app && back.id.text === product ? await queryProduct(back.link, this.t.info) : null;
     back.link.close();
     if (back.id.text !== product) throw fail("mismatch", `written, but the pedal reports ${back.id.text}`, back.id.text);

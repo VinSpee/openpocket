@@ -35,9 +35,9 @@ print(app[i + 11:i + 31].split(b'\\0')[0].decode(), 'CRC-OK' if not bad else 'CR
 const appIn = (dump) => execFileSync("python3", ["-c", appOf, dump, join(ROOT, "tools")]).toString().trim();
 
 // run the flasher on a simulated pedal; resolves { code, out, log, dump }
-async function run(argv, { send, flash = old } = {}) {
+async function run(argv, { send, flash = old, stock } = {}) {
   const dump = join(TMP, `dump${Math.random().toString(36).slice(2)}.bin`);
-  const sim = simAccess([flash, "--dump", dump]);
+  const sim = simAccess([flash, "--dump", dump, ...(stock ? ["--stock", stock] : [])]);
   await sim.ready;
   if (send) for (const o of sim.access.outputs.values()) { const s = o.send; o.send = (b) => send(b, s); }
   const lines = [];
@@ -77,6 +77,13 @@ const say = (lines) => (l) => lines.push(l);
 {
   const r = await run(["--confirm-flash", "--package", bb, "--manifest", man]);
   ok(r.code === 2 && /wrong model/.test(r.out) && untouched(r), "BlackBox package on a Pocket X: refused, flash unchanged");
+}
+
+// 4b. an official firmware newer than any the installer knows: refused before the upgrade command (pxota.js
+//     startRefusal), in a dry run, an update and a rescue alike
+for (const argv of [["--dry-run"], ["--confirm-flash"], ["--rescue", "--dry-run", "--timeout", "5"], ["--rescue", "--confirm-flash", "--timeout", "5"]]) {
+  const r = await run([...argv, "--package", px, "--manifest", man], { stock: "PocketX_017" });
+  ok(r.code === 2 && /REFUSED: .*official firmware 017.*PocketX_016/.test(r.out) && untouched(r), `${argv.join(" ")} over an unknown official PocketX_017: refused, flash unchanged`);
 }
 
 // 5. damaged or unlisted package: refused before any MIDI

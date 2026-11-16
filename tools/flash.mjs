@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { webcrypto } from "node:crypto";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Updater, IS_OTA, OUR_LOADER, MODELS, TIMING, OPENPOCKET, firmwareName } from "../docs/pxota.js";
+import { Updater, IS_OTA, OUR_LOADER, MODELS, TIMING, OPENPOCKET, firmwareName, startRefusal } from "../docs/pxota.js";
 import { verifyPackage } from "../docs/pxpkg.js";
 
 globalThis.crypto ??= webcrypto;                             // Node 18 has no global; the page's browser does
@@ -29,8 +29,10 @@ const USAGE = `usage: node tools/op.mjs flash --dry-run [--package FILE] [--mani
   --app NAME       install the alternative firmware NAME (built with \`node tools/op.mjs app NAME\`: its manifest is
                    build/apps/NAME/manifest.json) in place of OpenPocket. Without it only OpenPocket is installed,
                    which is also the way back from an alternative firmware`;
-const RECOVERY = `Recovery: if the pedal does not start, power-cycle it and run this again. If it stays dead, use the SD-card
-recovery (README.md, "Install": the \`flash/\` folder, fm1buddy on an ESP32-S3, \`make appimage DUMP=fm1-1.bin\` or makeimage.bat).`;
+const RECOVERY = `Recovery: do not switch the pedal off while it is in update mode (an update that stopped): reconnect the cable and
+run this again with --rescue --package FILE, which finishes it. Once the update has finished, switching it off and on is safe.
+A BlackBox that then shows a black screen or restarts in a loop: the USB rescue, \`make rescue\` on a Mac or RESCUE.bat on
+Windows (docs/RESCUE.md). The SD-card recovery is the second route (README.md, "Install": the \`flash/\` folder, fm1buddy on an ESP32-S3).`;
 
 class Refusal extends Error {}                               // a check that came first: nothing was sent to the pedal
 const refuse = (msg) => new Refusal(msg);
@@ -143,6 +145,7 @@ async function rescue(args, given, access, t, say) {
           if (!OUR_LOADER(dev.id)) throw refuse(`the pedal is in the update mode of another firmware (${dev.id.text}); a rescue only finishes an OpenPocket update. Nothing was sent.`);
           say(`it is in update mode (${dev.id.text}); a real rescue would finish the update with ${given.product}.`);
         } else if (!want) throw refuse(`wrong model: the pedal is a ${dev.id.text}, no package given for it. Nothing was sent.`);
+        else if (startRefusal(dev.id, want.product)) throw refuse(startRefusal(dev.id, want.product));
         say(`dry run ok: a rescue would install ${pkgName(want || given)} on ${dev.id.text}. Nothing was written.`);
         return 0;
       }
@@ -200,10 +203,12 @@ export async function main(argv, { access, say = console.log, timing } = {}) {
     if (args.rescue) return await rescue(args, pkg, access, t, say);
     const dev = await detect(access, t);
     say(`pedal: ${devName(dev)} on "${dev.name}"`);
-    if (IS_OTA(dev.id)) throw refuse(`the pedal is in update mode (${dev.id.text}), not running firmware. Power-cycle it, then try again; the installer page can also finish an interrupted update.`);
+    if (IS_OTA(dev.id)) throw refuse(`the pedal is in update mode (${dev.id.text}): an update stopped before it was finished. Do not switch it off; finish it with --rescue --confirm-flash --package FILE (the package that was being installed), or with Resume on the installer page.`);
 
     if (!pkg) { pkg = await loadPackage(args, { model: dev.id.model }); say(`package ${describe(pkg)}`); }
     if (pkg.model !== dev.id.model) throw refuse(`wrong model: the pedal is a ${dev.id.text}, the package is ${pkg.product}. Nothing was sent.`);
+    const why = startRefusal(dev.id, pkg.product);
+    if (why) throw refuse(why);
 
     if (args.dryRun) { say(`dry run ok: would update ${devName(dev)} -> ${pkgName(pkg)}. Nothing was written.`); return 0; }
 
@@ -218,7 +223,7 @@ export async function main(argv, { access, say = console.log, timing } = {}) {
     wayBack(pkg, say);
     return 0;
   } catch (e) {
-    if (e instanceof Refusal) { say(`REFUSED: ${e.message}`); return 2; }
+    if (e instanceof Refusal || e.code === "untested") { say(`REFUSED: ${e.message}`); return 2; }   // (untested: Updater's own start check)
     say(`FAILED: ${WHY[e.code] || "error"}: ${e.message}${e.detail ? ` [${e.detail}]` : ""}`);
     say(RECOVERY);
     return 1;
