@@ -103,20 +103,18 @@ export function parseInfo(pkt) {
 const NEWEST_OFFICIAL = Object.fromEntries(MODELS.map((m) => [m, Math.max(...OFFICIAL.filter((o) => o.model === m)
   .map((o) => parseInt(o.product.split("_")[1], 10)))]));
 
-// Why installing product must not start on the pedal that answered with identity id, or null when it may. The USB
+// A warning for a pedal that runs an official firmware newer than the newest one this page knows, else null. The USB
 // rescue (tools/uboot_rescue.py) reads the pedal's flash head and refuses an image for another layout; over MIDI the
-// head cannot be read, so the firmware the pedal runs stands in for it. OpenPocket's update loader is written over
-// an official firmware only up to the newest one this page knows: a newer one may have moved what the loader relies
-// on, and a pedal left half-written by it does not start. The way back (an official package) is the vendor's own update.
-export function startRefusal(id, product) {
-  if (!IS_OFFICIAL(id) || parseInt(product.split("_")[1], 10) < 900) return null;
+// head cannot be read, so the running firmware stands in for it. This is a precaution, not a block: installing over
+// it needs the user's confirmation (acceptNewer), and nothing else changes.
+export function newerOfficialWarning(id) {
+  if (!IS_OFFICIAL(id)) return null;
   const newest = NEWEST_OFFICIAL[id.model];
   if (id.version <= newest) return null;
   const v = (n) => String(n).padStart(3, "0");
-  return `The pedal runs the official firmware ${v(id.version)} (${id.text}), newer than the official ${id.model} firmware ` +
-    `this installer has been checked with (up to ${v(newest)}). Installing ${product} over it could leave the pedal ` +
-    `unable to start, so nothing was sent. Install the official ${id.model}_${v(newest)} package first (the installer ` +
-    `page's step 3, "Back to the official firmware", or the vendor's updater), then install again.`;
+  return `The pedal runs the official firmware ${v(id.version)} (${id.text}), newer than the newest official ${id.model} ` +
+    `firmware this installer has been checked with (${v(newest)}). This version check is a precaution: no evidence yet ` +
+    `shows that a newer official release is what left pedals unable to start. Installing over it is untested.`;
 }
 
 // what a pedal runs, in words, from its identity and its product (null: it did not say)
@@ -273,24 +271,25 @@ export class Updater {
   // product: the package identity ("PocketX_924", or the official "PocketX_016" for the way back)
   // opts.app: the product the package is (OPENPOCKET, or an alternative firmware's id). When given, the pedal must
   // say it runs that product once it is back: the identity alone is the same for every product on the base
+  // opts.acceptNewer: the user confirmed installing over an official firmware newer than the page knows (newerOfficialWarning)
   async install(image, product, onStep, opts = {}) {
     const step = onStep || (() => {});
     const [model] = product.split("_");
     const dev = await this.find((id) => MODELS.includes(id.model));
     if (!dev) throw fail("notfound", "pedal not found", this.seen());
     if (dev.id.model !== model) { dev.link.close(); throw fail("model", `the pedal is a ${dev.id.text}, the package is ${product}`, dev.id.text); }
-    return this.installOn(dev, image, product, step, opts.app);
+    return this.installOn(dev, image, product, step, opts.app, opts.acceptNewer);
   }
 
   // rescue (issue #1): a pedal that restarts every few seconds. The first pedal that answers gets the package of
   // its model at once (pick(model) -> { image, product }, already fetched): the upgrade command stops its DSP.
-  async rescue(pick, onStep) {
+  async rescue(pick, onStep, opts = {}) {
     const step = onStep || (() => {});
     const dev = await this.find((id) => MODELS.includes(id.model));
     if (!dev) return null;
     const pkg = pick(dev.id.model);
     if (!pkg) { dev.link.close(); throw fail("pkg", dev.id.model, dev.id.model); }
-    return this.installOn(dev, pkg.image, pkg.product, step, pkg.app);
+    return this.installOn(dev, pkg.image, pkg.product, step, pkg.app, opts.acceptNewer);
   }
 
   // rescue for a program with no button to press again (the command line): rescue() again and again until a pedal is
@@ -300,12 +299,12 @@ export class Updater {
   // `loader` ({ image, product }): a loader does not report its model, so the caller names the package.
   // onEvent("wait", msLeft) and onEvent("retry", error) report on the way. Returns the version the pedal reports, or null
   // when no pedal answered in time.
-  async rescueWithin(pick, onStep, { timeoutMs, onEvent, loader = null } = {}) {
+  async rescueWithin(pick, onStep, { timeoutMs, onEvent, loader = null, acceptNewer = false } = {}) {
     const end = Date.now() + timeoutMs, tell = onEvent || (() => {});
     let pkg = null;
     for (;;) {
       try {
-        const done = await this.rescue((model) => (pkg = pick(model)), onStep);
+        const done = await this.rescue((model) => (pkg = pick(model)), onStep, { acceptNewer });
         if (done) return done;
         const half = pkg || loader;
         if (half && await this.resume(half.image, half.product, onStep, { app: half.app })) return half.product;
@@ -321,9 +320,9 @@ export class Updater {
   }
 
   // every check comes before the first byte that changes anything: the upgrade command is the point of no return
-  async installOn(dev, image, product, step, app) {
-    const why = startRefusal(dev.id, product);
-    if (why) { dev.link.close(); throw fail("untested", why, dev.id.text); }
+  async installOn(dev, image, product, step, app, acceptNewer = false) {
+    const why = parseInt(product.split("_")[1], 10) >= 900 && newerOfficialWarning(dev.id);
+    if (why && !acceptNewer) { dev.link.close(); throw fail("untested", `${why} Nothing was sent; confirm to install anyway.`, dev.id.text); }
     step("start", dev.id.text);
     dev.link.send(UPGRADE);
     await sleep(this.t.afterUpgrade);

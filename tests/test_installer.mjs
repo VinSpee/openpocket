@@ -9,7 +9,7 @@ import { mkdtempSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Updater, IS_OPENPOCKET, startRefusal } from "../docs/pxota.js";
+import { Updater, IS_OPENPOCKET, newerOfficialWarning } from "../docs/pxota.js";
 import { productOf, logicalImage, checkOfficial } from "../docs/pxpkg.js";
 import { simAccess } from "./simpedal.mjs";
 
@@ -88,31 +88,36 @@ ok(productOf(px) === "PocketX_924" && productOf(bb) === "BlackBox_924", "package
   await sim.end();
 }
 
-// 4b. an official firmware newer than any the installer knows (the USB rescue's head check, over MIDI): refused before
-//     the upgrade command, by install and by rescue alike; the way back to an official package is not concerned
+// 4b. an official firmware newer than any the installer knows (the USB rescue's head check, over MIDI): a precaution
+//     that needs the user's confirmation. Without it nothing is sent, by install and by rescue alike; with it the
+//     install completes. The way back to an official package is not concerned
 {
   const pocket = (v) => ({ model: "PocketX", version: v, text: `PocketX_${String(v).padStart(3, "0")}` });
   const box = (v) => ({ model: "BlackBox", version: v, text: `BlackBox_${String(v).padStart(3, "0")}` });
-  ok(startRefusal(pocket(16), "PocketX_924") === null && startRefusal(box(21), "BlackBox_924") === null && startRefusal(box(20), "BlackBox_924") === null,
-    "start check: the official firmware the page knows (PocketX_016, BlackBox_020 / 021) may be updated");
-  ok(/BlackBox_021/.test(startRefusal(box(23), "BlackBox_924") || "") && /PocketX_016/.test(startRefusal(pocket(17), "PocketX_924") || ""),
-    "start check: a newer official firmware is refused and the known one named");
-  ok(startRefusal(box(23), "BlackBox_021") === null && startRefusal({ ...pocket(923), version: 923 }, "PocketX_924") === null,
-    "start check: the way back to an official package, and OpenPocket to OpenPocket, are not concerned");
+  ok(newerOfficialWarning(pocket(16)) === null && newerOfficialWarning(box(21)) === null && newerOfficialWarning(box(20)) === null && newerOfficialWarning(pocket(923)) === null,
+    "newer-firmware check: the official firmware the page knows (PocketX_016, BlackBox_020 / 021), and OpenPocket, are not concerned");
+  ok(/BlackBox_023.*\(021\).*precaution/s.test(newerOfficialWarning(box(23)) || "") && /PocketX_017.*\(016\)/s.test(newerOfficialWarning(pocket(17)) || ""),
+    "newer-firmware check: a newer official firmware gets a warning that names the known one and calls it a precaution");
   for (const how of ["install", "rescue"]) {
+    const run = (u, accept, steps) => (how === "install"
+      ? u.install(logicalImage(px), "PocketX_924", (s) => steps.push(s), { acceptNewer: accept })
+      : u.rescue(() => ({ image: logicalImage(px), product: "PocketX_924" }), (s) => steps.push(s), { acceptNewer: accept }));
     const dump = join(TMP, `untested_${how}.bin`);
-    const sim = simAccess([join(TMP, "flash_old.bin"), "--stock", "PocketX_017", "--dump", dump]);
+    let sim = simAccess([join(TMP, "flash_old.bin"), "--stock", "PocketX_017", "--dump", dump]);
     await sim.ready;
-    const u = new Updater(sim.access, null, FAST);
-    const steps = [];
-    let err = null;
-    try {
-      if (how === "install") await u.install(logicalImage(px), "PocketX_924", (s) => steps.push(s));
-      else await u.rescue(() => ({ image: logicalImage(px), product: "PocketX_924" }), (s) => steps.push(s));
-    } catch (e) { err = e; }
+    let steps = [], err = null;
+    try { await run(new Updater(sim.access, null, FAST), false, steps); } catch (e) { err = e; }
     await sim.end();
-    ok(err && err.code === "untested" && err.detail === "PocketX_017" && !steps.length, `${how} over an unknown official PocketX_017: refused (untested), no step started`);
-    ok(!sim.log.some((l) => /step[12]/.test(l)) && flashOf(dump).equals(flashOf(join(TMP, "flash_old.bin"))), `${how} refused: the pedal got no upgrade command, its flash is as it was`);
+    ok(err && err.code === "untested" && err.detail === "PocketX_017" && !steps.length, `${how} over an unknown official PocketX_017, not confirmed: refused (untested), no step started`);
+    ok(!sim.log.some((l) => /step[12]/.test(l)) && flashOf(dump).equals(flashOf(join(TMP, "flash_old.bin"))), `${how} not confirmed: the pedal got no upgrade command, its flash is as it was`);
+
+    sim = simAccess([join(TMP, "flash_old.bin"), "--stock", "PocketX_017"]);
+    await sim.ready;
+    steps = []; err = null;
+    let res = null;
+    try { res = await run(new Updater(sim.access, null, FAST), true, steps); } catch (e) { err = e; }
+    await sim.end();
+    ok(!err && res === "PocketX_924" && steps.includes("start"), `${how} over PocketX_017, confirmed: the install completes ${err ? "(" + err.code + ")" : ""}`);
   }
 }
 

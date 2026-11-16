@@ -87,6 +87,10 @@ footer a,.note a{color:inherit}
     <p class="note warnbox" id="bbwarn" hidden data-t="bbwarn"></p>
     <p class="note warnbox" id="testchan" hidden data-t="testchan"></p>
     <p class="note warnbox" id="altnow" hidden></p>
+    <div id="newerconfirm" hidden>
+      <p class="note warnbox" id="newerwarn"></p>
+      <label class="chk"><input type="checkbox" id="newerok"><span data-t="newerok"></span></label>
+    </div>
     <div class="row">
       <button class="go" id="install" disabled data-t="install"></button>
       <button class="alt" id="resume" hidden data-t="resume"></button>
@@ -147,7 +151,7 @@ footer a,.note a{color:inherit}
 </div>
 
 <script type="module">
-import { Updater, IS_OTA, IS_OPENPOCKET, IS_ALT, OPENPOCKET, OUR_LOADER, MODELS } from "./pxota.js";
+import { Updater, IS_OTA, IS_OPENPOCKET, IS_ALT, OPENPOCKET, OUR_LOADER, MODELS, newerOfficialWarning } from "./pxota.js";
 import { verifyPackage, checkOfficial } from "./pxpkg.js";
 import { BLACKBOX_V21, verifyFactorySounds } from "./pxfactory.js";
 
@@ -166,6 +170,7 @@ const T = {
     done: "Done: the pedal now runs ", nexteditor: "Open the preset editor", nextnotes: "What is new in this version", sameok: "OpenPocket is up to date.",
     s3: "Back to the official firmware", s3note: "Pick your pedal's official file (.fwsc), downloaded from Donner / M-VAVE. It is checked here, in your browser, and sent to no server.",
     backoff: "Return to the official firmware", offknown: "Official file verified: ", offunknown: "Well-formed official file, unknown to this page: ",
+    newerok: "I understand: install anyway, over this official firmware.",
     unknownok: "I understand: this file has not been tested with this page. Install it anyway.",
     rescue: "Rescue and advanced options",
     rescuenote: "If the pedal stays in update mode, reconnect it: the Resume button appears. The button below puts a pedal running OpenPocket into the chip's UBOOT mode, for a recovery from the SD card (fm1buddy).",
@@ -258,13 +263,17 @@ function showDev(d) {
   $("verify-factory").disabled = busy || !onV21;
   $("factory-uboot").disabled = busy || !onV21;
   $("resume").hidden = !d || !IS_OTA(d.id);
-  $("install").disabled = busy || !d || IS_OTA(d.id) || !manifest;
+  const newer = d && newerOfficialWarning(d.id);
+  $("newerconfirm").hidden = !newer;
+  if (newer) $("newerwarn").textContent = newer; else if (d) $("newerok").checked = false;
+  const unconfirmed = Boolean(newer) && !$("newerok").checked;
+  $("install").disabled = busy || !d || IS_OTA(d.id) || !manifest || unconfirmed;
   $("uboot").disabled = busy || !d || !IS_OPENPOCKET(d.id);
   const alt = d && IS_ALT(d.product) ? d.product : null;           /* the pedal runs an alternative firmware */
   $("install").textContent = alt ? t("back") : t("install");
   $("altnow").hidden = !alt;
   if (alt) $("altnow").textContent = `${t("altnow1")}${alt.name} ${alt.version}${t("altnow2")}`;
-  $("altinstall").disabled = busy || !d || IS_OTA(d.id) || !altManifest;
+  $("altinstall").disabled = busy || !d || IS_OTA(d.id) || !altManifest || unconfirmed;
   if (altManifest) $("altinstall").textContent = (alt && alt.app === APP ? t("altre") : t("altinstall")) + `${altManifest.app.name} ${altManifest.app.version}`;
   $("backoff").disabled = busy || !d || IS_OTA(d.id) || !official || official.model !== d.id.model ||
     (!official.known && !$("offok").checked);
@@ -379,8 +388,9 @@ function rescueTry() {
   return run(async () => {
     let r;
     try {
-      r = await up.rescue(pick, (s, n) => { progress(s, n); if (s !== "verify" && s !== "write") log("rescue step " + s + (n !== undefined ? " " + n : "")); });
+      r = await up.rescue(pick, (s, n) => { progress(s, n); if (s !== "verify" && s !== "write") log("rescue step " + s + (n !== undefined ? " " + n : "")); }, { acceptNewer: $("newerok").checked });
     } catch (e) {
+      if (e.code === "untested") { $("newerwarn").textContent = e.message; $("newerconfirm").hidden = false; }   // tick the box, then arm the rescue again
       if (e.code === "untested" || e.code === "pkg") { $("rescueOn").checked = false; pre = null; }   // refused: trying again changes nothing
       throw e;
     }
@@ -452,6 +462,7 @@ $("offfile").onchange = async (ev) => {
   showDev(lastDev);
 };
 $("offok").onchange = () => showDev(lastDev);
+$("newerok").onchange = () => showDev(lastDev);
 window.addEventListener("beforeunload", (e) => { if (busy) { e.preventDefault(); e.returnValue = ""; } });
 // remember the model, for a resume after a disconnect
 setInterval(() => { if (lastDev && MODELS.includes(lastDev.id.model)) try { localStorage.setItem("op-model", lastDev.id.model); } catch (_) {} }, 2000);

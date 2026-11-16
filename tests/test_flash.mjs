@@ -79,11 +79,20 @@ const say = (lines) => (l) => lines.push(l);
   ok(r.code === 2 && /wrong model/.test(r.out) && untouched(r), "BlackBox package on a Pocket X: refused, flash unchanged");
 }
 
-// 4b. an official firmware newer than any the installer knows: refused before the upgrade command (pxota.js
-//     startRefusal), in a dry run, an update and a rescue alike
+// 4b. an official firmware newer than any the installer knows (pxota.js newerOfficialWarning): without
+//     --accept-newer-official the flash stops before the upgrade command, in a dry run, an update and a rescue alike;
+//     with it the update completes
 for (const argv of [["--dry-run"], ["--confirm-flash"], ["--rescue", "--dry-run", "--timeout", "5"], ["--rescue", "--confirm-flash", "--timeout", "5"]]) {
   const r = await run([...argv, "--package", px, "--manifest", man], { stock: "PocketX_017" });
-  ok(r.code === 2 && /REFUSED: .*official firmware 017.*PocketX_016/.test(r.out) && untouched(r), `${argv.join(" ")} over an unknown official PocketX_017: refused, flash unchanged`);
+  ok(r.code === 2 && /REFUSED: .*official firmware 017.*precaution.*--accept-newer-official/s.test(r.out) && untouched(r), `${argv.join(" ")} over an unknown official PocketX_017: refused without confirmation, flash unchanged`);
+}
+for (const argv of [["--dry-run"], ["--rescue", "--dry-run", "--timeout", "5"]]) {
+  const r = await run([...argv, "--accept-newer-official", "--package", px, "--manifest", man], { stock: "PocketX_017" });
+  ok(r.code === 0 && /WARNING: .*017/.test(r.out) && /dry run ok/.test(r.out) && untouched(r), `${argv.join(" ")} --accept-newer-official: warns, passes the check, writes nothing`);
+}
+for (const argv of [["--confirm-flash"], ["--rescue", "--confirm-flash", "--timeout", "5"]]) {
+  const r = await run([...argv, "--accept-newer-official", "--package", px, "--manifest", man], { stock: "PocketX_017" });
+  ok(r.code === 0 && /done: the pedal reports PocketX_924/.test(r.out) && !untouched(r), `${argv.join(" ")} --accept-newer-official over PocketX_017: the update completes`);
 }
 
 // 5. damaged or unlisted package: refused before any MIDI

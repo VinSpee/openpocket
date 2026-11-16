@@ -132,17 +132,21 @@ await page.click("#factory-uboot");
 await page.waitForFunction(() => /USB recovery requested/.test(document.getElementById("msg").textContent));
 ok(simLog.includes("uboot") && !simLog.some((l) => /step[12]/.test(l)), "BlackBox V21: recovery asks for UBOOT without running an OTA");
 
-// an official firmware newer than any the page knows: Install refuses before the upgrade command, names the known one
+// an official firmware newer than any the page knows: a warning and a checkbox. Install stays disabled until it is
+// ticked; once ticked the install completes on the simulated pedal
 sim.stdin.end(); sim = null; simLog.length = 0; buf = "";
 await page.reload();
 startSim("--stock", "PocketX_017");
 await page.click("#connect");
+await page.waitForSelector("#newerconfirm:not([hidden])", { timeout: 15000 });
+ok(/official firmware 017.*precaution/s.test(await page.textContent("#newerwarn")), "official PocketX_017 (unknown): the warning names the firmware and calls the check a precaution");
+ok(await page.isDisabled("#install") && !simLog.some((l) => /step[12]/.test(l)), "official PocketX_017: Install stays disabled until confirmed, nothing sent to the pedal");
+await page.screenshot({ path: join(OUT, "page_4b_untested.png"), fullPage: true });
+await page.check("#newerok");
 await page.waitForSelector("#install:enabled", { timeout: 15000 });
 await page.click("#install");
-await page.waitForSelector("#msg.err", { timeout: 15000 });
-ok(/official firmware 017.*nothing was sent.*PocketX_016/s.test(await page.textContent("#msg")), "official PocketX_017 (unknown): Install refused, the known 016 named");
-ok(!simLog.some((l) => /step[12]/.test(l)), "official PocketX_017: no update step ran on the pedal");
-await page.screenshot({ path: join(OUT, "page_4b_untested.png"), fullPage: true });
+await page.waitForFunction(() => /PocketX_924/.test(document.getElementById("msg").textContent), null, { timeout: 240000 });
+ok(simLog.some((l) => /step2 rc=0/.test(l)), "official PocketX_017, confirmed: the install completes on the simulated pedal");
 
 // a package that is not the manifest's (one byte changed on the site): refused by its SHA-256, before the pedal is asked
 sim.stdin.end(); sim = null; simLog.length = 0; buf = "";
