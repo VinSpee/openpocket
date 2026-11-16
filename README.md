@@ -79,7 +79,8 @@ with no extra hardware (`docs/RESCUE.md`, read-only check and backup first, the 
 `make rescue`, then `make rescue-write` (it needs `brew install libusb` and sudo); from Windows, `RESCUE.bat`, then
 `RESCUE.bat --write`, in a Command Prompt opened as administrator (it needs Python 3, no driver). A browser cannot do this
 step: the pedal is then a USB mass-storage device, which browsers keep from web pages. The second route is the SD-card
-recovery (`flash/`: fm1buddy on an ESP32-S3, `makeimage.bat`).
+recovery (`flash/`: fm1buddy on an ESP32-S3, `makeimage.bat`). Step-by-step instructions for a Mac or a Windows PC, in
+plain words: [Quick start: rescue a BlackBox that will not boot](docs/RESCUE.md#quick-start-rescue-a-blackbox-that-will-not-boot).
 
 **Without internet**: double-click `INSTALL-OFFLINE.bat` (Windows; nothing to install: a small PowerShell server,
 `tools/serve_offline.ps1`) or run `make serve` (macOS, Linux; `tools/serve.py`, needs Python 3). It serves the installer

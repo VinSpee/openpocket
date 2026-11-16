@@ -40,11 +40,16 @@ button:disabled{opacity:.45;cursor:default}
 .note{font-size:13.5px;color:var(--dim);margin:0;max-width:68ch}
 .note strong{color:var(--ink)}
 .warnbox{border-left:3px solid var(--warn);padding:2px 0 2px 12px}
-.msg{font-weight:600;min-height:1.5em}
+.msg{font-weight:600;min-height:1.5em;overflow-wrap:anywhere}
 .msg.ok{color:var(--ok)}.msg.err{color:var(--err)}
 input[type=file]{font:inherit;color:var(--dim);max-width:100%}
 label.chk{display:flex;gap:8px;align-items:flex-start;font-size:13.5px}
 details summary{cursor:pointer;color:var(--dim);font-size:13px}
+.guide{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.guide summary{color:var(--ink);font-weight:600;font-size:13.5px}
+.guide h3{margin:8px 0 0;font-size:13.5px;color:var(--ink)}
+.guide ol,.guide ul{padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.guide code{overflow-wrap:anywhere}
 pre#log{margin:10px 0 0;background:var(--code);border-radius:10px;padding:12px;font:12px/1.5 "JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
 code{font:12.5px "JetBrains Mono",ui-monospace,monospace;background:var(--code);padding:1px 5px;border-radius:5px}
 footer{color:var(--dim);font-size:12.5px;display:flex;flex-direction:column;gap:6px}
@@ -123,8 +128,41 @@ footer a,.note a{color:inherit}
       <label class="chk"><input type="checkbox" id="rescueOn"><span data-t="rescueon"></span></label>
       <p class="note" data-t="rescuenote"></p>
       <p class="note" data-t="rescueusb"></p>
-      <p class="note" data-t="rescuemacsteps"></p>
-      <p class="note" data-t="rescuewinsteps"></p>
+      <details class="guide" id="rescueguide">
+        <summary>How to run the rescue on your computer</summary>
+        <p class="note">The first run only checks the pedal and saves a backup. Nothing is written until the second run. Download two things first: the OpenPocket folder (<a href="https://github.com/VinSpee/openpocket/archive/refs/heads/main.zip">openpocket-main.zip</a>, then unzip it) and the official BlackBox firmware file (it ends in <code>.fwsc</code>) from the M-VAVE website. Put the firmware file inside the <code>openpocket-main</code> folder and rename it <code>BlackBox</code> (if your computer shows the <code>.fwsc</code> ending, keep it).</p>
+        <h3 id="rescue-mac">On a Mac</h3>
+        <ol class="note">
+          <li>Once: install Homebrew from <a href="https://brew.sh">brew.sh</a> and follow the "Next steps" it prints. Then, in Terminal, type <code>brew install libusb</code> and press Enter.</li>
+          <li>Unplug the pedal.</li>
+          <li>In Terminal, type <code>cd </code> (with a space), drag the <code>openpocket-main</code> folder onto the Terminal window, and press Enter.</li>
+          <li>Type <code>sudo python3 tools/uboot_rescue.py --package BlackBox.fwsc</code> and press Enter. Type your Mac password (nothing shows while you type).</li>
+          <li>When it says it is waiting for the pedal, plug the pedal straight into the Mac (no hub).</li>
+          <li>The check passed if you see a line that starts with <code>Read-only run finished, nothing was written</code>. Keep the backup it saved in the <code>OpenPocket-rescue</code> folder in your home folder.</li>
+          <li>To restore the pedal, unplug it, type <code>sudo python3 tools/uboot_rescue.py --write --package BlackBox.fwsc</code>, press Enter, and plug the pedal in when it is waiting.</li>
+          <li>When it says <code>Done</code>, unplug the pedal and plug it back in.</li>
+        </ol>
+        <h3 id="rescue-windows">On Windows</h3>
+        <p class="note warnbox">The Windows rescue has not been tested on a real pedal yet. Please report on GitHub whether it works for you.</p>
+        <ol class="note">
+          <li>Once: install Python 3 from <a href="https://www.python.org/downloads/">python.org</a> and tick "Add python.exe to PATH" on its first screen. No driver is needed.</li>
+          <li>Open the <code>openpocket-main</code> folder until you see <code>RESCUE.bat</code>. Click the address bar at the top of the window and copy the location (Ctrl+C).</li>
+          <li>Press the Windows key, type <code>cmd</code>, right-click "Command Prompt" and choose "Run as administrator".</li>
+          <li>Type <code>cd /d "</code>, paste the location (right-click), type <code>"</code> and press Enter.</li>
+          <li>Unplug the pedal. Type <code>RESCUE.bat --package BlackBox.fwsc</code> and press Enter.</li>
+          <li>When it says it is waiting for the pedal, plug the pedal straight into the PC (no hub). If Windows offers to format a drive, click Cancel. Never click Format.</li>
+          <li>The check passed if you see a line that starts with <code>Read-only run finished, nothing was written</code>. Keep the backup it saved in the <code>OpenPocket-rescue</code> folder in your user folder.</li>
+          <li>To restore the pedal, unplug it, type <code>RESCUE.bat --write --package BlackBox.fwsc</code>, press Enter, and plug the pedal in when it is waiting.</li>
+          <li>When it says <code>Done</code>, unplug the pedal and plug it back in.</li>
+        </ol>
+        <h3>If it does not work</h3>
+        <ul class="note">
+          <li><code>REFUSED</code>: a safety check stopped it and nothing was written. The message says why; most often the file is not the official BlackBox firmware.</li>
+          <li>It stops in the middle or says it gave up: run the same line again. It continues where it stopped.</li>
+          <li>The pedal still does not start: <a href="https://github.com/VinSpee/openpocket/issues">open an issue on GitHub</a> with the text from the window, and keep the backup file.</li>
+        </ul>
+        <p class="note">The full guide, with every safety check: <a href="RESCUE.md#quick-start-rescue-a-blackbox-that-will-not-boot">RESCUE.md</a>.</p>
+      </details>
       <p class="note" data-t="rescuedocs"></p>
       <div class="row"><button class="alt" id="uboot" disabled data-t="uboot"></button></div>
     </details>
@@ -165,9 +203,7 @@ const T = {
     rescue: "Rescue and advanced options",
     rescuenote: "If the pedal stays in update mode, reconnect it: the Resume button appears. The button below puts a pedal running OpenPocket into the chip's UBOOT mode, for a recovery from the SD card (fm1buddy).",
     rescueusb: "A BlackBox that shows a black screen or restarts in a loop, and that this page cannot reach, can be restored over USB with no extra hardware, from a Mac or a Windows PC. A browser cannot do it: the pedal is then a USB mass-storage device, which browsers keep from web pages on every system. Download the official BlackBox file (M-VAVE) and the OpenPocket folder, then run a read-only check first (it saves a full backup of the pedal's flash and writes nothing), and the restore only once the check has passed.",
-    rescuemacsteps: "Mac: `brew install libusb` once, then in the OpenPocket folder `make rescue ARGS=\"--package FILE.fwsc\"` (read-only), then `make rescue-write ARGS=\"--package FILE.fwsc\"`.",
-    rescuewinsteps: "Windows: Python 3 from python.org once (no driver to install). Open a Command Prompt as administrator (right-click Start, Terminal (Admin)), go to the OpenPocket folder, run `RESCUE.bat --package FILE.fwsc` (read-only), then `RESCUE.bat --write --package FILE.fwsc`. If Windows offers to format a drive while the pedal is connected, click Cancel.",
-    rescuedocs: "Every step, the safety checks and what to do when it fails: docs/RESCUE.md. The SD-card route (fm1buddy, flash/) is the second choice.",
+    rescuedocs: "The SD-card route (fm1buddy, flash/) is the second choice.",
     uboot: "Enter UBOOT mode", logt: "Log",
     foot1: "OpenPocket is an independent project, not affiliated with Donner or M-VAVE. Install at your own risk. Source code: GPL-3.0.",
     foot2: "Update protocol and loader from Felucca and felucca-bsp (Hügelton Instruments, GPL-3.0 / MPL-2.0). JieLi AC79 SDK files: Apache-2.0. Inter typeface: SIL OFL 1.1.",
@@ -175,7 +211,7 @@ const T = {
     testchan: "TEST CHANNEL: this installs a test build, not the release. It is for people who agreed to try it, and it is not the version the normal installer page offers. To go back, open this page without ?channel=… and press Install.",
     bbwarn: "M-VAVE BlackBox: v31 is the fix for issue #1 (OpenPocket restarted every 4 s after the pedal was switched off and on), still being tested on the BlackBox. Please report how it goes on GitHub. If your BlackBox restarts in a loop, use the rescue mode below.",
 toeditor: "Preset editor →",
-        rescueon: "Rescue mode, for a pedal that restarts in a loop: tick this, press Connect, then plug the pedal in (or let it restart). The install starts by itself as soon as the pedal answers; it stops the pedal's sound processing at once, so the restarts stop. It installs the official file chosen in step 3 if there is one for this pedal, otherwise OpenPocket.",
+        rescueon: "Rescue mode, for a pedal that restarts in a loop: tick this, press Connect, then plug the pedal in (or let it restart). The install starts by itself as soon as the pedal answers; it stops the pedal's sound processing at once, so the restarts stop. It installs the official file chosen in step 3 if there is one for this pedal, otherwise OpenPocket. If the pedal never answers here, use \"How to run the rescue on your computer\" below.",
     e_model: "This package is not for this pedal: ", e_lost: "The pedal was disconnected. Do not switch it off: plug the cable back in, then press Resume if the page shows update mode, else Install again.",
     e_stopped: "The pedal stopped answering before the update was finished. Do not switch it off: unplug the cable, plug it back in, then press Resume if the page shows update mode, else Install again.", e_noloader: "The update loader did not appear. Do not switch the pedal off: replug the cable, then press Resume.",
     e_noreturn: "The update was written and checked, but the pedal did not come back. Switching it off and on is safe now. If it then shows a black screen or restarts in a loop, use the USB rescue (Rescue and advanced options, below).", e_mismatch: "Written, but the pedal reports: ",

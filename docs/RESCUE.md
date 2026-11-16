@@ -1,5 +1,63 @@
 # Rescuing a BlackBox over USB from a Mac or Windows (no extra hardware)
 
+## Quick start: rescue a BlackBox that will not boot
+
+Use this when the pedal shows a black screen or keeps restarting, and the installer page cannot reach it. You need the
+USB cable and a Mac or a Windows PC. The first run only checks the pedal and saves a backup. Nothing is written until the
+second run.
+
+You need two downloads on either computer:
+
+- The OpenPocket folder: [openpocket-main.zip](https://github.com/VinSpee/openpocket/archive/refs/heads/main.zip). Unzip it.
+- The official BlackBox firmware file (it ends in `.fwsc`) from the M-VAVE website. Put it inside the `openpocket-main`
+  folder and rename it `BlackBox`. If your computer shows the `.fwsc` ending, keep it: the full name is `BlackBox.fwsc`.
+
+### On a Mac
+
+1. Install Homebrew from [brew.sh](https://brew.sh) if you do not have it, and follow the "Next steps" it prints.
+   Then, in Terminal, type `brew install libusb` and press Enter. You only do this once.
+2. Unplug the pedal.
+3. In Terminal, type `cd ` (with a space after it), drag the `openpocket-main` folder onto the Terminal window, and press
+   Enter.
+4. Type `sudo python3 tools/uboot_rescue.py --package BlackBox.fwsc` and press Enter. Type your Mac password when asked
+   (nothing shows while you type). If the Mac offers to install developer tools, click Install, then type the line again.
+5. When it says it is waiting for the pedal, plug the pedal straight into the Mac (no hub). The check starts by itself.
+6. The check passed if you see a line that starts with `Read-only run finished, nothing was written`. A backup of the pedal is
+   now in the `OpenPocket-rescue` folder in your home folder. Keep it.
+7. To restore the pedal, unplug it, then type
+   `sudo python3 tools/uboot_rescue.py --write --package BlackBox.fwsc` and press Enter. Plug the pedal in when it
+   says it is waiting.
+8. When it says `Done`, unplug the pedal and plug it back in. It should start normally.
+
+### On Windows
+
+The Windows rescue has not been tested on a real pedal yet. Please report on GitHub whether it works for you.
+
+1. Install Python 3 from [python.org](https://www.python.org/downloads/). On the first screen of the installer, tick
+   "Add python.exe to PATH". You only do this once. You do not need to install any driver.
+2. Open the `openpocket-main` folder until you see `RESCUE.bat`. Click the address bar at the top of the window and copy
+   the folder's location (Ctrl+C).
+3. Press the Windows key, type `cmd`, right-click "Command Prompt" and choose "Run as administrator". Click Yes.
+4. Type `cd /d "` then paste the location (right-click), type `"` and press Enter.
+5. Unplug the pedal. Type `RESCUE.bat --package BlackBox.fwsc` and press Enter.
+6. When it says it is waiting for the pedal, plug the pedal straight into the PC (no hub). If Windows offers to format a
+   drive, click Cancel. Never click Format.
+7. The check passed if you see a line that starts with `Read-only run finished, nothing was written`. A backup of the pedal is
+   now in the `OpenPocket-rescue` folder in your user folder. Keep it.
+8. To restore the pedal, unplug it, then type `RESCUE.bat --write --package BlackBox.fwsc` and press Enter. Plug the pedal
+   in when it says it is waiting.
+9. When it says `Done`, unplug the pedal and plug it back in. It should start normally.
+
+### If it does not work
+
+- `REFUSED`: a safety check stopped it and nothing was written. The message says why. The most common cause is a
+  firmware file that is not the official BlackBox file.
+- It stops in the middle, or says it gave up: run the same line again. It continues where it stopped.
+- The pedal still does not start: [open an issue on GitHub](https://github.com/VinSpee/openpocket/issues) with the text
+  from the window, and keep the backup file. The SD-card recovery (README.md, "Install") is the other way back.
+
+The rest of this page explains each step and each safety check in detail.
+
 Use this when the pedal restarts in a loop or shows a black screen after an install, and the installer's rescue mode
 cannot finish. Between crashes the pedal sits
 about 44 seconds in the JieLi mask-ROM USB boot state ("UBOOT": USB 4C4A:8057, shown by macOS as `WL80UBOOT1.00`). The

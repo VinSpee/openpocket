@@ -165,10 +165,27 @@ sim.stdin.end(); sim = null; simLog.length = 0; buf = "";
   writeFileSync(f, good);
 }
 
-// the USB rescue for a pedal the page cannot reach: Mac and Windows steps, read-only first
-ok(/Windows/.test(await page.textContent("[data-t=rescuewinsteps]")) && /RESCUE\.bat/.test(await page.textContent("[data-t=rescuewinsteps]")) &&
-   /make rescue/.test(await page.textContent("[data-t=rescuemacsteps]")) && /read-only/.test(await page.textContent("[data-t=rescueusb]")),
-   "rescue section: the USB rescue from a Mac and from Windows, read-only first");
+// the USB rescue for a pedal the page cannot reach: a folded guide in the rescue section, Mac and Windows steps,
+// read-only first, the write as one more step, a link to the full guide; it fits a phone's width
+{
+  ok(/read-only/.test(await page.textContent("[data-t=rescueusb]")) && /How to run the rescue on your computer/.test(await page.textContent("[data-t=rescueon]")),
+    "rescue section: the USB rescue is read-only first, and rescue mode points to the guide");
+  await page.click("details summary[data-t=rescue]");
+  ok(!(await page.isVisible("#rescue-mac")), "rescue guide: folded until opened");
+  await page.click("#rescueguide summary");
+  const steps = (id) => page.$$eval(`#${id} + ol li, #${id} + p + ol li`, (li) => li.map((e) => e.textContent));
+  const mac = await steps("rescue-mac"), win = await steps("rescue-windows");
+  ok(mac.some((s) => /brew install libusb/.test(s)) && mac.some((s) => /sudo python3 tools\/uboot_rescue\.py --package BlackBox\.fwsc/.test(s)) &&
+     mac.some((s) => /--write --package BlackBox\.fwsc/.test(s)), "rescue guide, Mac: libusb once, the read-only check, then the write");
+  ok(win.some((s) => /python\.org/.test(s)) && win.some((s) => /Run as administrator/.test(s)) && win.some((s) => /^Unplug.*RESCUE\.bat --package BlackBox\.fwsc/.test(s)) &&
+     win.some((s) => /RESCUE\.bat --write --package BlackBox\.fwsc/.test(s)) && /not been tested on a real pedal/.test(await page.textContent("#rescueguide .warnbox")),
+    "rescue guide, Windows: Python once, an administrator Command Prompt, the check, then the write; said to be untested");
+  ok(await page.getAttribute("#rescueguide a[href^='RESCUE.md#quick-start']", "href") !== null, "rescue guide: links the full guide in RESCUE.md");
+  await page.setViewportSize({ width: 360, height: 800 });
+  ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "rescue guide: no sideways scrolling at a phone's width");
+  await page.screenshot({ path: join(OUT, "page_4c_rescue_guide.png"), fullPage: true });
+  await page.setViewportSize({ width: 820, height: 1100 });
+}
 
 // a test channel: only through ?channel=NAME, from its own folder, with its banner; the normal page has none
 cpSync(join(FIX, "firmware"), join(SITE, "firmware", "midi-test"), { recursive: true });
