@@ -1,9 +1,14 @@
-# Rescuing a crash-looping BlackBox from a Mac (no extra hardware)
+# Rescuing a BlackBox over USB from a Mac or Windows (no extra hardware)
 
-Use this when the pedal restarts in a loop and the installer's rescue mode cannot finish. Between crashes the pedal sits
+Use this when the pedal restarts in a loop or shows a black screen after an install, and the installer's rescue mode
+cannot finish. Between crashes the pedal sits
 about 44 seconds in the JieLi mask-ROM USB boot state ("UBOOT": USB 4C4A:8057, shown by macOS as `WL80UBOOT1.00`). The
 mask ROM is chip ROM, so it cannot be damaged. `tools/uboot_rescue.py` waits for that state, loads JieLi's RAM loader and
 rewrites the app area of the flash from the official package, then restarts the pedal.
+
+The installer page cannot do this part. In this state the pedal is a USB mass-storage device, and browsers refuse web pages
+access to every mass-storage interface (WebUSB's protected classes), on every system and whatever driver is installed. The
+page can only reach a pedal that answers over MIDI; the rescue below is a command that runs on the computer.
 
 ## One-time setup (macOS)
 
@@ -19,6 +24,14 @@ That is all. The tool is one Python 3 file that calls libusb through `ctypes` (n
   `c32b28e`, the same pin as `flash/installer-fm1buddy-pocketx.bat`) and checked against SHA-256
   `d41da6126760c9d66660bcc0cac8d27d221806c5e369a8036921efe68dca5376` on every run. It is not in this repository. `make clean`
   removes the cache; `--loader FILE` uses a copy you downloaded yourself.
+
+## One-time setup (Windows)
+
+Install Python 3 from [python.org](https://www.python.org/downloads/) and tick "Add python.exe to PATH". Nothing else: no
+libusb, no Zadig, no driver change. Windows keeps its own mass-storage driver on the pedal, and the tool sends the same
+commands through it (SCSI pass-through, the way kagaimiq/jl-uboot-tool reaches these chips on Windows). Windows lets only an
+administrator do that, so the tool runs in a Command Prompt opened as administrator. The files are the same as on a Mac:
+the official package (pass it with `--package`) and `wl82loader.bin`, downloaded and checked as above.
 
 ## The commands
 
@@ -40,6 +53,19 @@ It checks that the pedal answers INQUIRY as `WL82 UBOOT1.00`, loads the loader, 
 the flash id (must be a 1 MiB flash), saves a backup of the whole flash to `~/OpenPocket-rescue/blackbox-<time>.dump.bin`,
 compares the pedal's head `[0, 0x4000)` with the image's, reports how many sectors differ, and sends run-app. Keep this
 backup: it is the only copy of what the pedal held before the rescue.
+
+On Windows, open a Command Prompt as administrator (right-click Start, "Terminal (Admin)"), go to the OpenPocket folder
+and run the same tool through `RESCUE.bat`:
+
+```
+cd /d C:\path\to\openpocket
+RESCUE.bat --package "C:\Users\you\Downloads\BlackBox.fwsc"            (read-only)
+RESCUE.bat --write --package "C:\Users\you\Downloads\BlackBox.fwsc"    (the rescue, after the read-only run passed)
+```
+
+The backup goes to `%USERPROFILE%\OpenPocket-rescue`. Windows may say it found a drive and offer to format it while the
+pedal is in this state: click **Cancel**, never Format. The tool finds the pedal among the disks by asking each one to name
+itself (SCSI INQUIRY, which reads nothing and changes nothing) and only goes on with the one that answers `WL82 UBOOT1.00`.
 
 2. **The rescue**, only after the read-only run has passed:
 
@@ -128,8 +154,10 @@ The two backups' times are consistent with a read-only run followed by the `--wr
 | Symptom | Cause and next step |
 | --- | --- |
 | `libusb not found` | `brew install libusb` (or set `LIBUSB_PATH`). |
+| Windows: `only an administrator` | Open the Command Prompt as administrator and run `RESCUE.bat` there. |
+| Windows: `Python 3 is not installed` | Install it from python.org (tick "Add python.exe to PATH"). If typing `python` opens the Microsoft Store, install from python.org instead; `RESCUE.bat` uses its `py` launcher. |
 | `cannot take the interface from macOS (LIBUSB_ERROR_ACCESS)` | Run the command with `sudo`. |
-| Waits forever | The pedal is not in UBOOT right now. It is there about 44 s out of every 70 s while it loops; check `ioreg -p IOUSB` for `WL80UBOOT1.00`, a data cable and a direct port. |
+| Waits forever | The pedal is not in UBOOT right now. It is there about 44 s out of every 70 s while it loops; check `ioreg -p IOUSB` for `WL80UBOOT1.00` (Windows: a new disk drive in Device Manager), a data cable and a direct port. |
 | `REFUSED` | A safety check stopped it; the message names which. Nothing was written. |
 | `gave up after N tries` | The pedal kept leaving UBOOT before the run could finish. Rerun: it resumes. |
 | Still nothing | The SD-card recovery in `flash/` (fm1buddy on an ESP32-S3) is the other route. |
@@ -138,4 +166,4 @@ The two backups' times are consistent with a read-only run followed by the `--wr
 
 The USB boot protocol is documented by [kagaimiq/jl-uboot-tool](https://github.com/kagaimiq/jl-uboot-tool) (MIT) and
 [konsumer/fm1buddy](https://github.com/konsumer/fm1buddy) (GPL-3.0); `tools/uboot_rescue.py` is a new implementation of the
-same commands for macOS. Tests: `make rescue-check` runs it against a simulated pedal (`tests/uboot_sim.py`), with no hardware.
+same commands for macOS and Windows. Tests: `make rescue-check` runs it against a simulated pedal (`tests/uboot_sim.py`), with no hardware.
