@@ -411,14 +411,14 @@ $("install").onclick = () => run(async () => {
   const pkg = await packageFor(d.id.model);
   started = pkg;
   log(`install ${pkg.product} (OpenPocket) over ${d.id.text}`);
-  return up.install(pkg.image, pkg.product, stepLog, { app: pkg.app });
+  return up.install(pkg.image, pkg.product, stepLog, { app: pkg.app, acceptNewer: $("newerok").checked });
 });
 $("altinstall").onclick = () => run(async () => {
   const d = lastDev;
   const pkg = await packageFor(d.id.model, altManifest, APPFW);
   started = { ...pkg, alt: altManifest.app };
   log(`install ${pkg.product} (${altManifest.app.name} ${altManifest.app.version}, an alternative firmware) over ${d.id.text}`);
-  const id = await up.install(pkg.image, pkg.product, stepLog, { app: pkg.app });
+  const id = await up.install(pkg.image, pkg.product, stepLog, { app: pkg.app, acceptNewer: $("newerok").checked });
   return { alt: altManifest.app, id };
 }, null, $("altmsg"));
 $("resume").onclick = () => run(async () => {
