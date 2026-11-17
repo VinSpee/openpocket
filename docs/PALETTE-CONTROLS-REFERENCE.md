@@ -7,8 +7,8 @@ The source is one video, watched for behaviour only:
 
 The video has no narration. It shows the unit from above beside a player, a hand on the controls, and short text
 cards. Everything in section 1 is what the pictures and the cards show, in my own words, with the time in the video.
-A statement that the pictures do not show outright is marked **inferred**. No frame, artwork, or text of the video is
-in this repository. [PALETTE.md](PALETTE.md) describes the instrument that results.
+A statement that the pictures do not show outright is marked **inferred**. No code, artwork, or text was copied from
+the video. Seven frame sheets from it are kept in this repository as a design reference (see "The frames" below). [PALETTE.md](PALETTE.md) describes the instrument that results.
 
 ## 1. What the video shows
 
@@ -122,3 +122,18 @@ from the reference's manual, and PALETTE keeps it.
 | The order | FX picks the selected module up, the knob moves it | FX, then the four module buttons in the wanted order |
 | Bypass | All four modules | All four, or the set chosen in the order mode |
 | After an effect change | The tile shows the new name | The five effects are listed for a moment, the new one lit |
+
+## 4. The frames
+
+The seven images in [reference/](reference/) are frames taken from the manufacturer's promotional video named at the
+top of this note. They are kept only as a design reference for the layout of the controls. They show the video's own
+artwork, logo, and text, which stay the property of their owner. No code, artwork, or text was copied from them into
+PALETTE.
+
+- [Frame sheet 1, 0:00 to 1:10](reference/framesheet-1-0m00-1m10.jpg)
+- [Frame sheet 2, 1:12 to 2:22](reference/framesheet-2-1m12-2m22.jpg)
+- [Frame sheet 3, 2:24 to 3:34](reference/framesheet-3-2m24-3m34.jpg)
+- [Frame sheet 4, 3:36 to 4:46](reference/framesheet-4-3m36-4m46.jpg)
+- [Frame sheet 5, 4:48 to 5:06](reference/framesheet-5-4m48-5m06.jpg)
+- [Detail: choosing an effect and the order, 1:06 to 1:27](reference/detail-effect-select-and-order-1m06-1m27.jpg)
+- [Detail: dual bypass and the presets, 1:30 to 3:49](reference/detail-dual-bypass-and-presets-1m30-3m49.jpg)
