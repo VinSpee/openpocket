@@ -51,3 +51,9 @@ jobs:
             build/apps/palette/SHA256SUMS
       - name: Host tests, also with the packages of both products built above
         run: node tools/op.mjs test --built
+  formal:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Model-check the TLA+ specifications and the firmware's recorded flash order (formal/README.md)
+        run: npm ci --prefix formal && node formal/check.mjs
