@@ -30,6 +30,7 @@
 #    and the MIDI input ring with an app's reader of it (firmware/base/midi.h): unread, it blocks the installer's SysEx
 #  - LED map + lights driver (led_probe.h, px_leds.h): PC7 enable after the first byte, the 595 timing, the table
 #  - button lights (px_lights.h): each block lights its button, FX for its group, HOME blinks in the tuner
+#  - package reader: tools/pocketx_fw.py on packages built to the old (0x4000) and the V22 (0x6000) layout: info, unpack, pack
 #  - packages: tools/pxpkg.py rebuilds the official PocketX_016 app area byte for byte (needs the official file)
 #  - installer: docs/pxota.js + docs/pxpkg.js against a simulated pedal running the real update code (ota.c, ldr_core.c)
 #  - flasher: tools/flash.mjs (node tools/op.mjs flash) against the same simulated pedal: update, dry run, wrong model, damaged package, rescue of a pedal that restarts in a loop
@@ -117,6 +118,8 @@ build/lightsim > build/lightsim.log || { cat build/lightsim.log; exit 1; }; tail
 echo "== simulated pedal"
 $CC -O1 -Wall -Wno-unused-function -o build/devsim tests/devsim.c
 if [ -n "$1" ]; then echo "== packages"; python3 tests/test_pxpkg.py "$1"; fi
+echo "== package reader (tools/pocketx_fw.py: the app area where the flash head names it, 0x4000 or 0x6000)"
+python3 tests/test_pocketx_fw.py $1 | tail -1
 echo "== packages of two products (tools/pxpkg.py: an app's product descriptor, its packages' names, the manifest)"
 python3 tests/test_pxpkg_app.py > build/pxpkg_app.log || { cat build/pxpkg_app.log; exit 1; }; tail -1 build/pxpkg_app.log
 echo "== installer"

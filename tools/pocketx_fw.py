@@ -22,9 +22,10 @@ Format (all CRCs are CRC16 poly 0x1021 init 0, JieLi "ENC" = 16-bit LFSR XOR):
             list_crc = crc of the encrypted entries); flash.bin, info.log,
             isd_config.ini, ota.bin (usb_hid_ota.bin loader), script.ver,
             blimit.bin, tail.bin
-  flash   = [0,0x4000) head: flash header + JLFS (ENC 0xFFFF per 32 B), SPL
-            uboot.boot, isd_config blob (chip key 0x980F)
-            [0x4000,..) app area, SFC: ENC per 32-B block, key 0x980F ^ (rel>>2)
+  flash   = [0,BASE) head: flash header + JLFS (ENC 0xFFFF per 32 B), SPL
+            uboot.boot, isd_config blob (chip key 0x980F); BASE is the address of the
+            head's `app_dir_head` entry: 0x4000 up to V20, 0x6000 from V22 (larger boot loader)
+            [BASE,..) app area, SFC: ENC per 32-B block, key 0x980F ^ (rel>>2)
             app_area_head (dcrc = crc(area[0x20:len])), app.bin, cfg_tool.bin,
             VM / PRCT / BTIF / USR region descriptors
 """
@@ -117,15 +118,32 @@ def jlfs_entry(dec, o):
                 hdr_ok=crc16(e[2:32]) == hc)
 
 
+def app_base(flash):
+    """Where the app area starts: the address the head's `app_dir_head` entry names (the head is ENC 0xFFFF per 32 B)."""
+    o = 0x20
+    while o + 32 <= len(flash):
+        e = jlfs_entry(enc(flash[o:o + 32]), 0)
+        if not e["hdr_ok"]:
+            break
+        if e["name"] == "app_dir_head":
+            if e["addr"] % 0x1000 or e["addr"] + 0x120 > len(flash):
+                raise ValueError(f"app_dir_head at {e['addr']:#x} is not a sector inside the {len(flash):#x}-byte flash")
+            return e["addr"]
+        o += 32
+    raise ValueError("no app_dir_head entry in the flash head")
+
+
 def flash_decrypt(flash):
-    return flash[:0x4000] + sfc(flash[0x4000:], 0)
+    base = app_base(flash)
+    return flash[:base] + sfc(flash[base:], 0)
 
 
 def flash_parse(dec):
-    head = jlfs_entry(dec, 0x4000)
+    base = app_base(dec)
+    head = jlfs_entry(dec, base)
     ents = [head]
-    o = 0x4020
-    while o < 0x4120:
+    o = base + 0x20
+    while o < base + 0x120:
         e = jlfs_entry(dec, o)
         if not e["name"] or not e["name"].isprintable():
             break
@@ -134,15 +152,24 @@ def flash_parse(dec):
     return ents
 
 
+def area_files(ents):
+    """The entries after the area head that hold file data in the area. Regions (attr bit 0x10: VM, PRCT, BTIF, USR) are
+    addressed from the start of the flash, not of the area, and the V22 and V23 VM region carries a data CRC for a range
+    that is not in the package."""
+    return [e for e in ents[1:] if e["dcrc"] != 0xFFFF and not e["attr"] & 0x10]
+
+
 def flash_checks(dec, ents):
     res = {}
+    base = app_base(dec)
     head = ents[0]
     res["app_area_head entry crc"] = head["hdr_ok"]
-    res["app_area_head data crc"] = crc16(dec[0x4020:0x4000 + head["len"]]) == head["dcrc"]
+    res["app_area_head data crc"] = crc16(dec[base + 0x20:base + head["len"]]) == head["dcrc"]
+    files = area_files(ents)
     for e in ents[1:]:
         res[f"{e['name']} entry crc"] = e["hdr_ok"]
-        if e["dcrc"] != 0xFFFF:
-            d = dec[0x4000 + e["addr"]:0x4000 + e["addr"] + e["len"]]
+        if e in files:
+            d = dec[base + e["addr"]:base + e["addr"] + e["len"]]
             res[f"{e['name']} data crc"] = crc16(d) == e["dcrc"]
     return res
 
@@ -162,8 +189,11 @@ def package_checks(L, u):
         d = L[e["off"]:e["off"] + e["len"]]
         if e["name"] == "flash.bin":
             ok["flash.bin crc"] = crc16(d) == e["crc"]
-            dec = flash_decrypt(d)
-            ok.update(flash_checks(dec, flash_parse(dec)))
+            try:
+                dec = flash_decrypt(d)
+                ok.update(flash_checks(dec, flash_parse(dec)))
+            except ValueError as err:
+                ok[str(err)] = False
         if e["name"] in ("ota.bin", "tail.bin"):
             ok[f"{e['name']} crc"] = crc16(d) == e["crc"]
     return ok
@@ -181,8 +211,10 @@ def cmd_info(a):
             fe = flash_parse(dec)
             for f in fe:
                 print(f"      {f['name']:15s} addr {f['addr']:#010x} len {f['len']:#08x} attr {f['attr']:#04x}")
+            base = app_base(dec)
+            print(f"      app area at {base:#x}")
             app = fe[1]
-            a_ = dec[0x4000 + app["addr"]:0x4000 + app["addr"] + app["len"]]
+            a_ = dec[base + app["addr"]:base + app["addr"] + app["len"]]
             import re
             ver = [m.group().decode() for m in re.finditer(rb"[A-Za-z]+X?_\d{3}\b", a_)][:3]
             print(f"      app version strings: {ver}")
@@ -212,9 +244,9 @@ def cmd_unpack(a):
             (out / "flash_dec.bin").write_bytes(dec)
             fe = flash_parse(dec)
             man["jlfs"] = fe
-            for f in fe[1:]:
-                if f["dcrc"] != 0xFFFF:
-                    (out / f["name"]).write_bytes(dec[0x4000 + f["addr"]:0x4000 + f["addr"] + f["len"]])
+            base = app_base(dec)
+            for f in area_files(fe):
+                (out / f["name"]).write_bytes(dec[base + f["addr"]:base + f["addr"] + f["len"]])
     (out / "logical.bin").write_bytes(L)
     (out / "manifest.json").write_text(json.dumps(man, indent=1))
     print(f"unpacked {a.pkg} ({tag}) to {out}/  -> edit {out}/app.bin, then: pack {out} NEW.fwsc")
@@ -229,15 +261,16 @@ def cmd_pack(a):
     flash = bytearray(L[fe_ent["off"]:fe_ent["off"] + fe_ent["len"]])
     dec_orig = flash_decrypt(bytes(flash))
     dec = bytearray(dec_orig)
+    base = app_base(dec)
     changed = []
-    for f in man["jlfs"][1:]:
+    for f in area_files(man["jlfs"]):
         p = src / f["name"]
-        if f["dcrc"] == 0xFFFF or not p.exists():
+        if not p.exists():
             continue
         new = p.read_bytes()
         if len(new) != f["len"]:
             raise SystemExit(f"{f['name']}: {len(new)} B, must stay {f['len']} B (same-size edits only)")
-        lo = 0x4000 + f["addr"]
+        lo = base + f["addr"]
         if new != dec[lo:lo + f["len"]]:
             changed.append(f["name"])
             dec[lo:lo + f["len"]] = new
@@ -247,13 +280,13 @@ def cmd_pack(a):
             struct.pack_into("<H", dec, o, crc16(dec[o + 2:o + 32]))
     if changed:
         # app_area_head data crc, then its entry crc
-        hl = struct.unpack_from("<I", dec, 0x4008)[0]
-        struct.pack_into("<H", dec, 0x4002, crc16(dec[0x4020:0x4000 + hl]))
-        struct.pack_into("<H", dec, 0x4000, crc16(dec[0x4002:0x4020]))
+        hl = struct.unpack_from("<I", dec, base + 8)[0]
+        struct.pack_into("<H", dec, base + 2, crc16(dec[base + 0x20:base + hl]))
+        struct.pack_into("<H", dec, base, crc16(dec[base + 2:base + 0x20]))
         nblk = 0
-        for o in range(0x4000, len(dec), 32):
+        for o in range(base, len(dec), 32):
             if dec[o:o + 32] != dec_orig[o:o + 32]:
-                flash[o:o + 32] = sfc_block(dec[o:o + 32], o - 0x4000)
+                flash[o:o + 32] = sfc_block(dec[o:o + 32], o - base)
                 nblk += 1
         print(f"changed: {', '.join(changed)}; {nblk} flash blocks re-encrypted")
     else:
