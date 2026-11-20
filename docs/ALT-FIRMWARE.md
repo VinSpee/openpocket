@@ -136,7 +136,7 @@ USB, and the update entry are the base's code, not the app's.
 | The pedal restarts in a loop, and answers USB for a moment each time | Rescue mode: the installer page's "Rescue and advanced options", or `node tools/op.mjs flash --rescue --confirm-flash`. It installs OpenPocket the moment the pedal answers. | The installer or the flasher |
 | Two starts in a row did not finish | The boot guard enters the chip's UBOOT state by itself. | The UBOOT rescue tool |
 | An install was interrupted | The pedal stays in update mode. Press Resume on the installer page, or run `flash --rescue --package FILE`. | The installer or the flasher |
-| The firmware does not answer USB at all | The chip's UBOOT state. On a BlackBox: `make rescue`, then `make rescue-write` ([RESCUE.md](RESCUE.md)). That document covers the BlackBox only. On a Pocket X the documented route is the SD card (README.md, "Install"). | A Mac or Linux computer, libusb, the official package; or the SD-card kit |
+| The firmware does not answer USB at all | The chip's UBOOT state. On a BlackBox: `make rescue`, then `make rescue-write` ([RESCUE.md](RESCUE.md)). That document covers the BlackBox only. On a Pocket X the documented route is the SD card (README.md, "Install"). | A Mac with libusb or a Windows PC with Python 3 (RESCUE.bat), the official package; or the SD-card kit |
 
 The UBOOT rescue tool (`tools/uboot_rescue.py`) does not care which product was on the pedal. It writes the official
 firmware's application area and leaves the rest of the flash, so OpenPocket's data and the app's own data stay. It
