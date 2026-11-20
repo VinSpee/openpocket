@@ -25,8 +25,9 @@
 #   make rescue [ARGS=..]   restore a looping BlackBox from its UBOOT state, read-only (needs sudo and libusb: docs/RESCUE.md)
 #   make rescue-write [ARGS=..]   the same, writing the official firmware back (run `make rescue` first)
 #   make rescue-check   the UBOOT rescue tool (tools/uboot_rescue.py) against a simulated pedal; needs only Python 3
+#   make kit [ARGS=..]   the rescue kit a user downloads: docs/rescue/OpenPocket-rescue-kit-N.zip (rescue/README.md); needs only Python 3
 # `make NATIVE=1 build` skips Docker (toolchain installed with firmware/setup.sh).
-.PHONY: doctor build ble app all test package package-test clean shell image serve serve-ble serve-app wasm render appimage flash flash-rescue log rescue rescue-write rescue-check sim
+.PHONY: doctor build ble app all test package package-test clean shell image serve serve-ble serve-app wasm render appimage flash flash-rescue log rescue rescue-write rescue-check sim kit
 doctor build ble all test package package-test clean shell image serve wasm rescue-check:
 	@node tools/op.mjs $@
 app:
@@ -39,7 +40,7 @@ render:
 	@node tools/op.mjs render "$(IN)" "$(OUT)" "$(PRESET)"
 appimage:
 	@node tools/op.mjs appimage "$(DUMP)"
-flash log:
+flash log kit:
 	@node tools/op.mjs $@ $(ARGS)
 rescue:
 	@node tools/op.mjs rescue $(ARGS)

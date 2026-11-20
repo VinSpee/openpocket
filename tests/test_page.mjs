@@ -3,7 +3,8 @@
 // bridged to the simulated pedal (tests/devsim.c): Connect, then Install, as a user would; screenshots in OUTDIR.
 //   node tests/test_page.mjs OUTDIR
 import { spawn, execFileSync } from "node:child_process";
-import { mkdtempSync, cpSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdtempSync, cpSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, extname } from "node:path";
@@ -19,8 +20,9 @@ const FIX = mkdtempSync(join(tmpdir(), "opfix-"));
 execFileSync("python3", [join(ROOT, "tests", "fixtures.py"), join(FIX, "firmware")], { stdio: "inherit" });
 cpSync(join(ROOT, "docs"), SITE, { recursive: true });
 cpSync(join(FIX, "firmware"), join(SITE, "firmware"), { recursive: true });
+execFileSync("python3", [join(ROOT, "rescue", "build_kit.py"), join(SITE, "rescue")], { stdio: "inherit" });
 
-const TYPES = { ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".fwsc": "application/octet-stream" };
+const TYPES = { ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".fwsc": "application/octet-stream", ".zip": "application/zip" };
 const server = createServer((req, res) => {
   try {
     const p = join(SITE, decodeURIComponent(req.url.split("?")[0]).replace(/\/$/, "/index.html"));
@@ -105,8 +107,7 @@ ok(simLog.some((l) => /step2 rc=0/.test(l)), "the simulated pedal wrote the new 
 sim.stdin.end(); sim = null; simLog.length = 0; buf = "";
 await page.reload();
 await page.waitForTimeout(300);
-ok(!(await page.isVisible("#rescueOn")), "rescue mode sits in the advanced section, folded");
-await page.click("details summary[data-t=rescue]");
+ok(await page.isVisible("#rescueCard #rescueOn"), "rescue mode sits in the Rescue card, in sight");
 await page.check("#rescueOn");
 await page.waitForFunction(() => /rescue mode armed/.test(document.getElementById("log").textContent), null, { timeout: 15000 });
 await page.click("#connect");
@@ -165,26 +166,56 @@ sim.stdin.end(); sim = null; simLog.length = 0; buf = "";
   writeFileSync(f, good);
 }
 
-// the USB rescue for a pedal the page cannot reach: a folded guide in the rescue section, Mac and Windows steps,
-// read-only first, the write as one more step, a link to the full guide; it fits a phone's width
+// the Rescue card: three ways back in sight (a loop, update mode, a dark pedal), the kit of this site as one download
+// with its SHA-256, and a folded guide with the three paths, Mac and Windows steps, read-only first; it fits a phone
 {
-  ok(/read-only/.test(await page.textContent("[data-t=rescueusb]")) && /How to run the rescue on your computer/.test(await page.textContent("[data-t=rescueon]")),
-    "rescue section: the USB rescue is read-only first, and rescue mode points to the guide");
-  await page.click("details summary[data-t=rescue]");
+  const ways = await page.$$eval("#rescueCard h3.way", (h) => h.map((e) => e.textContent));
+  ok(ways.length === 3 && /loop/.test(ways[0]) && /update mode/.test(ways[1]) && /black screen/.test(ways[2]) && await page.isVisible("#rescueCard h3.way"),
+    "Rescue card: a loop, update mode and a dark pedal, each in sight");
+  ok(/read-only/.test(await page.textContent("[data-t=rescueusb]")) && /rescue kit below/.test(await page.textContent("[data-t=rescueon]")) &&
+     /Resume/.test(await page.textContent("[data-t=rescuenote]")), "Rescue card: the kit is read-only first, rescue mode points to it, update mode points to Resume");
+  await page.waitForSelector("#kit:not([hidden])", { timeout: 5000 });
+  const kit = JSON.parse(readFileSync(join(SITE, "rescue", "manifest.json"), "utf8"));
+  const href = await page.getAttribute("#kit", "href");
+  const got = await (await fetch(new URL(href, url))).arrayBuffer();
+  ok(href === "rescue/" + kit.file && (await page.getAttribute("#kit", "download")) === kit.file && /^OpenPocket-rescue-kit-\d+\.zip$/.test(kit.file),
+    `Rescue card: one button downloads ${kit.file}`);
+  ok(createHash("sha256").update(Buffer.from(got)).digest("hex") === (await page.textContent("#kitsha")) && kit.sha256 === (await page.textContent("#kitsha")),
+    "Rescue card: the SHA-256 shown is the downloaded kit's");
+  ok(/does not hold M-VAVE's firmware/.test(await page.textContent("#kitfw")) && !(await page.isVisible("#kitnone")), "Rescue card: says the kit comes without M-VAVE's firmware");
+  ok(/do not install OpenPocket/.test(await page.textContent("[data-t=rescuev22]")), "Rescue card: warns against an install after a V22 or V23 rescue");
+  ok(!/openpocket-main|archive\/refs/.test(await page.content()), "the page no longer sends anyone to the zip of main");
   ok(!(await page.isVisible("#rescue-mac")), "rescue guide: folded until opened");
   await page.click("#rescueguide summary");
+  const paths = await page.$$eval("#rescue-paths li", (li) => li.map((e) => e.textContent));
+  ok(paths.length === 3 && /Path A.*V16, V17 or V20.*BlackBox_020\.fwsc/.test(paths[0]) && /Path B.*V22 or V23.*not sure.*BlackBox_023\.fwsc/.test(paths[1]) && /Path C.*Stop/.test(paths[2]),
+    "rescue guide: the three paths, each with its file");
   const steps = (id) => page.$$eval(`#${id} + ol li, #${id} + p + ol li`, (li) => li.map((e) => e.textContent));
   const mac = await steps("rescue-mac"), win = await steps("rescue-windows");
-  ok(mac.some((s) => /brew install libusb/.test(s)) && mac.some((s) => /sudo python3 tools\/uboot_rescue\.py --package BlackBox\.fwsc/.test(s)) &&
-     mac.some((s) => /--write --package BlackBox\.fwsc/.test(s)), "rescue guide, Mac: libusb once, the read-only check, then the write");
-  ok(win.some((s) => /python\.org/.test(s)) && win.some((s) => /Run as administrator/.test(s)) && win.some((s) => /^Unplug.*RESCUE\.bat --package BlackBox\.fwsc/.test(s)) &&
-     win.some((s) => /RESCUE\.bat --write --package BlackBox\.fwsc/.test(s)) && /not been tested on a real pedal/.test(await page.textContent("#rescueguide .warnbox")),
+  ok(mac.some((s) => /brew install libusb/.test(s)) && mac.some((s) => /sudo python3 tools\/uboot_rescue\.py --package firmware\/BlackBox_023\.fwsc/.test(s)) &&
+     mac.some((s) => /--write --package firmware\/BlackBox_023\.fwsc/.test(s)), "rescue guide, Mac: libusb once, the read-only check, then the write");
+  ok(win.some((s) => /python\.org/.test(s)) && win.some((s) => /Run as administrator.*not PowerShell/.test(s)) && win.some((s) => /^Unplug.*RESCUE\.bat --package firmware\\BlackBox_023\.fwsc/.test(s)) &&
+     win.some((s) => /RESCUE\.bat --write --package firmware\\BlackBox_023\.fwsc/.test(s)) && /not been tested on a real pedal/.test(await page.textContent("#rescueguide .warnbox")),
     "rescue guide, Windows: Python once, an administrator Command Prompt, the check, then the write; said to be untested");
   ok(await page.getAttribute("#rescueguide a[href^='RESCUE.md#quick-start']", "href") !== null, "rescue guide: links the full guide in RESCUE.md");
+  await page.screenshot({ path: join(OUT, "page_4b_rescue_card.png"), fullPage: true });
   await page.setViewportSize({ width: 360, height: 800 });
-  ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "rescue guide: no sideways scrolling at a phone's width");
+  ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "Rescue card and guide: no sideways scrolling at a phone's width");
   await page.screenshot({ path: join(OUT, "page_4c_rescue_guide.png"), fullPage: true });
   await page.setViewportSize({ width: 820, height: 1100 });
+  ok(!(await page.isVisible("#uboot")), "the UBOOT soft key sits in the advanced section, folded");
+  // a copy of the page without the kit, or with a manifest that names a file outside its folder: no download is offered
+  const no = await browser.newPage({ viewport: { width: 820, height: 900 } });
+  writeFileSync(join(SITE, "rescue", "manifest.json"), JSON.stringify({ ...kit, file: "../firmware/x.zip" }));
+  await no.goto(url);
+  await no.waitForSelector("#kitnone:not([hidden])", { timeout: 5000 });
+  ok(!(await no.isVisible("#kit")) && !(await no.isVisible("#kitinfo")), "a kit manifest that names a path: no download is offered");
+  renameSync(join(SITE, "rescue", "manifest.json"), join(SITE, "rescue", "manifest.off"));
+  await no.reload();
+  await no.waitForSelector("#kitnone:not([hidden])", { timeout: 5000 });
+  ok(!(await no.isVisible("#kit")) && (await no.getAttribute("#kitnone a", "href")) === "RESCUE.md#the-rescue-kit", "a copy of the page without the kit: says so and links how to get it");
+  writeFileSync(join(SITE, "rescue", "manifest.json"), JSON.stringify(kit));
+  await no.close();
 }
 
 // a test channel: only through ?channel=NAME, from its own folder, with its banner; the normal page has none

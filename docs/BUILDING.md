@@ -45,6 +45,7 @@ Apple silicon and other ARM machines Docker emulates it (Rosetta or QEMU); you c
 | `make render IN=guitar.wav [OUT=..] [PRESET=1]` | a DI recording through the engine |
 | `make appimage DUMP=fm1-1.bin` | `fm1-300.bin` for the SD-card recovery |
 | `make rescue` / `make rescue-write` | restore a looping BlackBox from its UBOOT state from a Mac (read-only first; asks for sudo; `ARGS="--package FILE"` for options); on Windows `RESCUE.bat` in an administrator Command Prompt: `docs/RESCUE.md` |
+| `make kit` | the rescue kit a user downloads, `docs/rescue/OpenPocket-rescue-kit-N.zip` and its `manifest.json` (`rescue/README.md`); the same bytes on every computer; needs only Python 3 |
 | `make rescue-check` | the UBOOT rescue tool (`tools/uboot_rescue.py`, see `docs/RESCUE.md`) against a simulated pedal; needs only Python 3 |
 
 `make NATIVE=1 build` skips Docker and uses a toolchain installed on the machine (`sh firmware/setup.sh` installs it in

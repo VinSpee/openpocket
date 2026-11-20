@@ -19,6 +19,8 @@ jobs:
         run: node tools/op.mjs all
       - name: Build the MIDI test channel package (never the installer default)
         run: node tools/op.mjs package-test
+      - name: Build the rescue kit (the host tests fail when it is not the pinned kit, rescue/kit.sha256)
+        run: node tools/op.mjs kit
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}   # also after a failed test, so that the packages it ran on can be read
         with:
@@ -29,6 +31,7 @@ jobs:
             docs/firmware/*.fwsc
             docs/firmware/manifest.json
             docs/firmware/midi-test/
+            docs/rescue/
             build/SHA256SUMS
             build/SHA256SUMS-midi-test
             build/apps/*/*.bin
