@@ -167,6 +167,7 @@ proposed upstream.
 | `tools/` | package builder, loader wrapper, font converter, flash image tools |
 | `tests/` | host tests and the simulated pedal |
 | `flash/` | SD-card recovery with fm1buddy (ESP32-S3) |
+| `changelog/`, `.changeset/` | the release units with their changelogs, and the changesets waiting for the next release ([CONTRIBUTING.md](CONTRIBUTING.md), [docs/RELEASING.md](docs/RELEASING.md)) |
 | `firmware/ble/`, `third_party/jieli-ble/` | the optional Bluetooth MIDI test image (`make ble`, [docs/BLE-TEST.md](docs/BLE-TEST.md)) and JieLi's Bluetooth controller it links |
 
 ## Licence

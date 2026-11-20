@@ -1,0 +1,31 @@
+name: changeset
+# Does this pull request add a changeset (CONTRIBUTING.md)? Advisory: it fails without one, and it is not a required check.
+on:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: changeset-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  changeset:
+    # the Version Packages pull request uses changesets up and never adds one
+    if: ${{ !startsWith(github.head_ref, 'changeset-release/') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the changesets of this pull request are the ones added since the base branch
+      - run: npm ci
+      - name: The changesets this pull request adds (it fails when one names an unknown unit, and when there is none)
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: |
+          npx changeset status --since="$BASE" --output="$RUNNER_TEMP/status.json"
+          if [ "$(jq '.changesets | length' "$RUNNER_TEMP/status.json")" -eq 0 ]; then
+            echo "::error title=No changeset::This pull request adds no changeset. Run 'npx changeset' and commit the file, or 'npx changeset --empty' when the change needs no release note. See CONTRIBUTING.md."
+            exit 1
+          fi
+          jq -r '.changesets[] | "- `.changeset/\(.id).md`: " + (if (.releases | length) == 0 then "empty, no release note" else ([.releases[] | "\(.name) (\(.type))"] | join(", ")) end)' "$RUNNER_TEMP/status.json" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: The release units share one version and the release step reads them
+        run: node .github/scripts/release.mjs

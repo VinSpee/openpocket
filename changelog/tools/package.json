@@ -1,0 +1,6 @@
+{
+  "name": "tools",
+  "version": "1.0.0-beta.0",
+  "private": true,
+  "description": "Installer, rescue and tools"
+}
