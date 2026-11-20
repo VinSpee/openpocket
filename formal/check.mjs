@@ -18,10 +18,10 @@ const ROOT = resolve(HERE, "..");
 
 // [specification, configuration, expected status, the property that fails, why it is expected to]
 const MODELS = [
-  ["FlashHold", "FlashHold", "invariant", "XipExclusion", "finding F1"],
+  ["FlashHold", "FlashHold", "ok"],
   ["FlashHold", "FlashHoldFixed", "ok"],
   ["FlashHold", "FlashHoldOneShot", "ok"],
-  ["FlashHold", "FlashHoldOneShotGap", "invariant", "XipExclusion", "finding F1"],
+  ["FlashHold", "FlashHoldOneShotGap", "ok"],
   ["FlashHold", "FlashHoldNoCollect", "invariant", "XipExclusion", "mutation"],
   ["EditorWatch", "EditorWatch", "ok"],
   ["EditorWatch", "EditorWatchNoOwed", "invariant", "InSync", "mutation"],
@@ -36,12 +36,8 @@ const MODELS = [
 
 // The runs conformance/flash_trace.c records from the firmware's own code, against FlashHold.tla:
 // [trace, configuration, expected status, why a mismatch is expected]
-const HELD = ["nm_commit", "nm_erase", "ir_commit", "ir_erase"];
-const TRACES = [
-  ["st_save", "FlashHold", "conforms"],
-  ["st_save", "FlashHoldFixed", "conforms"],
-  ...HELD.flatMap((t) => [[t, "FlashHold", "conforms"], [t, "FlashHoldFixed", "mismatch", "finding F1"]]),
-];
+const TRACES = ["st_save", "nm_commit", "nm_erase", "ir_commit", "ir_erase"]
+  .flatMap((t) => [[t, "FlashHold", "conforms"], [t, "FlashHoldFixed", "conforms"]]);
 
 const args = process.argv.slice(2);
 const noTraces = args.includes("--no-traces");

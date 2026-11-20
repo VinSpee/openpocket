@@ -18,7 +18,8 @@ EXTENDS Naturals, Sequences
 CONSTANTS
   Modes,           \* how CPU1 is used in the runs explored: "oneshot" (dsp_job: one block a job) and / or
                    \* "worker" (lp_job: the NAM layer split, one job for as long as the preset plays)
-  ScanInsideHold,  \* FALSE: the code (nm_scan after st_audio_hold(0)); TRUE: the scan before it
+  ScanInsideHold,  \* TRUE: the code (nm_scan before st_audio_hold(0)); FALSE: the scan after it, the order before
+                   \* the fix of F1 (formal/FINDINGS.md)
   Collect,         \* TRUE: the code (a hold calls a_collect); FALSE: a mutation that leaves it out
   Gap              \* TRUE: the main loop may run between the interrupt's two callbacks. firmware/px_aorder.h:
                    \* a_enc runs, and the interrupt enters again for a_dec, a few microseconds later
@@ -43,8 +44,8 @@ vars == <<mode, mi, msub, masked, cli, sfc, pend, dpend, isr, cpu1, ajob, served
 \* st_audio_hold(1) and audio_apply's full change start alike
 Hold == <<"mask", "collect">>
 
-\* nm_commit: the hold, the erases, the programs and the read back, then the release and nm_scan (16 SPI
-\* reads); nm_changed -> audio_apply: the hold, px_engine_set (it reads the model's weights over SPI), the
+\* nm_commit: the hold, the erases, the programs and the read back, then nm_scan (16 SPI reads) and the
+\* release; nm_changed -> audio_apply: the hold, px_engine_set (it reads the model's weights over SPI), the
 \* release. "write", "scan" and "load" are each one flash access or more.
 Program ==
   Hold \o <<"write">> \o

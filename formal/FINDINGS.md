@@ -2,15 +2,22 @@
 
 The models in this folder were checked with everystate 0.4.1 against the code at commit `5fce8f5`.
 Two findings were real in the code at that commit. One note describes a promise the store does not make. Three models passed.
-F2 has since been fixed, and the release pin (`tests/release.sha256`) moved with the fix. F1 is open.
+Both findings have since been fixed, and the release pin (`tests/release.sha256`) moved with each fix.
 
 | Id | What | Verdict | Found by |
 |---|---|---|---|
-| F1 | Saving or erasing a NAM model or an IR reads the flash after the audio hold is released | Real in the code. The effect on a pedal is not tested. | `FlashHold.cfg`, `FlashHoldOneShotGap.cfg` |
+| F1 | Saving or erasing a NAM model or an IR read the flash after the audio hold was released | Fixed: the scan runs inside the hold. It was real in the code. Its effect on a pedal was not tested. | `FlashHold.cfg`, `FlashHoldOneShotGap.cfg` |
 | F2 | A request from the editor made the pedal drop a push it owed | Fixed. It was real in the code and reproduced on the firmware's editor code. | `EditorWatchNoOwed.cfg`, which was `EditorWatch.cfg` |
 | N1 | A save that returned an error can be the one the next start loads | True of the code. Not a loss. | `PresetStoreStrict.cfg` |
 
-## F1: the model and IR scans read the flash while CPU1 runs a job
+## F1 (fixed): the model and IR scans read the flash while CPU1 runs a job
+
+**Fixed.** [Pull request 37](https://github.com/VinSpee/openpocket/pull/37) moved `nm_scan` and `ir_scan` above `st_audio_hold(0)` in the four functions.
+`FlashHold.cfg`, `FlashHoldOneShot.cfg`, and `FlashHoldOneShotGap.cfg` now model that order and pass. The four recorded runs conform to `FlashHoldFixed.cfg`.
+`tests/test_flash_hold.c` runs the same firmware files in the host tests. It fails when a flash access of a save or an erase falls outside the hold: before the fix it counted the 16 reads of `nm_scan` and the 8 of `ir_scan`.
+The rest of this section describes the code before the fix, at commit `5fce8f5`. To see the trace again, set `ScanInsideHold = FALSE` in `FlashHold.cfg`.
+
+Only a pedal can show two things, and neither was tested. The first is that a save and an erase of a NAM model and of an IR still work on the real flash, with the audio back afterwards and both cores running, also while a NAM amp plays on two cores. The second is that the mute around a save is not audibly longer: the scan adds 16 or 8 short reads to the hold.
 
 **The promise.** While the SFC is off, CPU1 is in its RAM loop.
 `fl_enter` switches the SFC off for every erase, program, and SPI read (`firmware/bsp/chip/fm1_flash.h:120`), with the interrupts of CPU0 off.
@@ -18,7 +25,7 @@ CPU1 has no interrupts to switch off. Its idle loop is in RAM, and a job is not 
 `firmware/bsp/chip/fm1_cpu1.h:21` states the rule: "CPU0 turns the flash off only with no job outstanding".
 `st_audio_hold` (`firmware/px_store.h:169`) keeps the rule. It masks the audio interrupt and calls `a_collect`.
 
-**The shortest trace.** `FlashHold.cfg` models `nm_commit` as the code runs it. The check stops after 12 states.
+**The shortest trace.** `FlashHold.cfg` modelled `nm_commit` as the code ran it. The check stopped after 12 states.
 
 | Step | Model action | In the code |
 |---|---|---|
@@ -40,7 +47,7 @@ The editor reaches them with NAM_COMMIT, NAM_ERASE, IR_COMMIT, and IR_ERASE.
 
 **Real, or the model's doing?** Real. Two checks tie the trace to the code.
 
-- `formal/conformance/flash_trace.c` runs the firmware's own `px_store.h`, `px_models.h`, and `px_irs.h` on a PC and records each mask, each `a_collect`, each flash access, and each unmask. `everystate conform` accepts all five recorded runs as behaviours of the model of the code. Against the model of the fix it accepts `st_save` and rejects the other four at their `Unmask` line. `node formal/check.mjs` repeats this check.
+- `formal/conformance/flash_trace.c` runs the firmware's own `px_store.h`, `px_models.h`, and `px_irs.h` on a PC and records each mask, each `a_collect`, each flash access, and each unmask. `everystate conform` accepted all five recorded runs as behaviours of the model of the code. Against the model of the fix it accepted `st_save` and rejected the other four at their `Unmask` line.
 - The steps of the audio interrupt and of `lp_job` come from reading `firmware/px_audio.h`. No test runs them. `a_send` waits only for the output of `lp_job`, not for its return (`a_lp_post`), so the job is still outstanding when the main loop runs again.
 
 **When it happens.** With a NAM amp on two cores (the layer split), `lp_job` is one job for as long as the preset plays. Every scan read then falls inside it.
@@ -53,7 +60,7 @@ A job reads the flash only for the code and the constants outside those lists. `
 So the scan can pass unnoticed many times. When a job does reach the flash during a read, the outcome is the one `st_audio_hold` exists to prevent.
 A fault on CPU1 retires it, and the pedal runs on one core until it is switched off.
 
-**Suggested fix.** Move the scan above the release in the four functions, so that it runs with the audio held.
+**The fix.** The scan moved above the release in the four functions, so that it runs with the audio held.
 
 ```c
 	nm_scan();
@@ -61,7 +68,7 @@ A fault on CPU1 retires it, and the pedal runs on one core until it is switched 
 ```
 
 `FlashHoldFixed.cfg` models that order and passes, with both ways of using CPU1 and with the gap between the two callbacks.
-After the fix, the four recorded runs conform to `FlashHoldFixed.cfg`, and `check.mjs` reports it. Change the four `mismatch` rows in `check.mjs` to `conforms` in the same change.
+The four recorded runs now conform to `FlashHoldFixed.cfg`, and `check.mjs` expects it.
 
 ## F2 (fixed): a request from the editor made the pedal drop a push it owed
 

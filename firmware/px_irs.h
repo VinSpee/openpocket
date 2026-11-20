@@ -38,6 +38,7 @@ static int ir_hdr_ok(const ir_hdr_t *h)
 {
     return h->magic == IR_MAGIC && h->ver == 1u && h->n == PX_IR_LEN && h->scale > 0.0f && h->scale < 1000.0f;
 }
+/* boot (and after each write, inside its audio hold, as nm_scan): the headers into ir_cache */
 static void ir_scan(void)
 {
     ir_hdr_t h;
@@ -95,8 +96,8 @@ static int ir_commit(uint32_t s)
             if (ota_fread(base + o, chk, m) || memcmp(chk, ir_stage + o, m)) rc = 2;
         }
     }
-    st_audio_hold(0);
     ir_scan();
+    st_audio_hold(0);
     return rc;
 }
 /* IR_ERASE: slot s emptied. 0 ok, 1 invalid, 2 flash */
@@ -107,7 +108,7 @@ static int ir_erase(uint32_t s)
     if (s >= PX_IR_N) return 1;
     st_audio_hold(1);
     if (fl_erase4k(IR_BASE + s * IR_SLOT, &k)) rc = 2;
-    st_audio_hold(0);
     ir_scan();
+    st_audio_hold(0);
     return rc;
 }

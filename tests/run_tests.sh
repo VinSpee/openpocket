@@ -15,6 +15,8 @@
 #  - NAM: engine/px_nam.c against tools/nam_a2.py with every factory model (needs numpy)
 #  - MIDI: the musical-MIDI code (firmware/px_midi.h) on a PC: decoder, CC map, messages sent, settings byte, clock
 #  - preset store: save / reload / power cut at every step of a save (firmware/px_store.h on a simulated flash)
+#  - flash hold (firmware/px_store.h, px_models.h, px_irs.h): every erase, program and SPI read of a save or an erase
+#    of a preset, a NAM model or an IR falls inside the audio hold (formal/FINDINGS.md, F1)
 #  - the audio callbacks' order (v42, firmware/px_aorder.h): the I2S driver calls the output's callback before the
 #    input's when its interrupt enters late; every output block must still be the sound of that interrupt's guitar block
 #  - tuner (firmware/px_tuner.h): bass and guitar notes, sine and plucked, in tune and off it, read every 100 ms: the
@@ -96,6 +98,8 @@ echo "== base controls (firmware/base/input.h over base/controls.h: the pins and
 base_test test_base_input $CC -O1 -Wall -Wno-unused-function -Wno-unused-variable -Itests/host -Ifirmware tests/test_base_input.c
 echo "== base store (firmware/base/store.h: an app's own data in flash, kept by every update loader)"
 base_test test_base_store $CC -O1 -Wall -Wno-unused-function -Ifirmware tests/test_base_store.c
+echo "== flash hold (every flash access of a save or an erase with the audio held and the second core collected)"
+base_test test_flash_hold $CC -O1 -Wall -Wno-unused-function -Iengine tests/test_flash_hold.c engine/px_dsp.c firmware/px_math.c -lm
 echo "== PALETTE's engine (firmware/apps/palette/engine.c: twenty effects in four modules, changes without a step)"
 base_test test_palette $CC -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -Wall -Ifirmware/apps/palette tests/test_palette.c firmware/apps/palette/engine.c firmware/px_math.c -lm
 $CC -O2 -Wall -Ifirmware/apps/palette -o build/palette_render tests/palette_render.c firmware/apps/palette/engine.c firmware/px_math.c -lm

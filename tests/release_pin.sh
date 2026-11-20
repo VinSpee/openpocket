@@ -1,7 +1,7 @@
 #!/bin/sh
 # The release pin: OpenPocket's image and packages must be the bytes of the pinned release (upstream's published v42
-# with the bass tuner fix, trails and the editor watch fix), whatever changed in the base firmware or in another app
-# (docs/BASE-FIRMWARE.md, section 9).
+# with the bass tuner fix, trails, the editor watch fix and the flash hold fix), whatever changed in the base firmware
+# or in another app (docs/BASE-FIRMWARE.md, section 9).
 # tests/release.sha256 holds their SHA-256.
 #   tests/release_pin.sh [SUMS]   compare SUMS (default build/SHA256SUMS, which `tools/op.mjs package` writes) with the pin
 # The same sums mean that nothing in OpenPocket needs a check on a pedal. To pin a new OpenPocket release (a merge of
