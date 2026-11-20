@@ -7,6 +7,7 @@ firmware/build-ble/
 firmware/openpocket-ble.bin
 docs/firmware/*.fwsc
 docs/firmware/manifest.json
+docs/rescue/
 *.o
 __pycache__/
 # your own pedal's backup and images made from it: never in the repository (they hold the official firmware)

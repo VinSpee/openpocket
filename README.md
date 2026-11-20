@@ -79,9 +79,9 @@ the DSP slower and crackle, so v33 leaves them as the boot loader does again.) B
 restarts in a loop, the page has a **rescue mode** (step 2): tick it, press Connect, plug the pedal in; the install
 starts the moment the pedal answers and halts its DSP at once. A BlackBox can always go back to its official firmware from the page (step 3). It is the same JieLi update system as the M-VAVE FM-1, where this method is
 used by Felucca, CLIPPER and SLOOP. If the pedal still loops, or shows a black screen after an install, restore it over USB
-with no extra hardware (`docs/RESCUE.md`, read-only check and backup first, the official BlackBox file): from a Mac,
-`make rescue`, then `make rescue-write` (it needs `brew install libusb` and sudo); from Windows, `RESCUE.bat`, then
-`RESCUE.bat --write`, in a Command Prompt opened as administrator (it needs Python 3, no driver). A browser cannot do this
+with no extra hardware, using the rescue kit (`docs/RESCUE.md`: read-only check and backup first, then the official
+BlackBox file that matches the firmware the pedal had). It runs from a Mac (it needs `brew install libusb` and sudo) or
+from Windows, in a Command Prompt opened as administrator (it needs Python 3, no driver). A browser cannot do this
 step: the pedal is then a USB mass-storage device, which browsers keep from web pages. The second route is the SD-card
 recovery (`flash/`: fm1buddy on an ESP32-S3, `makeimage.bat`). Step-by-step instructions for a Mac or a Windows PC, in
 plain words: [Quick start: rescue a BlackBox that will not boot](docs/RESCUE.md#quick-start-rescue-a-blackbox-that-will-not-boot).

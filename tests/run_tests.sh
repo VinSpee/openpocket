@@ -42,6 +42,8 @@
 #    flasher's --app guard, the install, the way back to OpenPocket (also by rescue), what the flash keeps through both.
 #    With OP_BUILT=1 (node tools/op.mjs all) also with the packages the build made: each product's image byte for byte
 #  - rescue: tools/uboot_rescue.py (protocol, guards, resume) against a simulated UBOOT pedal, tests/uboot_sim.py
+#  - rescue kit: rescue/build_kit.py gives the pinned bytes twice; an unzipped kit's own files restore a simulated pedal
+#    on a V20, a V22 and a V23 flash head, and refuse the file of the other head (tests/test_rescue_kit.py)
 #  - hosted simulator: tools/sim.mjs driven over HTTP (controls, held buttons, screen, flash file, SysEx, the Web MIDI shim)
 #  - an app in the hosted simulator: firmware/apps/starter's own C files with tests/host as the chip, over the same HTTP
 #    interface: its controls, its sound at the two outputs, MIDI, its store, safe mode, the boot guard
@@ -152,6 +154,8 @@ if sh tests/release_pin.sh build/no-such.sums > /dev/null 2>&1; then echo "relea
 echo "release pin: ok"
 echo "== rescue tool (tools/uboot_rescue.py on a simulated UBOOT pedal)"
 python3 tests/test_uboot_rescue.py $1
+echo "== rescue kit (rescue/build_kit.py: the pinned bytes; the unzipped kit on a simulated V20, V22 and V23 pedal)"
+python3 tests/test_rescue_kit.py
 echo "== hosted simulator (tools/sim.mjs)"
 node tests/test_sim.mjs
 echo "== an app on the base firmware in the simulator (firmware/apps/starter, from its own C files: tools/sim.mjs --app)"

@@ -125,12 +125,12 @@ r = op(["build"], { path: join(tmp, "empty") });
 assert.notEqual(r.status, 0);
 assert.match(r.err, /Docker is not installed or not running/, "no docker at all");
 
-for (const p of ["firmware/openpocket-midi-test.bin", "docs/firmware/midi-test/PocketX_937.fwsc", "build/x", "firmware/build/y", "firmware/build-ble/z", "firmware/openpocket-ble.bin", "docs/firmware/PocketX_900.fwsc", "docs/firmware/manifest.json", "engine/px_render"]) touch(p);
+for (const p of ["firmware/openpocket-midi-test.bin", "docs/firmware/midi-test/PocketX_937.fwsc", "build/x", "firmware/build/y", "firmware/build-ble/z", "firmware/openpocket-ble.bin", "docs/firmware/PocketX_900.fwsc", "docs/firmware/manifest.json", "docs/rescue/manifest.json", "engine/px_render"]) touch(p);
 touch("docs/firmware/README.md");
 touch("engine/px_dsp.c");
 r = op(["clean"], { path: join(tmp, "empty") });
 assert.equal(r.status, 0, "clean needs no docker");
-for (const p of ["build", "firmware/build", "firmware/build-ble", "firmware/openpocket-ble.bin", "firmware/openpocket.bin", "firmware/openpocket-midi-test.bin", "docs/firmware/midi-test", "docs/firmware/PocketX_900.fwsc", "docs/firmware/manifest.json", "engine/px_render"]) {
+for (const p of ["build", "firmware/build", "firmware/build-ble", "firmware/openpocket-ble.bin", "firmware/openpocket.bin", "firmware/openpocket-midi-test.bin", "docs/firmware/midi-test", "docs/firmware/PocketX_900.fwsc", "docs/firmware/manifest.json", "docs/rescue", "engine/px_render"]) {
   assert.ok(!existsSync(join(root, p)), `${p} removed`);
 }
 for (const p of ["docs/firmware/README.md", "engine/px_dsp.c", "guitar.wav"]) assert.ok(existsSync(join(root, p)), `${p} kept`);
@@ -158,6 +158,9 @@ assert.ok(rc.calls.every((c) => c[0] !== "sudo"));
 rmSync(rlog, { force: true });
 op(["doctor"], { path: `${fakebin}:${rescuebin}` });
 assert.deepEqual(readFileSync(rlog, "utf8").trim().split("\n").at(-1).split("\t"), ["python3", "tools/uboot_rescue.py", "--check"], "doctor checks the rescue prerequisites");
+rc = rescueCalls(["kit", "--official", "dir"]);
+assert.equal(rc.status, 0);
+assert.deepEqual(rc.calls, [["python3", "rescue/build_kit.py", "--official", "dir"]], "kit runs on the host with Python only: no Docker, no sudo");
 r = op(["sim", "--help"]);
 assert.equal(r.status, 0, "sim is passed to tools/sim.mjs");
 assert.match(r.err, /usage: node tools\/op\.mjs sim/, "sim prints its own usage");
