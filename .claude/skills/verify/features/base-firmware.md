@@ -8,12 +8,13 @@
 - PALETTE (`firmware/apps/palette`, `docs/PALETTE.md`): a four-module stereo instrument, an alternative firmware too.
   `tests/test_palette.c` runs its engine, `tests/test_palette_sim.mjs` the app in the simulator, and
   `docs/PALETTE-REPORT.md` has its measured costs and its checks on a pedal.
-- The product identity: an app's INFO reply, the installer's separate card, the flasher's `--app`, the editor's notice.
+- The product identity: an app's INFO reply, the installer's card per firmware, the flasher's `--app`, the editor's notice.
 
 ## How to get to it (user POV)
 A maintainer changes a file under `firmware/base/`, or `px_usb.h`, `app.ld`, `build.sh`. A user of OpenPocket sees no
-difference. A user of an alternative firmware installs it from `index.html?app=NAME` or with `flash --app NAME`, and
-goes back with the button "Back to OpenPocket" or with `flash` without `--app`.
+difference. A user of an alternative firmware installs it from its card on the installer page (a firmware of
+`firmware/catalog.json`; any other with `index.html?app=NAME`) or with `flash --app NAME`, and goes back with the
+button "Switch to OpenPocket" or with `flash` without `--app`.
 
 ## Driving it with op.mjs
 1. `node tools/op.mjs all`: OpenPocket (it fails at the release pin when its bytes changed), each app, then the host
@@ -22,8 +23,8 @@ goes back with the button "Back to OpenPocket" or with `flash` without `--app`.
 2. `node tools/op.mjs sim --app starter --port 0 --reset`: the app's own C files on this computer. `GET /api/state`,
    `POST /api/press/NAME`, `/api/knob/N`, `/api/sound/440`, `/api/screen.png` (docs/SIMULATOR.md). The page's Listen
    button plays a guitar loop through the app's own code (`/api/loop/NAME`, `/api/audio/MS`).
-3. `sh .claude/skills/verify/scripts/pages.sh`: the installer page with `?app=starter` (install, the product named,
-   Back to OpenPocket) and the editor's notice for a pedal on an alternative firmware.
+3. `sh .claude/skills/verify/scripts/pages.sh`: the installer page with `?app=starter` and with a catalog of two firmwares
+   (install each, the product named, Switch to the other and back, the refusals) and the editor's notice for a pedal on an alternative firmware.
 4. After a change to a base file, the fast check is the object hash of `firmware/openpocket.c` compiled with
    `build.sh`'s flags, before and after. The full check is `node tools/op.mjs package`.
 

@@ -40,6 +40,13 @@ button:disabled{opacity:.45;cursor:default}
 .note{font-size:13.5px;color:var(--dim);margin:0;max-width:68ch}
 .note strong{color:var(--ink)}
 .warnbox{border-left:3px solid var(--warn);padding:2px 0 2px 12px}
+.fws{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:12px}
+.fw{border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.fw.on{border-color:var(--ok)}
+.fw h3{margin:0;font-size:17px;font-weight:800;display:flex;flex-wrap:wrap;align-items:center;gap:8px;overflow-wrap:anywhere}
+.fw h3 small{font:600 13px/1 Inter,sans-serif;color:var(--dim)}
+.fw .what{flex:1}
+.fw button{align-self:flex-start;text-align:left;line-height:1.25}
 .msg{font-weight:600;min-height:1.5em;overflow-wrap:anywhere}
 .msg.ok{color:var(--ok)}.msg.err{color:var(--err)}
 input[type=file]{font:inherit;color:var(--dim);max-width:100%}
@@ -87,32 +94,21 @@ footer a,.note a{color:inherit}
 
   <section class="card" id="installCard">
     <h2><b>2</b><span data-t="s2"></span></h2>
-    <p class="note"><span data-t="s2note"></span> <strong id="pkgver">…</strong></p>
+    <p class="note" data-t="s2note"></p>
     <p class="note warnbox" data-t="s2warn"></p>
     <p class="note warnbox" id="bbwarn" hidden data-t="bbwarn"></p>
     <p class="note warnbox" id="testchan" hidden data-t="testchan"></p>
-    <p class="note warnbox" id="altnow" hidden></p>
     <div id="newerconfirm" hidden>
       <p class="note warnbox" id="newerwarn"></p>
       <label class="chk"><input type="checkbox" id="newerok"><span data-t="newerok"></span></label>
     </div>
-    <div class="row">
-      <button class="go" id="install" disabled data-t="install"></button>
-      <button class="alt" id="resume" hidden data-t="resume"></button>
-    </div>
+    <div class="fws" id="fws"></div>
+    <p class="note" id="nofw" hidden data-t="nofw"></p>
+    <div class="row"><button class="alt" id="resume" hidden data-t="resume"></button></div>
     <div class="bar"><i id="bar"></i></div>
     <div class="steps" id="steps"></div>
     <p class="msg" id="msg"></p>
     <p class="note" id="next" hidden><a href="editor.html" data-t="nexteditor"></a> · <a id="notes" data-t="nextnotes"></a></p>
-  </section>
-
-  <section class="card" id="altCard" hidden>
-    <h2><b>+</b><span data-t="alt"></span></h2>
-    <p class="note"><strong id="altname"></strong> <span data-t="altwhat"></span></p>
-    <p class="note warnbox" data-t="altwarn"></p>
-    <p class="note" data-t="altback"></p>
-    <div class="row"><button class="alt" id="altinstall" disabled></button></div>
-    <p class="msg" id="altmsg"></p>
   </section>
 
   <section class="card">
@@ -201,11 +197,14 @@ const T = {
     connect: "Connect", idle: "waiting", searching: "searching…", found: "pedal found", none: "no pedal", busy: "working…",
     pedal: "Pedal", firmware: "Firmware", port: "MIDI port",
     official: "official", opfw: "OpenPocket", loader: "update mode (loader)",
-    s2: "Install OpenPocket", s2note: "Available version:",
+    s2: "Choose a firmware",
+    s2note: "Each firmware below is a whole firmware for the pedal. The pedal runs one at a time: installing one replaces the one it runs, and this page puts the other back the same way. What each firmware saved on the pedal stays there while the pedal runs another one.",
     s2warn: "During the install (about 1 to 2 minutes): do not unplug or switch the pedal off, keep this tab open. Nothing is sent before this page has checked the package against its SHA-256 and the firmware the pedal runs, and nothing is written before the pedal has checked it too. If the install stops, do not switch the pedal off: reconnect the cable and press Resume. First install over the official firmware: keep your backup (SD card / fm1buddy) at hand.",
-    install: "Install", resume: "Resume the update",
+    install: "Install ", again: "Install again: ", switchto: "Switch to ", onpedal: "on the pedal", resume: "Resume the update",
+    nofw: "No firmware package on this site.", unlisted: "Offered by this link only: it is not on this site's list.",
+    nosuch: "No firmware by this name on this site: ",
     st_start: "start", st_verify: "check", st_loader: "loader", st_write: "write", st_reboot: "restart", st_done: "done",
-    done: "Done: the pedal now runs ", nexteditor: "Open the preset editor", nextnotes: "What is new in this version", sameok: "OpenPocket is up to date.",
+    done: "Done: the pedal now runs ", nexteditor: "Open the preset editor", nextnotes: "What is new in this version",
     s3: "Back to the official firmware", s3note: "Pick your pedal's official file (.fwsc), downloaded from Donner / M-VAVE. It is checked here, in your browser, and sent to no server.",
     backoff: "Return to the official firmware", offknown: "Official file verified: ", offunknown: "Well-formed official file, unknown to this page: ",
     newerok: "I understand: install anyway, over this official firmware.",
@@ -221,18 +220,11 @@ const T = {
     testchan: "TEST CHANNEL: this installs a test build, not the release. It is for people who agreed to try it, and it is not the version the normal installer page offers. To go back, open this page without ?channel=… and press Install.",
     bbwarn: "M-VAVE BlackBox: v31 is the fix for issue #1 (OpenPocket restarted every 4 s after the pedal was switched off and on), still being tested on the BlackBox. Please report how it goes on GitHub. If your BlackBox restarts in a loop, use the rescue mode below.",
 toeditor: "Preset editor →",
-        rescueon: "Rescue mode, for a pedal that restarts in a loop: tick this, press Connect, then plug the pedal in (or let it restart). The install starts by itself as soon as the pedal answers; it stops the pedal's sound processing at once, so the restarts stop. It installs the official file chosen in step 3 if there is one for this pedal, otherwise OpenPocket. If the pedal never answers here, use \"How to run the rescue on your computer\" below.",
+        rescueon: "Rescue mode, for a pedal that restarts in a loop: tick this, press Connect, then plug the pedal in (or let it restart). The install starts by itself as soon as the pedal answers; it stops the pedal's sound processing at once, so the restarts stop. It installs the official file chosen in step 3 if there is one for this pedal, otherwise the first firmware of step 2. If the pedal never answers here, use \"How to run the rescue on your computer\" below.",
     e_model: "This package is not for this pedal: ", e_lost: "The pedal was disconnected. Do not switch it off: plug the cable back in, then press Resume if the page shows update mode, else Install again.",
     e_stopped: "The pedal stopped answering before the update was finished. Do not switch it off: unplug the cable, plug it back in, then press Resume if the page shows update mode, else Install again.", e_noloader: "The update loader did not appear. Do not switch the pedal off: replug the cable, then press Resume.",
     e_noreturn: "The update was written and checked, but the pedal did not come back. Switching it off and on is safe now. If it then shows a black screen or restarts in a loop, use the USB rescue (Rescue and advanced options, below).", e_mismatch: "Written, but the pedal reports: ",
-    e_foreign: "The pedal is in the update mode of another firmware: ", e_pkg: "OpenPocket package missing on this site: ",
-    altfw: "an alternative firmware, not OpenPocket", back: "Back to OpenPocket",
-    altnow1: "This pedal runs ", altnow2: ", an alternative firmware built on OpenPocket's base. It is not OpenPocket. The button below puts OpenPocket back: your OpenPocket presets, NAM models and cabinet IRs are still on the pedal.",
-    alt: "Alternative firmware", altwhat: "is another firmware for the same pedal, built on OpenPocket's base. It is not OpenPocket and not a version of it.",
-    altwarn: "It replaces OpenPocket: the pedal runs one firmware or the other, never both. It has its own sounds and controls, and the preset editor does not work with it. Your OpenPocket presets, NAM models and cabinet IRs stay on the pedal, untouched. Keep your backup (SD card / fm1buddy) at hand, as for any install.",
-    altback: "The way back: open this page again and press the button of step 2. It is called \"Back to OpenPocket\" while the pedal runs an alternative firmware. The public OpenPocket installer does the same.",
-    altinstall: "Install ", altre: "Install again: ", altdone1: "Done: the pedal now runs ", altdone2: ", an alternative firmware. To go back to OpenPocket, press the button of step 2.",
-    altmissing: "No alternative firmware by this name on this site: ",
+    e_foreign: "The pedal is in the update mode of another firmware: ", e_pkg: "Firmware package missing on this site: ",
   },
 };
 const lang = "en";
@@ -259,36 +251,67 @@ const errText = (e) => (e && e.code && T.en["e_" + e.code] ? t("e_" + e.code) + 
 /* a test channel (?channel=midi-test): packages from firmware/<channel>/, never offered without the link */
 const CHANNEL = (new URLSearchParams(location.search).get("channel") || "").replace(/[^a-z0-9-]/g, "");
 const FW = "firmware/" + (CHANNEL ? CHANNEL + "/" : "");
-/* an alternative firmware (?app=NAME: an app on the base firmware, docs/ALT-FIRMWARE.md): its packages from
- * firmware/apps/<name>/, in a card of its own, never offered without the link and never in OpenPocket's place */
+/* a firmware that is not on the site's list (?app=NAME: an app on the base firmware, docs/ALT-FIRMWARE.md): its
+ * packages from firmware/apps/<name>/, in a card of its own after the listed ones, never offered without the link */
 const APP = (new URLSearchParams(location.search).get("app") || "").replace(/[^a-z0-9-]/g, "");
 const APPFW = "firmware/apps/" + APP + "/";
-let access = null, up = null, manifest = null, lastDev = null, busy = false, official = null;
-let altManifest = null, started = null;        // started: the package of the last install begun here, for a resume
+/* offers: the firmwares this page can install, one card each, in the catalog's order. An offer is
+ * { id, name, version, what, note, dir, packages, listed }: id is the product a pedal says it runs (pxota.js parseInfo),
+ * packages are manifest entries whose files are relative to dir. The first offer is the one a rescue and a resume
+ * without a known package install. */
+let access = null, up = null, offers = [], lastDev = null, busy = false, official = null;
+let started = null;                            // the package of the last install begun here, for a resume
 let sawV21 = false;
 
 if (!navigator.requestMIDIAccess) { $("nomidi").hidden = false; $("connect").disabled = true; }
 $("testchan").hidden = !CHANNEL;
 
-async function loadManifest() {
-  try {
-    const r = await fetch(FW + "manifest.json", { cache: "no-store" });
-    manifest = await r.json();
-    $("pkgver").textContent = "v" + manifest.version + (CHANNEL ? " (" + CHANNEL + ")" : "");
-  } catch (e) { $("pkgver").textContent = "—"; log("manifest: " + e.message); }
+async function getJson(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
+  return r.json();
+}
+const fromCatalog = (f) => ({ id: f.id, name: f.name, version: f.version, what: f.what, note: f.note, dir: FW, packages: f.packages, listed: true });
+const fromManifest = (m, dir, listed) => ({ id: m.app ? m.app.id : OPENPOCKET, name: m.app ? m.app.name : t("opfw"),
+  version: m.app ? m.app.version : "v" + m.version, what: "", dir, packages: m.packages, listed });
+
+// the site's catalog (release.json, tools/catalog.py); without one (a test channel, a site with one firmware) the
+// firmware of the folder's manifest; then the firmware of ?app=, when the catalog does not list it
+async function loadOffers() {
+  let list = [];
+  try { list = (await getJson(FW + "release.json")).firmwares.map(fromCatalog); }
+  catch (e) {
+    log("catalog: " + e.message);
+    try { list = [fromManifest(await getJson(FW + "manifest.json"), FW, true)]; } catch (e2) { log("manifest: " + e2.message); }
+  }
+  if (APP && !list.some((o) => o.id === APP)) {
+    try {
+      const m = await getJson(APPFW + "manifest.json");
+      if (!m.app || m.app.id !== APP) throw new Error("not this firmware's manifest");
+      list.push(fromManifest(m, APPFW, false));
+    } catch (e) { setMsg($("msg"), t("nosuch") + APP, "err"); log("?app=" + APP + ": " + e.message); }
+  }
+  offers = list;
+  drawOffers();
 }
 
-async function loadAlt() {
-  if (!APP) return;
-  $("altCard").hidden = false;
-  try {
-    const r = await fetch(APPFW + "manifest.json", { cache: "no-store" });
-    const m = await r.json();
-    if (!m.app || m.app.id !== APP) throw new Error("not this firmware's manifest");
-    altManifest = m;
-    $("altname").textContent = `${m.app.name} ${m.app.version}`;
-  } catch (e) { setMsg($("altmsg"), t("altmissing") + APP, "err"); log("alternative firmware: " + e.message); }
+function drawOffers() {
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
+  $("nofw").hidden = offers.length > 0;
+  $("fws").replaceChildren(...offers.map((o) => {
+    const card = el("article", "fw");
+    card.dataset.fw = o.id;
+    const h = el("h3", "", o.name + " ");
+    h.append(el("small", "", o.version + (CHANNEL && o.dir === FW ? ` (${CHANNEL})` : "")), el("span", "pill ok", t("onpedal")));
+    const b = el("button", "go");
+    b.disabled = true;
+    b.onclick = () => install(o);
+    const warn = [o.note, !o.listed && t("unlisted")].filter(Boolean).map((w) => el("p", "note warnbox", w));
+    card.append(h, el("p", "note what", o.what), ...warn, b);
+    return card;
+  }));
 }
+const cardOf = (o) => $("fws").children[offers.indexOf(o)];
 
 function showDev(d) {
   lastDev = d;
@@ -303,14 +326,18 @@ function showDev(d) {
   $("newerconfirm").hidden = !newer;
   if (newer) $("newerwarn").textContent = newer; else if (d) $("newerok").checked = false;
   const unconfirmed = Boolean(newer) && !$("newerok").checked;
-  $("install").disabled = busy || !d || IS_OTA(d.id) || !manifest || unconfirmed;
   $("uboot").disabled = busy || !d || !IS_OPENPOCKET(d.id);
-  const alt = d && IS_ALT(d.product) ? d.product : null;           /* the pedal runs an alternative firmware */
-  $("install").textContent = alt ? t("back") : t("install");
-  $("altnow").hidden = !alt;
-  if (alt) $("altnow").textContent = `${t("altnow1")}${alt.name} ${alt.version}${t("altnow2")}`;
-  $("altinstall").disabled = busy || !d || IS_OTA(d.id) || !altManifest || unconfirmed;
-  if (altManifest) $("altinstall").textContent = (alt && alt.app === APP ? t("altre") : t("altinstall")) + `${altManifest.app.name} ${altManifest.app.version}`;
+  const alt = d && IS_ALT(d.product) ? d.product : null;           /* a firmware on the base that says which it is */
+  // which offer the pedal runs: the product it says, or (a firmware on the base too old to say) the first one's
+  const runs = d && IS_OPENPOCKET(d.id) ? (d.product ? d.product.app : OPENPOCKET) : null;
+  for (const o of offers) {
+    const card = cardOf(o), b = card.querySelector("button"), on = runs === o.id;
+    const same = on && o.packages.some((p) => p.product === d.id.text);
+    card.classList.toggle("on", on);
+    card.querySelector(".pill").hidden = !on;
+    b.disabled = busy || !d || IS_OTA(d.id) || unconfirmed;
+    b.textContent = t(same ? "again" : runs && !on ? "switchto" : "install") + `${o.name} ${o.version}`;
+  }
   $("backoff").disabled = busy || !d || IS_OTA(d.id) || !official || official.model !== d.id.model ||
     (!official.known && !$("offok").checked);
   $("backoff").textContent = official?.product === BLACKBOX_V21 ? "Install V21 firmware" : t("backoff");
@@ -318,7 +345,7 @@ function showDev(d) {
   const id = d.id;
   const ota = IS_OTA(id);
   $("d-model").textContent = ota ? "—" : (id.model === "PocketX" ? "Donner Pocket X" : "M-VAVE BlackBox");
-  $("d-fw").textContent = ota ? `${t("loader")} (${id.text})` : alt ? `${alt.name} ${alt.version}: ${t("altfw")} (${id.text})`
+  $("d-fw").textContent = ota ? `${t("loader")} (${id.text})` : alt ? `${alt.name} ${alt.version} (${id.text})`
     : IS_OPENPOCKET(id) ? `${t("opfw")} v${id.version - 900} (${id.text})` : `${t("official")} ${String(id.version).padStart(3, "0")} (${id.text})`;
   $("d-port").textContent = d.name;
   const bb = id.model === "BlackBox";               /* not supported yet: boot loop (issue #1) */
@@ -359,41 +386,38 @@ function progress(kind, n) {
   $("bar").style.width = pct.toFixed(1) + "%";
 }
 
-// the package of a model: OpenPocket's, or (man, dir given) the alternative firmware's. app: the product it is
-async function packageFor(model, man = manifest, dir = FW) {
-  const p = man && man.packages.find((x) => x.model === model);
+// an offer's package for a model. app: the product the pedal must say it runs afterwards
+async function packageFor(model, offer = offers[0]) {
+  const p = offer && offer.packages.find((x) => x.model === model);
   if (!p) throw Object.assign(new Error(model), { code: "pkg", detail: model });
-  const r = await fetch(dir + p.file, { cache: "no-store" });
+  const r = await fetch(offer.dir + p.file, { cache: "no-store" });
   if (!r.ok) throw Object.assign(new Error(p.file), { code: "pkg", detail: p.file });
-  // the manifest pins every byte (size, SHA-256), then the identity and every CRC: nothing else reaches the pedal
+  // the catalog pins every byte (size, SHA-256), then the identity and every CRC: nothing else reaches the pedal
   const { image } = await verifyPackage(new Uint8Array(await r.arrayBuffer()), p);
-  return { product: p.product, image, app: man.app ? man.app.id : OPENPOCKET };
+  return { product: p.product, image, app: offer.id, offer };
 }
 
-async function run(job, resultMessage, errorTo = $("msg")) {   // errorTo: where a failure is said (the job's own card)
+// job's result: the identity the pedal reports, or { offer, id } when one of the offers was installed
+async function run(job, resultMessage) {
   if (busy) return;
   busy = true; stepAt = resultMessage ? -1 : 0; drawSteps(); $("bar").style.width = "0";
   setState(t("busy"), "warn");
-  ["install", "altinstall", "backoff", "uboot", "connect", "verify-factory", "factory-uboot"].forEach((id) => $(id).disabled = true);
-  setMsg($("msg"), ""); setMsg($("altmsg"), ""); $("next").hidden = true;
+  ["backoff", "uboot", "connect", "verify-factory", "factory-uboot"].forEach((id) => $(id).disabled = true);
+  $("fws").querySelectorAll("button").forEach((b) => { b.disabled = true; });
+  setMsg($("msg"), ""); $("next").hidden = true;
   try {
-    let res = await job();
+    const res = await job();
     if (!resultMessage) { stepAt = STEPS.length; drawSteps(); }   // every stage done, none still lit
-    if (res && res.alt) {                               // an alternative firmware was installed: said in its own card
-      const m = `${t("altdone1")}${res.alt.name} ${res.alt.version} (${res.id})${t("altdone2")}`;
-      setMsg($("altmsg"), m, "ok"); log(m);
-      return;
-    }
+    const o = !resultMessage && res && res.offer;
     const firmwareOnly = !resultMessage && res === BLACKBOX_V21;
-    const v = !resultMessage && /^(?:PocketX|BlackBox)_9(\d\d)$/.exec(res);
     const message = resultMessage || (firmwareOnly
       ? "V21 firmware booted. Verify or restore the factory sounds in step 3."
-      : t("done") + (v ? `${t("opfw")} v${+v[1]} (${res})` : res));
+      : t("done") + (o ? `${o.name} ${o.version} (${res.id})` : res));
     setMsg($("msg"), message, firmwareOnly ? "" : "ok");
-    if (v) { $("notes").href = `WHATS-NEW-v${+v[1]}.md`; $("next").hidden = false; }
+    if (o && o.id === OPENPOCKET) { $("notes").href = `WHATS-NEW-${o.version}.md`; $("next").hidden = false; }   // (the editor is this firmware's)
     log(message);
   } catch (e) {
-    setMsg(errorTo, errText(e), "err");
+    setMsg($("msg"), errText(e), "err");
     log(`error ${e.code || ""}: ${e.message}`);
   } finally {
     busy = false;
@@ -411,12 +435,13 @@ const rescueArmed = () => $("rescueOn").checked && pre !== null && up !== null &
 async function prefetch() {
   pre = null;
   const got = {};
-  for (const m of MODELS) { try { got[m] = await packageFor(m); } catch (e) { log("rescue: " + errText(e)); } }   // (OpenPocket's: the rescue never installs an alternative firmware)
+  for (const m of MODELS) { try { got[m] = await packageFor(m); } catch (e) { log("rescue: " + errText(e)); } }   // (the first offer's: the rescue installs no other)
   if ($("rescueOn").checked) { pre = got; log("rescue mode armed: waiting for the pedal"); setState(t("searching"), "warn"); }
 }
+let picked = null;                                    // what the rescue chose for the pedal that answered
 function pick(model) {
-  if (official && official.model === model && (official.known || $("offok").checked)) return { image: official.image, product: official.product };
-  return pre && pre[model];
+  picked = official && official.model === model && (official.known || $("offok").checked) ? { image: official.image, product: official.product } : pre && pre[model];
+  return picked;
 }
 function rescueTry() {
   if (busy || scanning || !rescueArmed()) return;
@@ -432,7 +457,7 @@ function rescueTry() {
     }
     if (!r) throw Object.assign(new Error("no pedal yet"), { code: "notfound", detail: up.seen() });
     $("rescueOn").checked = false; pre = null;
-    return r;
+    return picked.offer ? { offer: picked.offer, id: r } : r;
   });
 }
 $("rescueOn").onchange = async () => {
@@ -442,30 +467,23 @@ $("rescueOn").onchange = async () => {
   if (rescueArmed() && lastDev) rescueTry();
 };
 const stepLog = (s, n) => { progress(s, n); if (s !== "verify" && s !== "write") log("step " + s + (n !== undefined ? " " + n : "")); };
-$("install").onclick = () => run(async () => {
+const install = (offer) => run(async () => {
   const d = lastDev;
-  const pkg = await packageFor(d.id.model);
+  const pkg = await packageFor(d.id.model, offer);
   started = pkg;
-  log(`install ${pkg.product} (OpenPocket) over ${d.id.text}`);
-  return up.install(pkg.image, pkg.product, stepLog, { app: pkg.app, acceptNewer: $("newerok").checked });
-});
-$("altinstall").onclick = () => run(async () => {
-  const d = lastDev;
-  const pkg = await packageFor(d.id.model, altManifest, APPFW);
-  started = { ...pkg, alt: altManifest.app };
-  log(`install ${pkg.product} (${altManifest.app.name} ${altManifest.app.version}, an alternative firmware) over ${d.id.text}`);
+  log(`install ${pkg.product} (${offer.name} ${offer.version}) over ${d.id.text}`);
   const id = await up.install(pkg.image, pkg.product, stepLog, { app: pkg.app, acceptNewer: $("newerok").checked });
-  return { alt: altManifest.app, id };
-}, null, $("altmsg"));
+  return { offer, id };
+});
 $("resume").onclick = () => run(async () => {
   const d = lastDev;
-  // our loader: finish the install begun on this page; else the OpenPocket package of the model picked by the official
-  // file or the last model seen (a loader does not say its model, and OpenPocket is the safe firmware to end on)
+  // our loader: finish the install begun on this page; else the first offer's package of the model picked by the
+  // official file or the last model seen (a loader does not say its model)
   if (OUR_LOADER(d.id)) {
     const model = (official && official.model) || stored("op-model", "PocketX");
     const pkg = started && !started.official ? started : await packageFor(model);
     await up.resume(pkg.image, pkg.product, (s, n) => progress(s, n), { app: pkg.app });
-    return pkg.alt ? { alt: pkg.alt, id: pkg.product } : pkg.product;
+    return { offer: pkg.offer, id: pkg.product };
   }
   if (!official) throw Object.assign(new Error(d.id.text), { code: "foreign", detail: d.id.text });
   await up.resume(official.image, official.product, (s, n) => progress(s, n), { official: true });
@@ -504,7 +522,7 @@ window.addEventListener("beforeunload", (e) => { if (busy) { e.preventDefault();
 setInterval(() => { if (lastDev && MODELS.includes(lastDev.id.model)) try { localStorage.setItem("op-model", lastDev.id.model); } catch (_) {} }, 2000);
 
 applyLang();
-Promise.all([loadManifest(), loadAlt()]).then(() => showDev(lastDev));
+loadOffers().then(() => showDev(lastDev));
 </script>
 </body>
 </html>

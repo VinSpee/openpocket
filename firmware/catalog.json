@@ -1,0 +1,14 @@
+{
+  "firmwares": [
+    {
+      "id": "openpocket",
+      "name": "OpenPocket",
+      "what": "A guitar multi-effects firmware: a chain of 12 blocks with amps, cabinets and effects in presets, neural amp models (NAM), and a preset editor in the browser."
+    },
+    {
+      "id": "palette",
+      "what": "A stereo effects instrument: twenty effects in four modules that can be put in any order.",
+      "note": "PALETTE has passed its tests on a simulated pedal only. It has not run on a real pedal yet."
+    }
+  ]
+}

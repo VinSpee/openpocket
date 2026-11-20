@@ -6,7 +6,8 @@
 //   node tools/op.mjs all        every product of this tree and the tests: OpenPocket (package, with the release pin), each
 //                                app of firmware/apps, then the host tests with the packages just built (test --built)
 //   node tools/op.mjs app NAME   another app on the base firmware (firmware/apps/NAME, docs/BASE-FIRMWARE.md) -> build/apps/NAME/
-//   node tools/op.mjs serve app NAME   the installer with that app offered beside OpenPocket (index.html?app=NAME)
+//   node tools/op.mjs serve app NAME   the installer with that app offered too (index.html?app=NAME), when it is not on the
+//                                      catalog of firmware/catalog.json, whose firmwares the page offers by itself
 //   node tools/op.mjs flash --dry-run | --confirm-flash [--rescue] [--package FILE] [--app NAME]   (writes to a connected pedal: docs/BUILDING.md)
 //   node tools/op.mjs log [--follow] [--json] [--wait SEC] [--scan SEC]   (reads a connected pedal's state: docs/BLE-TEST.md)
 //   node tools/op.mjs dsp [--presets A,B] [--seconds SEC] [--json]   (the DSP's load, late blocks and bypass per preset, over USB)
@@ -111,7 +112,7 @@ const commands = {
   package: () => inContainer(["sh", "-c", `sh firmware/build.sh && mkdir -p build && sha256sum ${OUTS} > build/SHA256SUMS && sh tests/release_pin.sh`]),
   "package-test": () => inContainer(["sh", "-c", `OP_CHANNEL=midi-test sh firmware/build.sh && mkdir -p build && sha256sum ${TEST} > build/SHA256SUMS-midi-test && cat build/SHA256SUMS-midi-test`]),
   clean() {
-    for (const p of ["build", "firmware/build", "firmware/build-ble", "firmware/openpocket.bin", "firmware/openpocket-ble.bin", "firmware/openpocket-midi-test.bin", "docs/firmware/midi-test", "docs/firmware/manifest.json", "engine/px_render"]) {
+    for (const p of ["build", "firmware/build", "firmware/build-ble", "firmware/openpocket.bin", "firmware/openpocket-ble.bin", "firmware/openpocket-midi-test.bin", "docs/firmware/midi-test", "docs/firmware/manifest.json", "docs/firmware/release.json", "engine/px_render"]) {
       rmSync(resolve(root, p), { recursive: true, force: true });
     }
     const dir = resolve(root, "docs/firmware");

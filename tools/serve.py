@@ -5,8 +5,8 @@ http://localhost:8765/ (Web MIDI works on localhost). Chrome or Edge. Ctrl+C sto
   tools/serve.py [index.html|editor.html] [firmware-dir]
 firmware-dir (for example build/ble) replaces docs/firmware as the place the installer reads the packages from.
 The packages of an alternative firmware (an app on the base firmware, docs/ALT-FIRMWARE.md) are read from where the
-build puts them: firmware/apps/NAME/ is build/apps/NAME/. The page offers one with index.html?app=NAME, beside
-OpenPocket, never in its place."""
+build puts them: firmware/apps/NAME/ is build/apps/NAME/. The page offers the ones of its catalog
+(docs/firmware/release.json, tools/catalog.py) and any other one with index.html?app=NAME."""
 import functools, http.server, os, sys, webbrowser
 
 page = sys.argv[1] if len(sys.argv) > 1 else "index.html"

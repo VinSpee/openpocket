@@ -174,3 +174,6 @@ mkdir -p "$PKG"
 # (an app's packages are named after it and its manifest says which product it is: --app; OpenPocket's are as ever)
 python3 "$HERE/../tools/pxpkg.py" "$APP" "$L/ota.bin" "$PKG" --version "$VER" \
     --sdk-files "$HERE/sdk/packager" ${OP_APP:+--app "$OP_APP"}
+# ---- the catalog of the firmwares that are built -> docs/firmware/release.json, for the installer's chooser ----
+# (a test channel and the Bluetooth test image are not on it: the page reads their own manifest)
+[ -n "$CHAN$OP_BLE" ] || python3 "$HERE/../tools/catalog.py"

@@ -2,7 +2,8 @@
 
 PALETTE (`firmware/apps/palette`) is an alternative firmware on the base firmware
 ([BASE-FIRMWARE.md](BASE-FIRMWARE.md), [ALT-FIRMWARE.md](ALT-FIRMWARE.md)). It is a product of its own, not a version
-of OpenPocket. The public installer never offers it.
+of OpenPocket. It is on the installer's catalog (`firmware/catalog.json`), so the installer page offers it in a card
+of its own, with a warning that it has not run on a pedal.
 
 Its reference is the Hologram Chroma Console: twenty stereo effects in four modules that can be put in any order. The
 module and effect names are the plain words of that instrument. Every algorithm here is written from the manual's

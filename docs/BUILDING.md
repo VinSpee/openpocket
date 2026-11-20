@@ -27,11 +27,11 @@ Apple silicon and other ARM machines Docker emulates it (Rosetta or QEMU); you c
 | Command | What it does |
 | --- | --- |
 | `make doctor` | check Node, Docker and the image, one line each (exit 1 when the build cannot work) |
-| `make build` | `firmware/build.sh` in the container: `firmware/openpocket.bin`, the update loader, `docs/firmware/PocketX_9NN.fwsc`, `BlackBox_9NN.fwsc`, `manifest.json` |
+| `make build` | `firmware/build.sh` in the container: `firmware/openpocket.bin`, the update loader, `docs/firmware/PocketX_9NN.fwsc`, `BlackBox_9NN.fwsc`, `manifest.json`, and `release.json`, the catalog of the firmwares that are built, which the installer page reads (`tools/catalog.py`) |
 | `make ble` | the Bluetooth MIDI test image (`OP_BLE=1 firmware/build.sh`): `firmware/openpocket-ble.bin`, `build/ble/*.fwsc`. Own target, own output folders; [BLE-TEST.md](BLE-TEST.md) |
-| `make app APP=starter` | another app on the base firmware, an alternative firmware (`OP_APP=starter firmware/build.sh`): `build/apps/starter/starter.bin`, its packages, its manifest and `SHA256SUMS`. The release files are not touched; [ALT-FIRMWARE.md](ALT-FIRMWARE.md), [BASE-FIRMWARE.md](BASE-FIRMWARE.md) |
+| `make app APP=starter` | another app on the base firmware, an alternative firmware (`OP_APP=starter firmware/build.sh`): `build/apps/starter/starter.bin`, its packages, its manifest and `SHA256SUMS`. The release files are not touched, and the catalog is written again; [ALT-FIRMWARE.md](ALT-FIRMWARE.md), [BASE-FIRMWARE.md](BASE-FIRMWARE.md) |
 | `make all` | every product from this tree: `package`, each app of `firmware/apps`, then `tests/run_tests.sh` with the packages just built (`node tools/op.mjs test --built`) |
-| `make serve-app APP=starter` | `make serve` with that alternative firmware offered beside OpenPocket (`index.html?app=starter`); builds it first if missing |
+| `make serve-app APP=starter` | `make serve` with that alternative firmware offered too (`index.html?app=starter`); builds it first if missing. A firmware of `firmware/catalog.json` is offered without it |
 | `make serve-ble` | `make serve` with `build/ble/` as the installer's package folder, to flash the test image |
 | `make package` | `build`, then `build/SHA256SUMS`, then the release pin: it fails when OpenPocket's image or packages are not the bytes of `tests/release.sha256` ([BASE-FIRMWARE.md](BASE-FIRMWARE.md), section 9) |
 | `make package-test` | the MIDI test channel (`OP_CHANNEL=midi-test`): `firmware/openpocket-midi-test.bin` and `docs/firmware/midi-test/` (v37 MIDI TEST, its own `manifest.json`), with `build/SHA256SUMS-midi-test`. The release files are not touched and the installer offers it only with `?channel=midi-test` |

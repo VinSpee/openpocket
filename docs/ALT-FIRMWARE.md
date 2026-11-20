@@ -91,12 +91,16 @@ Install only on a pedal you can afford to recover. Read section 6 first.
 node tools/op.mjs serve app mine          # or: make serve-app APP=mine
 ```
 
-The page opens as `index.html?app=mine`. Step 2 still installs OpenPocket. The alternative firmware has a card of
-its own below it, with its name, what it replaces, and the way back. While the pedal runs an alternative firmware,
-step 1 names it, and the button of step 2 reads "Back to OpenPocket".
+The page opens as `index.html?app=mine`. Step 2 has one card per firmware. Yours is the last one, with its name and
+a line that says it is offered by this link only. Each card has one button. While the pedal runs your firmware,
+step 1 names it, its card says "on the pedal", and the button of OpenPocket's card reads "Switch to OpenPocket".
 
-The public installer never offers an alternative firmware. Opened on a pedal that runs one, it shows the pedal as an
-OpenPocket of that number and offers to install OpenPocket. That is the way back from any computer.
+Without the link the page offers the firmwares of its catalog only. The catalog is `release.json`, which
+`firmware/build.sh` writes beside OpenPocket's packages from `firmware/catalog.json` and the manifests of what is
+built (`tools/catalog.py`). A firmware listed in `firmware/catalog.json` gets a card on every copy of the page, with
+no link: OpenPocket and PALETTE are listed, STARTER is not. An installer that has no catalog, such as upstream's,
+shows a pedal on an alternative firmware as an OpenPocket of that number and offers to install OpenPocket. That is a
+way back from any computer.
 
 **With the flasher:**
 
@@ -214,8 +218,8 @@ On STARTER:
 10. Press HOME: the effect is off. Press it again.
 11. Hold PUSH for a second: SAVED shows. Switch the pedal off and on: it starts on that preset, with PAN as saved.
 12. Send a Program Change 3 and a Control Change 7 from a computer: the preset and LEVEL follow.
-13. On the installer page, press Connect again. Step 1 shows "STARTER v01: an alternative firmware, not OpenPocket".
-    The button of step 2 reads "Back to OpenPocket".
+13. On the installer page, press Connect again. Step 1 shows "STARTER v01 (PocketX_901)" (or `BlackBox_901`).
+    STARTER's card says "on the pedal", and the button of OpenPocket's card reads "Switch to OpenPocket".
 14. Open the public installer in another tab and press Connect. It shows the pedal as OpenPocket v1 and offers to
     install OpenPocket. Do not install from there. Close the tab.
 15. Open `editor.html` and press Connect. It says that the pedal runs STARTER v01 and does not open.

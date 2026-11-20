@@ -36,6 +36,8 @@
 #  - button lights (px_lights.h): each block lights its button, FX for its group, HOME blinks in the tuner
 #  - package reader: tools/pocketx_fw.py on packages built to the old (0x4000) and the V22 (0x6000) layout: info, unpack, pack
 #  - packages: tools/pxpkg.py rebuilds the official PocketX_016 app area byte for byte (needs the official file)
+#  - catalog: tools/catalog.py, the list of firmwares the installer page offers (release.json), from the manifests and
+#    packages a build made. With OP_BUILT=1 also the catalog the build wrote: every firmware of firmware/catalog.json
 #  - installer: docs/pxota.js + docs/pxpkg.js against a simulated pedal running the real update code (ota.c, ldr_core.c)
 #  - flasher: tools/flash.mjs (node tools/op.mjs flash) against the same simulated pedal: update, dry run, wrong model, damaged package, rescue of a pedal that restarts in a loop
 #  - products: an alternative firmware (an app on the base firmware) on the same simulated pedal: what it says it is, the
@@ -136,6 +138,8 @@ echo "== package reader (tools/pocketx_fw.py: the app area where the flash head 
 python3 tests/test_pocketx_fw.py $1 | tail -1
 echo "== packages of two products (tools/pxpkg.py: an app's product descriptor, its packages' names, the manifest)"
 python3 tests/test_pxpkg_app.py > build/pxpkg_app.log || { cat build/pxpkg_app.log; exit 1; }; tail -1 build/pxpkg_app.log
+echo "== catalog (tools/catalog.py: the firmwares a site offers, from what the build made)"
+python3 tests/test_catalog.py ${OP_BUILT:+--built} > build/catalog.log || { cat build/catalog.log; exit 1; }; tail -1 build/catalog.log
 echo "== installer"
 node tests/test_installer.mjs "$1"
 echo "== flasher (tools/flash.mjs)"

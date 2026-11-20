@@ -28,6 +28,7 @@ jobs:
             firmware/openpocket-midi-test.bin
             docs/firmware/*.fwsc
             docs/firmware/manifest.json
+            docs/firmware/release.json
             docs/firmware/midi-test/
             build/SHA256SUMS
             build/SHA256SUMS-midi-test
