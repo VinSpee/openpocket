@@ -140,12 +140,12 @@ footer a,.note a{color:inherit}
       <p class="note" data-t="rescueusb"></p>
       <details class="guide" id="rescueguide">
         <summary>How to run the rescue on your computer</summary>
-        <p class="note">The first run only checks the pedal and saves a backup. Nothing is written until the second run. Download two things first: the OpenPocket folder (<a href="https://github.com/VinSpee/openpocket/archive/refs/heads/main.zip">openpocket-main.zip</a>, then unzip it) and the official BlackBox firmware file (it ends in <code>.fwsc</code>) from the M-VAVE website. Put the firmware file inside the <code>openpocket-main</code> folder and rename it <code>BlackBox</code> (if your computer shows the <code>.fwsc</code> ending, keep it).</p>
+        <p class="note">The first run only checks the pedal and saves a backup. Nothing is written until the second run. Download two things first: the OpenPocket folder (<a href="https://github.com/VinSpee/undertone/archive/refs/heads/main.zip">undertone-main.zip</a>, then unzip it) and the official BlackBox firmware file (it ends in <code>.fwsc</code>) from the M-VAVE website. Put the firmware file inside the <code>undertone-main</code> folder and rename it <code>BlackBox</code> (if your computer shows the <code>.fwsc</code> ending, keep it).</p>
         <h3 id="rescue-mac">On a Mac</h3>
         <ol class="note">
           <li>Once: install Homebrew from <a href="https://brew.sh">brew.sh</a> and follow the "Next steps" it prints. Then, in Terminal, type <code>brew install libusb</code> and press Enter.</li>
           <li>Unplug the pedal.</li>
-          <li>In Terminal, type <code>cd </code> (with a space), drag the <code>openpocket-main</code> folder onto the Terminal window, and press Enter.</li>
+          <li>In Terminal, type <code>cd </code> (with a space), drag the <code>undertone-main</code> folder onto the Terminal window, and press Enter.</li>
           <li>Type <code>sudo python3 tools/uboot_rescue.py --package BlackBox.fwsc</code> and press Enter. Type your Mac password (nothing shows while you type).</li>
           <li>When it says it is waiting for the pedal, plug the pedal straight into the Mac (no hub).</li>
           <li>The check passed if you see a line that starts with <code>Read-only run finished, nothing was written</code>. Keep the backup it saved in the <code>OpenPocket-rescue</code> folder in your home folder.</li>
@@ -156,7 +156,7 @@ footer a,.note a{color:inherit}
         <p class="note warnbox">The Windows rescue has not been tested on a real pedal yet. Please report on GitHub whether it works for you.</p>
         <ol class="note">
           <li>Once: install Python 3 from <a href="https://www.python.org/downloads/">python.org</a> and tick "Add python.exe to PATH" on its first screen. No driver is needed.</li>
-          <li>Open the <code>openpocket-main</code> folder until you see <code>RESCUE.bat</code>. Click the address bar at the top of the window and copy the location (Ctrl+C).</li>
+          <li>Open the <code>undertone-main</code> folder until you see <code>RESCUE.bat</code>. Click the address bar at the top of the window and copy the location (Ctrl+C).</li>
           <li>Press the Windows key, type <code>cmd</code>, right-click "Command Prompt" and choose "Run as administrator".</li>
           <li>Type <code>cd /d "</code>, paste the location (right-click), type <code>"</code> and press Enter.</li>
           <li>Unplug the pedal. Type <code>RESCUE.bat --package BlackBox.fwsc</code> and press Enter.</li>
@@ -169,7 +169,7 @@ footer a,.note a{color:inherit}
         <ul class="note">
           <li><code>REFUSED</code>: a safety check stopped it and nothing was written. The message says why; most often the file is not the official BlackBox firmware.</li>
           <li>It stops in the middle or says it gave up: run the same line again. It continues where it stopped.</li>
-          <li>The pedal still does not start: <a href="https://github.com/VinSpee/openpocket/issues">open an issue on GitHub</a> with the text from the window, and keep the backup file.</li>
+          <li>The pedal still does not start: <a href="https://github.com/VinSpee/undertone/issues">open an issue on GitHub</a> with the text from the window, and keep the backup file.</li>
         </ul>
         <p class="note">The full guide, with every safety check: <a href="RESCUE.md#quick-start-rescue-a-blackbox-that-will-not-boot">RESCUE.md</a>.</p>
       </details>

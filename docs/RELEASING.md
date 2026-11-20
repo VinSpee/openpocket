@@ -82,8 +82,8 @@ It has to be a job of this workflow. A tag created with the workflow's token doe
   the workflow cannot open the Version Packages pull request. It was off when this was written.
 - The workflows use only the token GitHub gives each run. There is no secret to create.
 - The `changeset` check is not a required check. To make it one, add it to the branch protection of `main`.
-- `.changeset/config.json` names the repository (`VinSpee/openpocket`) for the links in the changelogs. Change it
-  when the repository is renamed.
+- `.changeset/config.json` names the repository (`VinSpee/undertone`) for the links in the changelogs. Change it
+  when the repository is renamed again.
 
 ## Adding a unit
 

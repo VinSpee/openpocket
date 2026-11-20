@@ -1,4 +1,4 @@
-# no-mistakes pipeline settings for this fork (VinSpee/openpocket); not proposed upstream.
+# no-mistakes pipeline settings for this fork (VinSpee/undertone); not proposed upstream.
 # commands and test.instructions are read from the default branch, so edits here take effect only after they merge.
 # Lint is left to the pipeline's agent: the project has no linter of its own.
 

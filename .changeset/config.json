@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/@changesets/config@4.0.1/schema.json",
-  "changelog": ["@changesets/changelog-github", { "repo": "VinSpee/openpocket" }],
+  "changelog": ["@changesets/changelog-github", { "repo": "VinSpee/undertone" }],
   "commit": false,
   "format": false,
   "fixed": [["openpocket", "palette", "base", "tools"]],

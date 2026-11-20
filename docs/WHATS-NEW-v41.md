@@ -1,7 +1,7 @@
 # What's new in OpenPocket v41: NAM presets much lighter, every chain fits
 
 Most of v41 is **VinSpee's work** ([pull request #22](https://github.com/isod89/openpocket/pull/22), first reviewed step by
-step in [VinSpee/openpocket #16, #18, #19 and #21](https://github.com/VinSpee/openpocket/pull/16)). Thank you, Vince.
+step in [VinSpee/undertone #16, #18, #19 and #21](https://github.com/VinSpee/undertone/pull/16)). Thank you, Vince.
 
 Every output sample is the same as v40's: VinSpee checked it bit for bit on the PC (every block, every type, every factory
 preset) and on the pedal at boot. Nothing sounds different. The pedal just has much more room.
