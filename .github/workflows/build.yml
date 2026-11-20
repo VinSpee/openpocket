@@ -5,52 +5,60 @@ on:
     branches: [main]
 permissions:
   contents: read
+# a newer push to a pull request stops the run of the older one; every push to main runs to its end
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  build-and-test:
+  build-and-test:   # branch protection requires this name: do not rename it
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Build the container, the firmware and the installer packages (it fails when they are not the release's bytes)
-        run: node tools/op.mjs package
-      - uses: actions/upload-artifact@v4
-        with:
-          name: openpocket-build
-          path: |
-            firmware/openpocket.bin
-            docs/firmware/*.fwsc
-            docs/firmware/manifest.json
-            build/SHA256SUMS
+      - name: Build the container, OpenPocket (it fails when its packages are not the release's bytes) and every app of firmware/apps, then run the host tests with the packages built
+        run: node tools/op.mjs all
       - name: Build the MIDI test channel package (never the installer default)
         run: node tools/op.mjs package-test
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}   # also after a failed test, so that the packages it ran on can be read
         with:
-          name: openpocket-midi-test
+          name: firmware
           path: |
+            firmware/openpocket.bin
             firmware/openpocket-midi-test.bin
+            docs/firmware/*.fwsc
+            docs/firmware/manifest.json
             docs/firmware/midi-test/
+            build/SHA256SUMS
             build/SHA256SUMS-midi-test
-      - name: Build STARTER, the alternative firmware to start from (it fails when the base needs a name from OpenPocket)
-        run: node tools/op.mjs app starter
-      - uses: actions/upload-artifact@v4
+            build/apps/*/*.bin
+            build/apps/*/*.fwsc
+            build/apps/*/manifest.json
+            build/apps/*/SHA256SUMS
+  pages:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          name: openpocket-app-starter
-          path: |
-            build/apps/starter/starter.bin
-            build/apps/starter/*.fwsc
-            build/apps/starter/manifest.json
-            build/apps/starter/SHA256SUMS
-      - name: Build PALETTE, the four-module stereo alternative firmware (docs/PALETTE.md)
-        run: node tools/op.mjs app palette
+          node-version: 22
+      - name: Install Playwright and Chromium with its system libraries, outside the repository
+        run: |
+          mkdir -p "$RUNNER_TEMP/pw" && cd "$RUNNER_TEMP/pw"
+          npm init -y >/dev/null && npm i playwright
+          npx playwright install --with-deps chromium
+      - name: The installer, the editor, the pedal skin and the sound page in headless Chromium against the simulated pedals
+        run: PW_DIR="$RUNNER_TEMP/pw" sh .claude/skills/verify/scripts/pages.sh
       - uses: actions/upload-artifact@v4
+        if: ${{ failure() }}
         with:
-          name: openpocket-app-palette
+          name: page-screenshots
           path: |
-            build/apps/palette/palette.bin
-            build/apps/palette/*.fwsc
-            build/apps/palette/manifest.json
-            build/apps/palette/SHA256SUMS
-      - name: Host tests, also with the packages of both products built above
-        run: node tools/op.mjs test --built
+            build/page/
+            build/editor/
+            build/pedal/
+            build/audio/
   formal:
     runs-on: ubuntu-24.04
     steps:

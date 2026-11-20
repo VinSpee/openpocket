@@ -12,7 +12,7 @@ Both findings have since been fixed, and the release pin (`tests/release.sha256`
 
 ## F1 (fixed): the model and IR scans read the flash while CPU1 runs a job
 
-**Fixed.** [Pull request 37](https://github.com/VinSpee/openpocket/pull/37) moved `nm_scan` and `ir_scan` above `st_audio_hold(0)` in the four functions.
+**Fixed.** [Pull request 37](https://github.com/VinSpee/undertone/pull/37) moved `nm_scan` and `ir_scan` above `st_audio_hold(0)` in the four functions.
 `FlashHold.cfg`, `FlashHoldOneShot.cfg`, and `FlashHoldOneShotGap.cfg` now model that order and pass. The four recorded runs conform to `FlashHoldFixed.cfg`.
 `tests/test_flash_hold.c` runs the same firmware files in the host tests. It fails when a flash access of a save or an erase falls outside the hold: before the fix it counted the 16 reads of `nm_scan` and the 8 of `ir_scan`.
 The rest of this section describes the code before the fix, at commit `5fce8f5`. To see the trace again, set `ScanInsideHold = FALSE` in `FlashHold.cfg`.

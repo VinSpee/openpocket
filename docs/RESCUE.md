@@ -8,8 +8,8 @@ second run.
 
 You need two downloads on either computer:
 
-- The OpenPocket folder: [openpocket-main.zip](https://github.com/VinSpee/openpocket/archive/refs/heads/main.zip). Unzip it.
-- The official BlackBox firmware file (it ends in `.fwsc`) from the M-VAVE website. Put it inside the `openpocket-main`
+- The OpenPocket folder: [undertone-main.zip](https://github.com/VinSpee/undertone/archive/refs/heads/main.zip). Unzip it.
+- The official BlackBox firmware file (it ends in `.fwsc`) from the M-VAVE website. Put it inside the `undertone-main`
   folder and rename it `BlackBox`. If your computer shows the `.fwsc` ending, keep it: the full name is `BlackBox.fwsc`.
 
 ### On a Mac
@@ -17,7 +17,7 @@ You need two downloads on either computer:
 1. Install Homebrew from [brew.sh](https://brew.sh) if you do not have it, and follow the "Next steps" it prints.
    Then, in Terminal, type `brew install libusb` and press Enter. You only do this once.
 2. Unplug the pedal.
-3. In Terminal, type `cd ` (with a space after it), drag the `openpocket-main` folder onto the Terminal window, and press
+3. In Terminal, type `cd ` (with a space after it), drag the `undertone-main` folder onto the Terminal window, and press
    Enter.
 4. Type `sudo python3 tools/uboot_rescue.py --package BlackBox.fwsc` and press Enter. Type your Mac password when asked
    (nothing shows while you type). If the Mac offers to install developer tools, click Install, then type the line again.
@@ -35,7 +35,7 @@ The Windows rescue has not been tested on a real pedal yet. Please report on Git
 
 1. Install Python 3 from [python.org](https://www.python.org/downloads/). On the first screen of the installer, tick
    "Add python.exe to PATH". You only do this once. You do not need to install any driver.
-2. Open the `openpocket-main` folder until you see `RESCUE.bat`. Click the address bar at the top of the window and copy
+2. Open the `undertone-main` folder until you see `RESCUE.bat`. Click the address bar at the top of the window and copy
    the folder's location (Ctrl+C).
 3. Press the Windows key, type `cmd`, right-click "Command Prompt" and choose "Run as administrator". Click Yes.
 4. Type `cd /d "` then paste the location (right-click), type `"` and press Enter.
@@ -53,7 +53,7 @@ The Windows rescue has not been tested on a real pedal yet. Please report on Git
 - `REFUSED`: a safety check stopped it and nothing was written. The message says why. The most common cause is a
   firmware file that is not the official BlackBox file.
 - It stops in the middle, or says it gave up: run the same line again. It continues where it stopped.
-- The pedal still does not start: [open an issue on GitHub](https://github.com/VinSpee/openpocket/issues) with the text
+- The pedal still does not start: [open an issue on GitHub](https://github.com/VinSpee/undertone/issues) with the text
   from the window, and keep the backup file. The SD-card recovery (README.md, "Install") is the other way back.
 
 The rest of this page explains each step and each safety check in detail.

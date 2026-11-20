@@ -88,7 +88,8 @@ The build is deterministic: two clean builds in the container give byte-identica
 `manifest.json` (checked on Apple silicon under emulation, SHA-256 equal). No build output is committed to the repository
 (`.gitignore`), so there is no committed binary to compare with; release packages are published as GitHub release assets,
 and `build/SHA256SUMS` of a given commit is the reference. CI (`.github/workflows/build.yml`) builds and tests every pull
-request on a native x86-64 runner and uploads the packages with their checksums.
+request on a native x86-64 runner and uploads the packages with their checksums. A second job, `pages`, runs the page tests in
+headless Chromium.
 
 ## Troubleshooting
 
@@ -108,4 +109,4 @@ On an Apple M-series Mac under emulation: first image build about 1 min (downloa
 ## Not covered
 
 The Docker path on native Windows was not tested (no Windows machine here); `tools/op.mjs` is tested on macOS and Linux with a fake `docker`. The WSL build and the PowerShell offline server are the ones v36 was built and installed with. The page
-tests that need Playwright are skipped unless it is installed.
+tests that need Playwright are skipped in `make test` unless it is installed; the `pages` job of CI runs them.
