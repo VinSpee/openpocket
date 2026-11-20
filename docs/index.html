@@ -200,7 +200,7 @@ const T = {
     s2: "Choose a firmware",
     s2note: "Each firmware below is a whole firmware for the pedal. The pedal runs one at a time: installing one replaces the one it runs, and this page puts the other back the same way. What each firmware saved on the pedal stays there while the pedal runs another one.",
     s2warn: "During the install (about 1 to 2 minutes): do not unplug or switch the pedal off, keep this tab open. Nothing is sent before this page has checked the package against its SHA-256 and the firmware the pedal runs, and nothing is written before the pedal has checked it too. If the install stops, do not switch the pedal off: reconnect the cable and press Resume. First install over the official firmware: keep your backup (SD card / fm1buddy) at hand.",
-    install: "Install ", again: "Install again: ", switchto: "Switch to ", onpedal: "on the pedal", resume: "Resume the update",
+    install: "Install ", again: "Install again: ", back: "Back to ", onpedal: "on the pedal", resume: "Resume the update",
     nofw: "No firmware package on this site.", unlisted: "Offered by this link only: it is not on this site's list.",
     nosuch: "No firmware by this name on this site: ",
     st_start: "start", st_verify: "check", st_loader: "loader", st_write: "write", st_reboot: "restart", st_done: "done",
@@ -336,7 +336,7 @@ function showDev(d) {
     card.classList.toggle("on", on);
     card.querySelector(".pill").hidden = !on;
     b.disabled = busy || !d || IS_OTA(d.id) || unconfirmed;
-    b.textContent = t(same ? "again" : runs && !on ? "switchto" : "install") + `${o.name} ${o.version}`;
+    b.textContent = t(same ? "again" : runs && !on ? "back" : "install") + `${o.name} ${o.version}`;
   }
   $("backoff").disabled = busy || !d || IS_OTA(d.id) || !official || official.model !== d.id.model ||
     (!official.known && !$("offok").checked);

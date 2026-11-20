@@ -231,7 +231,7 @@ await page.waitForTimeout(300);
 await page.click("#connect");
 await page.waitForSelector("#devinfo:not([hidden])", { timeout: 15000 });
 ok(/OpenPocket v23/.test(await page.textContent("#d-fw")) && (await page.textContent(OP)) === "Install OpenPocket v24", "a pedal on OpenPocket: named so, its card's button says Install");
-ok((await page.textContent(ALT)) === "Switch to STARTER v01" && !(await page.isVisible(`${card("starter")} .pill`)), "the other firmware's button says Switch to, with its name");
+ok((await page.textContent(ALT)) === "Back to STARTER v01" && !(await page.isVisible(`${card("starter")} .pill`)), "the other firmware's button says Back to, with its name");
 await page.screenshot({ path: join(OUT, "page_6_alt_offered.png"), fullPage: true });
 await page.click(ALT);
 await page.waitForFunction(() => /PocketX_901/.test(document.getElementById("msg").textContent) || document.getElementById("msg").classList.contains("err"), null, { timeout: 240000 });
@@ -239,9 +239,9 @@ ok((await page.textContent("#msg")) === "Done: the pedal now runs STARTER v01 (P
 ok(!(await page.isVisible("#next")), "no editor link and no release notes for a firmware that is not OpenPocket");
 await page.waitForFunction(() => /STARTER/.test(document.getElementById("d-fw").textContent), null, { timeout: 15000 });
 ok((await page.textContent("#d-fw")) === "STARTER v01 (PocketX_901)", `the page now sees: ${await page.textContent("#d-fw")}`);
-ok((await page.textContent(OP)) === "Switch to OpenPocket v24" && (await page.textContent(ALT)) === "Install again: STARTER v01" &&
+ok((await page.textContent(OP)) === "Back to OpenPocket v24" && (await page.textContent(ALT)) === "Install again: STARTER v01" &&
   await page.isVisible(`${card("starter")} .pill`) && !(await page.isVisible(`${card("openpocket")} .pill`)),
-  "the first card's button is now Switch to OpenPocket; STARTER's card says the pedal runs it");
+  "the first card's button is now Back to OpenPocket; STARTER's card says the pedal runs it");
 ok(await page.isEnabled("#uboot"), "the UBOOT soft key is the base firmware's: offered for every product on it");
 await page.screenshot({ path: join(OUT, "page_7_alt_running.png"), fullPage: true });
 {
@@ -255,7 +255,7 @@ await page.click(OP);
 await page.waitForFunction(() => /PocketX_924/.test(document.getElementById("msg").textContent) || document.getElementById("msg").classList.contains("err"), null, { timeout: 240000 });
 ok(/OpenPocket v24 \(PocketX_924\)/.test(await page.textContent("#msg")), `the way back: ${await page.textContent("#msg")}`);
 await page.waitForFunction(() => /OpenPocket v24/.test(document.getElementById("d-fw").textContent), null, { timeout: 15000 });
-ok((await page.textContent(OP)) === "Install again: OpenPocket v24" && (await page.textContent(ALT)) === "Switch to STARTER v01", "the pedal is on OpenPocket again, and the page says so");
+ok((await page.textContent(OP)) === "Install again: OpenPocket v24" && (await page.textContent(ALT)) === "Back to STARTER v01", "the pedal is on OpenPocket again, and the page says so");
 ok(step2() === 2, "the simulated pedal wrote both firmwares");
 await page.screenshot({ path: join(OUT, "page_8_back_on_openpocket.png"), fullPage: true });
 {
@@ -298,13 +298,13 @@ await page.click(ALT);
 await page.waitForFunction(() => /PocketX_901/.test(document.getElementById("msg").textContent) || document.getElementById("msg").classList.contains("err"), null, { timeout: 240000 });
 ok((await page.textContent("#msg")) === "Done: the pedal now runs STARTER v01 (PocketX_901)", `chooser, the second firmware installed: ${await page.textContent("#msg")}`);
 await page.waitForSelector(`${OP}:enabled`, { timeout: 15000 });
-ok((await page.textContent(OP)) === "Switch to OpenPocket v24" && await page.isVisible(`${card("starter")} .pill`), "chooser: the first firmware's button now says Switch to, and names it");
+ok((await page.textContent(OP)) === "Back to OpenPocket v24" && await page.isVisible(`${card("starter")} .pill`), "chooser: the first firmware's button now says Back to, and names it");
 await page.screenshot({ path: join(OUT, "page_10_chooser_switched.png"), fullPage: true });
 await page.click(OP);
 await page.waitForFunction(() => /PocketX_924/.test(document.getElementById("msg").textContent) || document.getElementById("msg").classList.contains("err"), null, { timeout: 240000 });
 ok((await page.textContent("#msg")) === "Done: the pedal now runs OpenPocket v24 (PocketX_924)" && await page.isVisible("#next"), `chooser, switched to the first firmware: ${await page.textContent("#msg")}`);
 await page.waitForSelector(`${ALT}:enabled`, { timeout: 15000 });
-ok((await page.textContent(ALT)) === "Switch to STARTER v01" && (await page.textContent(OP)) === "Install again: OpenPocket v24", "chooser: the second firmware's button says Switch to");
+ok((await page.textContent(ALT)) === "Back to STARTER v01" && (await page.textContent(OP)) === "Install again: OpenPocket v24", "chooser: the second firmware's button says Back to");
 await page.click(ALT);
 await page.waitForFunction(() => /PocketX_901/.test(document.getElementById("msg").textContent) || document.getElementById("msg").classList.contains("err"), null, { timeout: 240000 });
 await page.waitForFunction(() => /STARTER/.test(document.getElementById("d-fw").textContent), null, { timeout: 15000 });

@@ -151,7 +151,7 @@ const GATE = {
     return [
       h("h1", { text: `This pedal runs ${name}` }),
       h("p", { id: "othernote", text: `${o.name} is an alternative firmware built on OpenPocket's base. It is not OpenPocket, and this editor edits OpenPocket's presets and blocks, which ${o.name} does not have.` }),
-      h("p", {}, "To use this editor, put OpenPocket back: ", h("a", { href: "./", text: "open the installer" }), " and press ", h("b", { text: "Switch to OpenPocket" }),
+      h("p", {}, "To use this editor, put OpenPocket back: ", h("a", { href: "./", text: "open the installer" }), " and press ", h("b", { text: "Back to OpenPocket" }),
         ". Your OpenPocket presets, NAM models and cabinet IRs are still on the pedal."),
       connectBtn("Try again"),
       h("p", { class: "dim", text: "The editor also tries again by itself as soon as a device is plugged in." }),

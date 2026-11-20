@@ -93,7 +93,7 @@ node tools/op.mjs serve app mine          # or: make serve-app APP=mine
 
 The page opens as `index.html?app=mine`. Step 2 has one card per firmware. Yours is the last one, with its name and
 a line that says it is offered by this link only. Each card has one button. While the pedal runs your firmware,
-step 1 names it, its card says "on the pedal", and the button of OpenPocket's card reads "Switch to OpenPocket".
+step 1 names it, its card says "on the pedal", and the button of OpenPocket's card reads "Back to OpenPocket".
 
 Without the link the page offers the firmwares of its catalog only. The catalog is `release.json`, which
 `firmware/build.sh` writes beside OpenPocket's packages from `firmware/catalog.json` and the manifests of what is
@@ -219,7 +219,7 @@ On STARTER:
 11. Hold PUSH for a second: SAVED shows. Switch the pedal off and on: it starts on that preset, with PAN as saved.
 12. Send a Program Change 3 and a Control Change 7 from a computer: the preset and LEVEL follow.
 13. On the installer page, press Connect again. Step 1 shows "STARTER v01 (PocketX_901)" (or `BlackBox_901`).
-    STARTER's card says "on the pedal", and the button of OpenPocket's card reads "Switch to OpenPocket".
+    STARTER's card says "on the pedal", and the button of OpenPocket's card reads "Back to OpenPocket".
 14. Open the public installer in another tab and press Connect. It shows the pedal as OpenPocket v1 and offers to
     install OpenPocket. Do not install from there. Close the tab.
 15. Open `editor.html` and press Connect. It says that the pedal runs STARTER v01 and does not open.

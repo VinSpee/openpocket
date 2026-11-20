@@ -14,7 +14,7 @@
 A maintainer changes a file under `firmware/base/`, or `px_usb.h`, `app.ld`, `build.sh`. A user of OpenPocket sees no
 difference. A user of an alternative firmware installs it from its card on the installer page (a firmware of
 `firmware/catalog.json`; any other with `index.html?app=NAME`) or with `flash --app NAME`, and goes back with the
-button "Switch to OpenPocket" or with `flash` without `--app`.
+button "Back to OpenPocket" or with `flash` without `--app`.
 
 ## Driving it with op.mjs
 1. `node tools/op.mjs all`: OpenPocket (it fails at the release pin when its bytes changed), each app, then the host
@@ -24,7 +24,7 @@ button "Switch to OpenPocket" or with `flash` without `--app`.
    `POST /api/press/NAME`, `/api/knob/N`, `/api/sound/440`, `/api/screen.png` (docs/SIMULATOR.md). The page's Listen
    button plays a guitar loop through the app's own code (`/api/loop/NAME`, `/api/audio/MS`).
 3. `sh .claude/skills/verify/scripts/pages.sh`: the installer page with `?app=starter` and with a catalog of two firmwares
-   (install each, the product named, Switch to the other and back, the refusals) and the editor's notice for a pedal on an alternative firmware.
+   (install each, the product named, switch to the other and go back, the refusals) and the editor's notice for a pedal on an alternative firmware.
 4. After a change to a base file, the fast check is the object hash of `firmware/openpocket.c` compiled with
    `build.sh`'s flags, before and after. The full check is `node tools/op.mjs package`.
 

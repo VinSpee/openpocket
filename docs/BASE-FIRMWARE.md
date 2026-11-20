@@ -300,7 +300,7 @@ The tools use this as follows:
 
 - **The installer page** names the product a pedal runs. It offers each firmware of its catalog in a card of its own
   (`release.json`, written by the build from `firmware/catalog.json`), and any other app only with
-  `index.html?app=<name>`. While a pedal runs one firmware, the button of another one's card reads "Switch to" with
+  `index.html?app=<name>`. While a pedal runs one firmware, the button of another one's card reads "Back to" with
   that firmware's name.
 - **The flasher** installs an app only with `--app <name>`. It names the product a pedal runs, checks after an
   install that the pedal runs the product that was installed, and ends with the way back.
