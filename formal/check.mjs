@@ -21,6 +21,7 @@ const MODELS = [
   ["FlashHold", "FlashHold", "invariant", "XipExclusion", "finding F1"],
   ["FlashHold", "FlashHoldFixed", "ok"],
   ["FlashHold", "FlashHoldOneShot", "ok"],
+  ["FlashHold", "FlashHoldOneShotGap", "invariant", "XipExclusion", "finding F1"],
   ["FlashHold", "FlashHoldNoCollect", "invariant", "XipExclusion", "mutation"],
   ["EditorWatch", "EditorWatch", "invariant", "InSync", "finding F2"],
   ["EditorWatch", "EditorWatchFixed", "ok"],

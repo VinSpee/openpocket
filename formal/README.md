@@ -28,7 +28,7 @@ npx everystate -config FlashHold.cfg FlashHold.tla
 
 ### Read the result
 
-Each line of `check.mjs` names a configuration, its result, and whether that result is the expected one.
+Each line that `check.mjs` prints names a configuration, its result, and whether that result is the expected one.
 
 ```
 ok    FlashHold.cfg                      invariant XipExclusion  (expected: finding F1)
@@ -52,16 +52,17 @@ A configuration that models a finding fails until the code is fixed. A mutation 
 
 In each `.tla` file, the comment on an action names the function the action stands for.
 
-Each model has one configuration for the code as it is, and others that the table below lists.
+The table below lists every configuration. A row that starts with "The code" models the code as it is.
 
 | Configuration | What it models | Expected |
 |---|---|---|
-| `FlashHold.cfg` | The code: `nm_scan` after `st_audio_hold(0)` | `XipExclusion` fails (F1) |
+| `FlashHold.cfg` | The code: `nm_scan` after `st_audio_hold(0)`. The interrupt's two callbacks run back to back. | `XipExclusion` fails (F1) |
 | `FlashHoldFixed.cfg` | The scan before the release | Passes |
-| `FlashHoldOneShot.cfg` | The code without the NAM layer split | Passes |
+| `FlashHoldOneShot.cfg` | The code without the NAM layer split, assuming that the main loop never runs between `a_enc` and `a_dec` | Passes |
+| `FlashHoldOneShotGap.cfg` | The code without the NAM layer split, without that assumption | `XipExclusion` fails (F1) |
 | `FlashHoldNoCollect.cfg` | Mutation: a hold without `a_collect` | `XipExclusion` fails |
 | `EditorWatch.cfg` | The code: every answered command resets `ed_w.hash` | `InSync` fails (F2) |
-| `EditorWatchFixed.cfg` | A command keeps a push that is owed | Passes |
+| `EditorWatchFixed.cfg` | A command other than STATE keeps a push that is owed | Passes |
 | `PresetStore.cfg` | The code | Passes |
 | `PresetStoreStrict.cfg` | The code, against a stricter promise | `OnlyConfirmedOrInProgress` fails (N1) |
 | `PresetStoreOverwrite.cfg` | Mutation: a save writes over the copy in use | `NoLostSave` fails |
@@ -72,7 +73,7 @@ Each model has one configuration for the code as it is, and others that the tabl
 
 ### Check the code against the flash model
 
-`conformance/flash_trace.c` runs the firmware's own `px_store.h`, `px_models.h`, and `px_irs.h` on a PC, as `tests/test_store.c` does.
+`conformance/flash_trace.c` runs the firmware's own `px_store.h`, `px_models.h`, and `px_irs.h` on a PC, in the way `tests/test_store.c` runs `px_store.h`.
 It records each mask, each `a_collect`, each flash access, and each unmask of `st_save`, `nm_commit`, `nm_erase`, `ir_commit`, and `ir_erase`.
 `everystate conform` then checks that each recorded run is a behaviour of `FlashHold.tla`.
 All five are behaviours of `FlashHold.cfg`. Only `st_save` is a behaviour of `FlashHoldFixed.cfg`, which is finding F1 seen from the code's side.
@@ -91,12 +92,12 @@ A part is modelled when more than one actor touches the same state, the code alr
 
 These parts are left out.
 
-- **The order of `a_enc` and `a_dec`** (`firmware/px_aorder.h`). Both run in the same interrupt and never interleave. `tests/test_aorder.c` runs the file itself.
-- **The request counters of `lp_job`** (`a_lpreq`, `a_lpdone`, `a_lparg`). `FlashHold.tla` holds them as two booleans, `served` and `quit`. The timing fields that set the split are not modelled.
-- **The USB driver** (`firmware/bsp/chip/usb.c`, MIDI and USB audio). It is felucca-bsp's, unchanged, its rings have one writer each, and `tests/test_usb_audio.c` runs it.
+- **The order of `a_enc` and `a_dec`** (`firmware/px_aorder.h`). The two callbacks never run at the same time, and `tests/test_aorder.c` runs the file itself. `FlashHold.tla` keeps one fact about them: the interrupt can enter once for each, and the main loop can run in between.
+- **The request counters of `lp_job`.** `FlashHold.tla` reduces `a_lpreq` and `a_lpdone` to one boolean, `served`, and holds `a_lpquit` as `quit`. `a_lparg` and the timing fields that set the split are not modelled.
+- **The USB driver** (`firmware/bsp/chip/usb.c`, MIDI and USB audio). It is felucca-bsp's with small local changes, its rings have one writer each, and `tests/test_usb_audio.c` runs it.
 - **The Bluetooth test image** (`firmware/ble`). It is not the release, and its tasks run from the main loop.
 - **The update** (`firmware/bsp/chip/ota.c`, `loader/`, `docs/pxota.js`, `tools/flash.mjs`). One side acts at a time. The orders that matter are power cuts, and the chip's boot code decides what follows one. That code is not in the repository, so a model would only restate guesses about it. A model of the update should first look at `ota_unstage`, which erases the first sector of the staged loader before the sector that holds the update record.
-- **The sound across a preset change.** Other work is changing it. `KnobHandoff.tla` models a full change only as mask, `a_collect`, and `px_engine_set`.
+- **The sound across a preset change.** A separate change to it (trails that ring on after the change) is in progress. `KnobHandoff.tla` models a full change only as mask, `a_collect`, and `px_engine_set`.
 - **The load figures** (`audio_prof`). The main loop reads and clears counters that the audio side adds to. A lost count changes a percentage on a diagnostics page.
 - **Two editors on one pedal.** The editor matches a reply by its command only. The models assume one editor.
 
@@ -104,11 +105,13 @@ These parts are left out.
 
 | Model | Bounds | Assumed, or left out |
 |---|---|---|
-| `FlashHold.tla` | One commit, any number of blocks | A job on CPU1 may read the flash at any time. CPU1 never fails. USB's interrupt is off with the others. |
-| `EditorWatch.tla` | 3 values of one setting; up to 3 changes on the pedal, 2 PINGs, and 2 changes in the editor | One setting stands for the preset. The USB link loses nothing and keeps the order. The editor's timeout and retry are left out. |
-| `PresetStore.tla` | 4 saves, any number of power cuts and flash errors | A cut erase or program leaves junk that fails the CRC. A header cut in its program is not a valid header. |
-| `KnobHandoff.tla` | 3 calls of `audio_apply` | The fade around a full change and the trails are left out. |
+| `FlashHold.tla` | One commit, any number of blocks | A job on CPU1 may read the flash at any time. CPU1 never fails. USB's interrupt is off with the others. Whether the main loop runs between `a_enc` and `a_dec` is a constant, `Gap`. |
+| `EditorWatch.tla` | 3 values of one setting. `EditorWatch.cfg` has 2 changes on the pedal, 1 PING, and 1 change in the editor. `EditorWatchFixed.cfg` has 3, 2, and 2. | One setting stands for the preset. The USB link loses nothing and keeps the order. The editor's timeout and retry are left out. |
+| `PresetStore.tla` | 4 saves, any number of power cuts and flash errors | A cut erase or program leaves junk that fails the CRC. A header cut in its program is taken as no header, although the CRC covers the slots and not the header. |
+| `KnobHandoff.tla` | 3 calls of `audio_apply` | CPU1 runs the whole chain (`dsp_job`). With a NAM amp on two cores `a_commit` runs only on CPU0, and that case is not modelled. The fade around a full change is left out. |
 | `LayerSplit.tla` | 4 layers, 4 blocks, a queue of 2 (the pedal has 23 layers and a queue of 6) | CPU1 never stops. The wait that gives up (`pxn_lp_late`) is left out. |
+
+Every model takes a write by one core as seen by the other in the order it was made. The code relies on `csync` and, between `a_kp` and `a_kpend`, on a compiler barrier for that.
 
 ## Keep the models true to the code
 
@@ -119,12 +122,12 @@ When you change one of the files below, read the model's actions against the new
 | When you change | Look at |
 |---|---|
 | `st_audio_hold`, or any code that erases, programs, or reads the flash at run time | `FlashHold.tla` and `conformance/flash_trace.c` |
-| `a_block`, `a_send`, `a_collect`, `lp_job`, or the mailbox of `fm1_cpu1.h` | `FlashHold.tla` |
+| `a_enc`, `a_dec`, `a_block`, `a_send`, `a_collect`, `lp_job`, or the mailbox of `fm1_cpu1.h` | `FlashHold.tla` |
 | `ed_service`, `ed_handle`, or the editor's `request`, `_onMessage`, `ping`, and `sendParam` | `EditorWatch.tla` |
 | `st_commit` or `st_load` | `PresetStore.tla` |
-| `audio_apply`, `a_commit`, `audio_poll`, `px_engine_prepare`, or `px_engine_knobs` | `KnobHandoff.tla` |
-| `pxn_lp_a`, `pxn_lp_b`, or `pxn_lp_split` | `LayerSplit.tla` |
+| `audio_apply`, `a_commit`, `dsp_block`, `px_engine_change`, `px_engine_prepare`, or `px_engine_knobs` | `KnobHandoff.tla` |
+| `pxn_lp_a`, `pxn_lp_b`, `pxn_lp_split`, or `lp_split` | `LayerSplit.tla` |
 
-When you fix a finding, the configuration that models the code as it was no longer describes the code.
-Change the constant in that configuration to the fixed value, change its row in `check.mjs` to `ok`, and say in `FINDINGS.md` which commit fixed the finding.
-For F1, also change the four `mismatch` rows of `TRACES` in `check.mjs` to `conforms`.
+When you fix a finding, the configurations that model the code as it was no longer describe the code.
+Set their constant to the fixed value, change their rows in `check.mjs` to `ok`, and say in `FINDINGS.md` which commit fixed the finding.
+For F1 those configurations are `FlashHold.cfg`, `FlashHoldOneShot.cfg`, and `FlashHoldOneShotGap.cfg`. Also change `mismatch` to `conforms` in the `HELD` rows of `TRACES` in `check.mjs`.

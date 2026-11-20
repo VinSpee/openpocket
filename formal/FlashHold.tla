@@ -20,7 +20,8 @@ CONSTANTS
                    \* "worker" (lp_job: the NAM layer split, one job for as long as the preset plays)
   ScanInsideHold,  \* FALSE: the code (nm_scan after st_audio_hold(0)); TRUE: the scan before it
   Collect,         \* TRUE: the code (a hold calls a_collect); FALSE: a mutation that leaves it out
-  Gap              \* TRUE: the main loop may run between the interrupt's two callbacks (a_enc, then a_dec)
+  Gap              \* TRUE: the main loop may run between the interrupt's two callbacks. firmware/px_aorder.h:
+                   \* a_enc runs, and the interrupt enters again for a_dec, a few microseconds later
 
 VARIABLES
   mode,    \* the mode of this run

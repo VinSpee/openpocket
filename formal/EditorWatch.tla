@@ -11,7 +11,8 @@
 \* Promise: once nothing is in flight and no push is owed, the editor shows the pedal's sound.
 \*
 \* One setting stands for the whole preset. The USB link is taken as reliable and in order (the editor's
-\* timeout and its one retry are left out).
+\* timeout and its one retry are left out). After a change of its own the editor asks for the state at once
+\* (a PING that its queue could put between the two is left out).
 EXTENDS Integers, Sequences
 
 CONSTANTS
@@ -33,6 +34,8 @@ VARIABLES
   knobs, pings, sets   \* how many of each are still to come
 
 vars == <<pedal, hash, window, inbox, wire, editor, waiting, knobs, pings, sets>>
+
+ASSUME 0 \in Values                               \* the setting when the editor connects
 
 None == [cmd |-> "none", v |-> 0]
 Stale == -1
@@ -112,6 +115,8 @@ Next ==
   \/ \E v \in Values : Knob(v) \/ SendSet(v)
   \/ Elapse \/ Push \/ Handle \/ SendPing \/ Recv
 
+\* Time passes, the pedal's main loop keeps running ed_service, and the editor reads what arrives. Nothing
+\* obliges a knob, a PING or a change in the editor to happen.
 Spec ==
   /\ Init /\ [][Next]_vars
   /\ WF_vars(Elapse) /\ WF_vars(Push) /\ WF_vars(Handle) /\ WF_vars(Recv)

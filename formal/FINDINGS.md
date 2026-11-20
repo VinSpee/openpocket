@@ -6,7 +6,7 @@ Nothing in the firmware was changed. A fix changes the firmware's bytes, and the
 
 | Id | What | Verdict | Found by |
 |---|---|---|---|
-| F1 | Saving or erasing a NAM model or an IR reads the flash after the audio hold is released | Real in the code. The effect on a pedal is not tested. | `FlashHold.cfg` |
+| F1 | Saving or erasing a NAM model or an IR reads the flash after the audio hold is released | Real in the code. The effect on a pedal is not tested. | `FlashHold.cfg`, `FlashHoldOneShotGap.cfg` |
 | F2 | A request from the editor makes the pedal drop a push it owes | Real in the code. Reproduced on the firmware's editor code. | `EditorWatch.cfg` |
 | N1 | A save that returned an error can be the one the next start loads | True of the code. Not a loss. | `PresetStoreStrict.cfg` |
 
@@ -44,8 +44,8 @@ The editor reaches them with NAM_COMMIT, NAM_ERASE, IR_COMMIT, and IR_ERASE.
 - The steps of the audio interrupt and of `lp_job` come from reading `firmware/px_audio.h`. No test runs them. `a_send` waits only for the output of `lp_job`, not for its return (`a_lp_post`), so the job is still outstanding when the main loop runs again.
 
 **When it happens.** With a NAM amp on two cores (the layer split), `lp_job` is one job for as long as the preset plays. Every scan read then falls inside it.
-Without the layer split, `a_send` waits for the block's job, and CPU1 is idle whenever the main loop runs. `FlashHoldOneShot.cfg` checks that case and passes.
-It passes only when the interrupt's two callbacks run back to back. If the main loop gets time between `a_enc` and `a_dec`, the same violation appears.
+Without the layer split, `a_send` waits for the block's job. If the main loop never runs between `a_enc` and `a_dec`, CPU1 is then idle whenever the main loop runs. `FlashHoldOneShot.cfg` checks that case and passes.
+`firmware/px_aorder.h` says that the interrupt normally enters once for each callback, a few microseconds apart. If the main loop runs in between, the same violation appears, and `FlashHoldOneShotGap.cfg` shows it in 10 states. Whether the main loop runs there on a pedal was not measured.
 
 **What it does on a pedal.** Not tested. That needs a pedal, and this work did not touch one.
 Since v40 most of the per-block code runs from RAM (`firmware/build.sh`, `RAM_DSP` and `RAM_FW`), including `lp_job` and the network.
@@ -109,7 +109,7 @@ After the command, set `ed_w.hash` to the state only when no push was owed or th
 Otherwise mark the push as owed, with a flag that `ed_service` also tests, so that the next push carries both changes.
 
 `EditorWatchFixed.cfg` models that rule and passes, with the property that the editor ends up showing the pedal's sound.
-The model also refuted a simpler rule, which leaves the hash alone while a push is owed. With that rule the hash can stay at a value the editor no longer shows, and a change on the pedal back to that value is never sent.
+The model also refuted a simpler rule, which leaves the hash alone for every command, a STATE request included, while a push is owed. With that rule the hash can stay at a value the editor no longer shows, and a change on the pedal back to that value is never sent.
 
 ## N1: a save that returned an error can be the one the next start loads
 

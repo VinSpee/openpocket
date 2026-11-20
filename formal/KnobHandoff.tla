@@ -11,6 +11,9 @@
 \*
 \* Promise: a_kp, the cabinet store and the engine's preset are never read by one side while the other writes
 \* them, and px_engine_set runs with no block in progress.
+\*
+\* The block is CPU1's whole chain (dsp_job). With a NAM amp on two cores a_commit runs only on CPU0
+\* (dsp_pipe_run, dsp_lp_run); that case is not modelled.
 EXTENDS Naturals
 
 CONSTANTS
@@ -23,7 +26,8 @@ VARIABLES
   masked,   \* the audio interrupt is masked
   job,      \* CPU1's block: "none", "start" (handed over), "knobs" (in px_engine_knobs), "rest" (the DSP)
   applies,  \* calls of audio_apply still to come
-  clash     \* the interrupt applied a change while the main loop was reading or writing what it uses
+  clash     \* the interrupt applied a change while the main loop was reading or writing what it uses, or
+            \* while CPU1 had a block in progress
 
 vars == <<mpc, kpend, masked, job, applies, clash>>
 
@@ -104,13 +108,13 @@ MainStep ==
   \/ FullMask \/ FullCollect \/ FullSet \/ FullClear \/ FullUnmask
 
 \* ---- the audio side ----
-\* the audio interrupt (a_block): the block before collected, a_commit on CPU0 (the main loop stands still
-\* meanwhile, wherever it is), the block handed to CPU1
+\* the audio interrupt (a_block): the block before collected (a_collect: job = "none"), a_commit on CPU0 (the
+\* main loop stands still meanwhile, wherever it is), the block handed to CPU1
 Irq ==
   /\ ~masked /\ job = "none"
   /\ job' = "start"
   /\ kpend' = FALSE
-  /\ clash' = (clash \/ (kpend /\ mpc \in Sharing))
+  /\ clash' = (clash \/ (kpend /\ (mpc \in Sharing \/ job # "none")))
   /\ UNCHANGED <<mpc, masked, applies>>
 
 \* dsp_block on CPU1: a_commit reads a_kpend
@@ -131,6 +135,8 @@ Cpu1Done ==
 
 Next == Begin \/ MainStep \/ Irq \/ Cpu1Check \/ Cpu1Knobs \/ Cpu1Done
 
+\* audio_apply, once begun, goes on. Blocks keep coming while the interrupt is not masked, and CPU1 finishes
+\* each one.
 Spec ==
   /\ Init /\ [][Next]_vars
   /\ WF_vars(MainStep) /\ WF_vars(Irq)
@@ -143,7 +149,7 @@ TypeOK ==
   /\ applies \in 0..MaxApplies /\ clash \in BOOLEAN
 
 \* The promise: px_engine_knobs never runs while the main loop reads the engine's preset or writes a_kp or the
-\* cabinet store.
+\* cabinet store, and never on CPU0 while CPU1 has a block in progress.
 NoTornHandoff == ~clash /\ ~(job = "knobs" /\ mpc \in Sharing)
 
 \* px_engine_set, and the a_kpend = 0 after it, run with no block in progress and the interrupt masked.

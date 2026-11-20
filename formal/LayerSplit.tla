@@ -86,7 +86,8 @@ AHand ==
   /\ UNCHANGED <<lout, ld, want, hard, es, as, ai, bpc, bi, bad>>
 
 \* ---- CPU1 (or CPU0 when it is alone) ----
-\* pxn_lp_b begins block lout: its split, pxn_lp_wait for the layers CPU0 had for the block before
+\* pxn_lp_b begins block lout: its split, pxn_lp_wait for the layers CPU0 had for the block before (CPU0 has
+\* finished that block before it hands this one over, so the wait never holds CPU1 back)
 BStart ==
   /\ bpc = "idle" /\ lout < lin
   /\ LET s == es[lout % LPQ] IN
@@ -119,6 +120,7 @@ Next ==
   \/ Force \/ AStart \/ AWaited \/ ALayer \/ AHand
   \/ BStart \/ BCopied \/ BLayer \/ BFinish
 
+\* Both cores keep working: CPU0 begins the next block while one is left, and each step begun ends.
 Spec ==
   /\ Init /\ [][Next]_vars
   /\ WF_vars(AStart) /\ WF_vars(AWaited) /\ WF_vars(ALayer) /\ WF_vars(AHand)
@@ -143,6 +145,7 @@ TouchB ==
 \* The promise.
 RingExclusive == TouchA \cap TouchB = {}
 InOrder == ~bad
+AllLayersRan == lout = NB => \A i \in Layers : ld[i] = NB
 
 \* A queue entry is not written while CPU1 still reads it.
 EntryExclusive == apc \in {"run", "hand"} /\ bpc # "idle" => lin % LPQ # lout % LPQ
