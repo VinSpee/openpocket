@@ -75,6 +75,7 @@ def build(out, official=None):
         for name, data in contents(official).items():
             info = zipfile.ZipInfo(f"{TOP}/{name}", STAMP)
             info.external_attr = 0o644 << 16
+            info.create_system = 3
             z.writestr(info, data)
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     manifest = {"kit": TOP, "version": version(), "file": path.name, "size": path.stat().st_size, "sha256": digest,
