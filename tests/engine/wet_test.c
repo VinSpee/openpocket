@@ -19,7 +19,7 @@ static float sig[FR * NB], ref[FR * NB], got[FR * NB];
 static void start(const px_preset_t *p)
 {
     px_engine_init(&e, 44100.0f); px_engine_set(&e, p);
-    e.dly_len = e.dly_tgt;                             /* (no glide from the factory preset's delay time: its glide is
+    e.dly.dly_len = e.dly.dly_tgt;                     /* (no glide from the factory preset's delay time: its glide is
                                                           heard lag frames later through the lane) */
 }
 static void run_inline(const px_preset_t *p, float *out)

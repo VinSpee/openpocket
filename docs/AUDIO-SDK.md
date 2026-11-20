@@ -312,3 +312,40 @@ Driver setup: `iis_open` IIS_PORTA, channel_in = BIT(1), channel_out = BIT(0), m
   lane against the inline delay, bit for bit.
 - Reverb: the low cut after the tank runs at the tank's rate. TONE stays at the full rate, because it takes down the
   half rate's images. The output is within 2e-4 of v39 on every type.
+
+## Trails (after v42): the outgoing delay and reverb ring out over the new preset
+- What was there: `px_engine_set()` kept the delay line across a change by accident (it was never cleared), so a delay
+  that was on in both presets replayed its memory under the new time and feedback, a delay switched off stopped (and
+  played its old echoes when it came back), and a reverb of another type started from a cleared ring.
+- What a true trail needs: the outgoing delay and reverb running on with their own settings while the new preset's
+  run beside them, so a second delay line (88 KB) and a second reverb ring (32 KB). The pedal has 40 bytes free in
+  `POOL`, 20 KB in `RAM`, 8.5 KB below it and 15 KB in the RAM code window.
+- Where the memory comes from: the delay line itself. A delay's taps reach back by its time (plus its modulation
+  depth; REVERSE reads twice its time), and 2 s is the longest, so most of the 45,056 ticks are idle: the factory
+  presets' delays reach 12,600 ticks at most. `px_engine_switch()` shares the line out in stretches
+  (`tr_switch`, `tr_place`):
+  - the outgoing delay keeps the last ticks its taps reach, where they are; when they lie across the end of its line
+    the older part is moved down next to the newer, and its write index does not move;
+  - the outgoing reverb's ring (16,384 ticks) is copied into a free stretch;
+  - the delay that plays gets the largest stretch left, empty. Free ticks are always zero, so when its write index
+    reaches the end of its line it takes the free ticks next to it (`dly_wrap`): they read as the silence before what
+    it holds. An ended trail's stretch is zeroed 8,192 ticks a block before it counts as free.
+- Four choices are tried in turn: both trails; the delay kept under the new settings and the reverb's trail; the
+  delay's trail without the reverb's; neither (which is `px_engine_set()`'s change). A delay or a reverb with the same
+  type and settings in both presets is not touched.
+- The trails' voices are a `px_dly` and a `px_rev` like the ones that play (the delay's and the reverb's fields in
+  `px_engine` became those two structs, and their functions take the struct and its memory; the output is the same,
+  `tests/equiv.sh`). Their state (1.9 KB with their lane) is in the low RAM, one engine's at a time. Nothing is sent
+  to them; their sound is added to the engine's output after the limiter, at the level the outgoing chain gave it
+  (the block's trim, a delay or reverb after it, the preset level), coming in over 256 frames.
+- With the wet lanes they are made in `px_wet_run` after the delay and the reverb, in a lane of their own, and are the
+  first to be cut when time is short. Without the lanes they are made at the end of the chain.
+- A trail ends when its sound has stayed under -90 dB for 0.25 s (a delay: and for a turn of its line), when the
+  firmware asks (`px_trails_stop`: the load over its limit four blocks running) or after 20 s, each time through a fade.
+- The firmware (`audio_apply`) calls `px_engine_switch()` for every full change. A preset loaded that differs from the
+  last one only by settings goes the full way too when `px_trail_due()` says its delay or reverb would ring; a knob
+  turned still glides.
+- `tests/engine/trail_test.c`: each delay and reverb type's trail against an engine that stays on the outgoing
+  preset (within one step of the 16-bit delay memory, wherever the write index is), the lanes, the two-core pipeline,
+  the ends, the cases without room, and changes at random with the stretches checked (never overlapping, free ticks
+  zero) under the address sanitizer.

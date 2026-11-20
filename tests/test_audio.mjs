@@ -72,6 +72,18 @@ check("a block switched off changes the sound", () => {
   const b = run(s, IN);
   assert.notDeepEqual(harmonics(tail(a), 220), harmonics(tail(b), 220));
 });
+check("a preset loaded leaves the last one's echo and reverb ringing (trails)", () => {
+  const silence = new Float32Array(8 * ENGINE_RATE);
+  const early = (a) => peak(a.subarray(0.1 * ENGINE_RATE, 0.5 * ENGINE_RATE));   // (after the new amp's first 100 ms)
+  const e = engine(13);                                // SMOOTH LEAD: a tape echo and a hall
+  run(e, IN);
+  e.factory(18);                                       // TIGHT METAL: neither
+  const out = run(e, silence), alone = run(engine(18), silence);   // and the same preset with nothing played before it
+  assert.ok(finite(out));
+  assert.ok(early(out) > 0.005 && early(out) > 20 * early(alone), `0.1 to 0.5 s: ${early(out)}, without a trail ${early(alone)}`);
+  assert.ok(peak(out.subarray(2 * ENGINE_RATE, 4 * ENGINE_RATE)) < early(out) / 50, "it dies away");
+  assert.ok(peak(out.subarray(6 * ENGINE_RATE)) < 1e-6, `after 6 s: ${peak(out.subarray(6 * ENGINE_RATE))}`);
+});
 check("MASTER follows the firmware's curve", () => {
   const ratio = peak(tail(run(engine(0, 40), IN))) / peak(tail(run(engine(0, 80), IN)));
   assert.ok(Math.abs(ratio - 0.25) < 0.01, `ratio ${ratio}`);

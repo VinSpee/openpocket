@@ -149,6 +149,40 @@ typedef struct {                       /* cabinet detail: its taps, breakup reso
 } px_cabd;
 #define PX_GL_MAX 64                   /* v38: the most settings that glide (px_dsp.c: GL_F) */
 
+/* trails: the delay's and the reverb's state, each in a struct of its own, so that a second one of each can run: the
+ * outgoing preset's, ringing out after a change (px_engine_switch below). Their functions in px_dsp.c take the struct as
+ * `e`, as when these were px_engine's own fields, and the memory they work in beside it. */
+typedef struct {
+    /* v40: the line runs at half rate (22.05 kHz) like the stock firmware's delays: one tick every two samples (the two
+     * inputs averaged in), the output interpolated between the last two ticks; times and depths below are in ticks */
+    int dly_lo, dly_hi;                                /* its line: these ticks of the delay memory (all of it, or a stretch) */
+    int dly_w, dly_type, dly_heads, rev_start, rev_cnt, dly_tick;
+    float dly_xa, dly_y0, dly_y1, dly_dp;              /* the input kept for the tick, the last two outputs, the last tap */
+    float dly_len, dly_tgt, dly_fb, dly_mix, dly_ph, dly_ph2, dly_inc, dly_inc2, dly_wow, dly_flut, dly_mod;
+    float dly_sat, dly_satn, dly_q, dly_hn, dly_hf, rev_xf, dly_env, dly_rq;
+    px_bq dly_lp, dly_hp;
+} px_dly;
+typedef struct {
+    /* reverb (v35): pre-delay + early reflections, 4 input diffusers, then either an 8-line feedback delay network
+     * with modulated lines and per-line high-frequency decay, or Dattorro's plate tank (8 units, 2 modulated);
+     * all lines in one 16-bit ring that turns once per sample at 22.05 kHz (+ spring dispersion, shimmer, gate) */
+    int   rv_lay, rv_alg;                              /* layout in use (type + 1; 0: none), 0 FDN / 1 plate */
+    int   rv_b[13], rv_n[13], rv_ptr, rv_tick;         /* units: 0 pre-delay, 1..4 diffusers, 5..12 lines / tank */
+    float rv_sr, rv_xa, rv_y0, rv_y1;                  /* half rate: its rate, the input kept, the last two outputs */
+    float rv_d[13], rv_dg[4];                          /* delay of each unit (samples), diffuser gains */
+    int   rv_pd, rv_ner, rv_ert[4]; float rv_erg[4];   /* pre-delay, early reflections (taps, gains) */
+    float rv_g[8], rv_p[8], rv_s[8];                   /* FDN: loop gain (low), damping pole, damping state */
+    float rv_ph1, rv_ph2, rv_inc1, rv_inc2, rv_mdep;   /* modulation: two slow LFOs, depth (samples) */
+    float rv_dec, rv_dd2, rv_damp, rv_bw, rv_fl, rv_fr; /* plate: decay, decay diffusion 2, damping, input band, feedback */
+    int   rv_tap[14];                                  /* plate: output taps (samples into tank units) */
+    float rv_in, rv_out, rv_mix, rv_env, rv_rq, rv_fade;   /* rv_rq: rounding (0.5), or 0 once the tail is very quiet */
+    int   rv_gate, rv_hold_n, sp_on; float rv_hold, rv_genv, rv_gg, rv_gate_rel;
+    float sp_z[6], sp_a;
+    int sh_w; float sh_ph, sh_out, sh_lp, sh_k, rv_shim, sh_hp, sh_hk;
+    px_bq rv_tone, rv_hp;
+    float dn;                                          /* its own anti-denormal offset (it may run beside the chain) */
+} px_rev;
+
 typedef struct {
     float sr;
     px_preset_t cur;
@@ -223,34 +257,13 @@ typedef struct {
     px_bq mod_lp;
     float ph_z[4], ph_fb, ph_lo, ph_hi, uv_k[4], uv_lamp, uv_up, uv_dn, trem_g, trem_att, trem_rel;
     float rot_h, rot_d, rot_hs, rot_ds, rot_ht, rot_dt, rot_hk, rot_dk, rot_bal;
-    /* delay */
-    /* v40: the line runs at half rate (22.05 kHz) like the stock firmware's delays: one tick every two samples (the two
-     * inputs averaged in), the output interpolated between the last two ticks; times and depths below are in ticks */
-    int16_t dly_buf[PX_DLY_N]; int dly_w, dly_type, dly_heads, rev_start, rev_cnt, dly_tick;
-    float dly_xa, dly_y0, dly_y1, dly_dp;              /* the input kept for the tick, the last two outputs, the last tap */
-    float dly_len, dly_tgt, dly_fb, dly_mix, dly_ph, dly_ph2, dly_inc, dly_inc2, dly_wow, dly_flut, dly_mod;
-    float dly_sat, dly_satn, dly_q, dly_hn, dly_hf, rev_xf, dly_env, dly_rq;
-    px_bq dly_lp, dly_hp;
-    /* reverb (v35): pre-delay + early reflections, 4 input diffusers, then either an 8-line feedback delay network
-     * with modulated lines and per-line high-frequency decay, or Dattorro's plate tank (8 units, 2 modulated);
-     * all lines in one 16-bit ring that turns once per sample at 22.05 kHz (+ spring dispersion, shimmer, gate) */
-    int16_t rv_m[PX_RV_M];
-    int   rv_lay, rv_alg;                              /* layout in use (type + 1; 0: none), 0 FDN / 1 plate */
-    int   rv_b[13], rv_n[13], rv_ptr, rv_tick;         /* units: 0 pre-delay, 1..4 diffusers, 5..12 lines / tank */
-    float rv_sr, rv_xa, rv_y0, rv_y1;                  /* half rate: its rate, the input kept, the last two outputs */
-    float rv_d[13], rv_dg[4];                          /* delay of each unit (samples), diffuser gains */
-    int   rv_pd, rv_ner, rv_ert[4]; float rv_erg[4];   /* pre-delay, early reflections (taps, gains) */
-    float rv_g[8], rv_p[8], rv_s[8];                   /* FDN: loop gain (low), damping pole, damping state */
-    float rv_ph1, rv_ph2, rv_inc1, rv_inc2, rv_mdep;   /* modulation: two slow LFOs, depth (samples) */
-    float rv_dec, rv_dd2, rv_damp, rv_bw, rv_fl, rv_fr; /* plate: decay, decay diffusion 2, damping, input band, feedback */
-    int   rv_tap[14];                                  /* plate: output taps (samples into tank units) */
-    float rv_in, rv_out, rv_mix, rv_env, rv_rq, rv_fade;
+    /* delay (px_dly above): its memory, and the one that plays */
+    int16_t dly_buf[PX_DLY_N]; px_dly dly;
+    /* reverb (px_rev above): its ring, and the one that plays; the shimmer's shifter memory */
+    int16_t rv_m[PX_RV_M]; px_rev rv;
+    float sh_buf[PX_PS_N];
     float cmp_la[128]; int cmp_lw;                     /* v36: swell look-ahead (128 samples) */
-    float btr[PX_NBLK], patch_g;                        /* v36: per-block level trims, preset level */          /* rv_rq: rounding (0.5), or 0 once the tail is very quiet */
-    int   rv_gate, rv_hold_n, sp_on; float rv_hold, rv_genv, rv_gg, rv_gate_rel;
-    float sp_z[6], sp_a;
-    float sh_buf[PX_PS_N]; int sh_w; float sh_ph, sh_out, sh_lp, sh_k, rv_shim, sh_hp, sh_hk;
-    px_bq rv_tone, rv_hp;
+    float btr[PX_NBLK], patch_g;                        /* v36: per-block level trims, preset level */
     /* v38: changes without clicks. A knob's new values glide there over PX_GLIDE_TICKS blocks (gl_t: where to, gl_left:
      * blocks to go); a block switched on or off fades in or out (bf: its gain now, bfa: at the start of this block, bfd:
      * +1 / -1 while it fades). run: the preset the processing plays, cur with the blocks still fading out kept on. */
@@ -278,10 +291,27 @@ int         px_nam_lp_b(px_engine *e);                /* v40.2: the other core's
 
 void px_engine_init(px_engine *e, float sr);
 void px_engine_set(px_engine *e, const px_preset_t *p);
+/* trails: a change made while the sound plays.
+ * px_engine_switch: px_engine_set, with the outgoing preset's delay and reverb left to ring out. A delay or a reverb
+ *   that sounds and that p switches off or sets otherwise goes on with its old settings and nothing sent to it; its
+ *   sound comes into the output over 6 ms and stays until it has died away (after 20 s it is faded out). p's own delay
+ *   and reverb start empty beside it. One with the same type and settings in p plays on as it is. Trails use the part of the
+ *   delay memory that the delay which plays does not reach: when the two delays' times come to more than about 1.3 s
+ *   there is no room for the reverb's trail and both delays, and to more than 2 s for the delay's trail; that block
+ *   then changes as px_engine_set changes it. The caller fades the output round the call, as for px_engine_set.
+ * px_trail_due: 1 = going to p now would leave a trail (a change px_engine_change calls PX_CH_KNOBS may: a preset loaded
+ *   then goes through px_engine_switch, a knob turned never does).
+ * px_trails: bit 0 the delay's trail rings, bit 1 the reverb's.
+ * px_trails_stop: they fade out over 6 ms (now: end at once), as when the DSP load is too high.
+ * px_engine_set ends them at once; px_engine_knobs leaves them alone. One engine's trails ring at a time. */
+void px_engine_switch(px_engine *e, const px_preset_t *p);
+int  px_trail_due(const px_engine *e, const px_preset_t *p);
+int  px_trails(const px_engine *e);
+void px_trails_stop(px_engine *e, int now);
 /* v38: changes without clicks.
  * px_engine_change: what going from the engine's preset to p takes: PX_CH_NONE; PX_CH_KNOBS (settings and blocks on or
  *   off only: px_engine_knobs, between two blocks, no stop); PX_CH_FULL (another type, order or NAM model: px_engine_set,
- *   the caller fading the output out and back in round it).
+ *   the caller fading the output out and back in round it; also a delay time its line cannot hold while trails ring).
  * px_engine_knobs: the new settings glide in over ~23 ms, blocks switched on or off fade. Light (only the blocks whose
  *   settings changed are recomputed), so the audio side can call it at the start of a block.
  * px_engine_prepare: the heavy part of px_engine_knobs (the cabinet's normalisation) made ahead, from any thread: it reads

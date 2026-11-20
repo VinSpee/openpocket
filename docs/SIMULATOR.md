@@ -91,7 +91,8 @@ The skin plays guitar through the pedal's real chain: `engine/px_dsp.c`, the fir
 (`firmware/px_math.c`), built to WebAssembly and run in an AudioWorklet of the page. The preset is the one on the screen:
 the page follows `GET state` (10 times a second, and after every control) and hands the engine the same bytes the
 firmware's `audio_poll()` hands it, so footswitches, PARA, the block buttons, an editor page and `curl` all change the
-sound. MASTER is the firmware's output gain, so it sets the level through the same curve.
+sound. MASTER is the firmware's output gain, so it sets the level through the same curve. A preset loaded leaves the
+last one's delay and reverb ringing, as on the pedal (trails); the pedal's short fade round the change is not played.
 
 | Control | Does |
 | --- | --- |

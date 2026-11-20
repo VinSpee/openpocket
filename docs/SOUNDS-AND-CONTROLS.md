@@ -115,6 +115,20 @@ plate). DECAY sets the real decay time (RT60) of the lows: ROOM 0.3–1.2 s, HAL
 PLATE 0.6–5 s, SPRING 1.5–4 s, SHIMMER 2–8 s, AMBIENT 6–20 s. They run at 22 kHz in 16 bits (like the classic
 studio units), in a quarter of v34's memory.
 
+**Trails**: when you change preset, the echoes and the reverb of the preset you leave ring out over the new one.
+They keep the settings they had and nothing new goes into them, so they die away as they would have. The new
+preset's own delay and reverb start empty beside them. The change itself still mutes the pedal for an instant, and
+the trails come back with the sound.
+
+- A delay or a reverb that is the same in both presets plays on as it is.
+- A trail still ringing after 20 s (a delay set to feed itself for ever) is faded out.
+- A SHIMMER trail adds no new octaves.
+- Turning a knob or switching a block off leaves no trail.
+- Trails use the part of the delay's 2 s of memory that the delays do not need: 0.74 s for the reverb's trail, and
+  each delay's own time. When there is not enough, the reverb's trail comes first, and the delay keeps its echoes
+  under the new preset's settings, as it did before trails. With delays of 0.6 s or less everything fits.
+- If the DSP load goes over its limit while a trail rings, the trail is dropped, not the sound.
+
 ## Factory presets (v37): 24 sounds, all at the same loudness, then 28 USER slots
 Built round the NAM models (v37; v36's were built round the fitted amps) and the fitted drives. Every preset is levelled to the
 same loudness (-23 LUFS, EBU R128, measured on real DI guitar by `tools/level_presets.py`): going from a clean to a
