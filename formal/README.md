@@ -31,9 +31,9 @@ npx everystate -config FlashHold.cfg FlashHold.tla
 Each line that `check.mjs` prints names a configuration, its result, and whether that result is the expected one.
 
 ```
-ok    FlashHold.cfg                      invariant XipExclusion  (expected: finding F1)
 ok    FlashHoldFixed.cfg                 ok, 250 states
-ok    nm_commit : FlashHoldFixed.cfg     mismatch, line 73 of 104  (expected: finding F1)
+ok    PresetStoreStrict.cfg              invariant OnlyConfirmedOrInProgress  (expected: note N1)
+ok    nm_commit : FlashHoldFixed.cfg     conforms
 ```
 
 Some configurations are expected to fail.
@@ -56,10 +56,10 @@ The table below lists every configuration. A row that starts with "The code" mod
 
 | Configuration | What it models | Expected |
 |---|---|---|
-| `FlashHold.cfg` | The code: `nm_scan` after `st_audio_hold(0)`. The interrupt's two callbacks run back to back. | `XipExclusion` fails (F1) |
-| `FlashHoldFixed.cfg` | The scan before the release | Passes |
+| `FlashHold.cfg` | The code: `nm_scan` before `st_audio_hold(0)`. The interrupt's two callbacks run back to back. | Passes |
+| `FlashHoldFixed.cfg` | The code, and the main loop may run between the two callbacks | Passes |
 | `FlashHoldOneShot.cfg` | The code without the NAM layer split, assuming that the main loop never runs between `a_enc` and `a_dec` | Passes |
-| `FlashHoldOneShotGap.cfg` | The code without the NAM layer split, without that assumption | `XipExclusion` fails (F1) |
+| `FlashHoldOneShotGap.cfg` | The code without the NAM layer split, without that assumption | Passes |
 | `FlashHoldNoCollect.cfg` | Mutation: a hold without `a_collect` | `XipExclusion` fails |
 | `EditorWatch.cfg` | The code: a command other than STATE keeps a push that is owed (`ed_w.owed`) | Passes |
 | `EditorWatchNoOwed.cfg` | Mutation: every answered command resets `ed_w.hash`, as the code did before the fix of F2 | `InSync` fails |
@@ -76,7 +76,9 @@ The table below lists every configuration. A row that starts with "The code" mod
 `conformance/flash_trace.c` runs the firmware's own `px_store.h`, `px_models.h`, and `px_irs.h` on a PC, in the way `tests/test_store.c` runs `px_store.h`.
 It records each mask, each `a_collect`, each flash access, and each unmask of `st_save`, `nm_commit`, `nm_erase`, `ir_commit`, and `ir_erase`.
 `everystate conform` then checks that each recorded run is a behaviour of `FlashHold.tla`.
-All five are behaviours of `FlashHold.cfg`. Only `st_save` is a behaviour of `FlashHoldFixed.cfg`, which is finding F1 seen from the code's side.
+All five are behaviours of `FlashHold.cfg` and of `FlashHoldFixed.cfg`.
+Before the fix of finding F1, `FlashHoldFixed.cfg` accepted only `st_save`, which was F1 seen from the code's side.
+`tests/test_flash_hold.c` checks the same order without the checker, in the host tests.
 
 `repro/editor_watch.mjs` reproduced finding F2 on the simulated pedal of the editor tests. `FINDINGS.md` gives the command. Since the fix both of its runs end the same, and `tests/test_editor.mjs` holds the case as a test. It depends on timing, so `check.mjs` does not run it.
 
@@ -115,13 +117,13 @@ Every model takes a write by one core as seen by the other in the order it was m
 
 ## Keep the models true to the code
 
-The models were last confirmed against the code at commit `5fce8f5`. `EditorWatch.tla` was read again against the fix of F2.
+The models were last confirmed against the code at commit `5fce8f5`. `EditorWatch.tla` was read again against the fix of F2, and `FlashHold.tla` and its configurations follow the fix of F1.
 
 When you change one of the files below, read the model's actions against the new code and run `node formal/check.mjs`.
 
 | When you change | Look at |
 |---|---|
-| `st_audio_hold`, or any code that erases, programs, or reads the flash at run time | `FlashHold.tla` and `conformance/flash_trace.c` |
+| `st_audio_hold`, or any code that erases, programs, or reads the flash at run time | `FlashHold.tla`, `conformance/flash_trace.c`, and `tests/test_flash_hold.c` |
 | `a_enc`, `a_dec`, `a_block`, `a_send`, `a_collect`, `lp_job`, or the mailbox of `fm1_cpu1.h` | `FlashHold.tla` |
 | `ed_service`, `ed_handle`, or the editor's `request`, `_onMessage`, `ping`, and `sendParam` | `EditorWatch.tla` |
 | `st_commit` or `st_load` | `PresetStore.tla` |
@@ -130,4 +132,4 @@ When you change one of the files below, read the model's actions against the new
 
 When you fix a finding, the configurations that model the code as it was no longer describe the code.
 Set their constant to the fixed value, change their rows in `check.mjs` to `ok`, and say in `FINDINGS.md` which commit fixed the finding.
-For F1 those configurations are `FlashHold.cfg`, `FlashHoldOneShot.cfg`, and `FlashHoldOneShotGap.cfg`. Also change `mismatch` to `conforms` in the `HELD` rows of `TRACES` in `check.mjs`.
+F1 was fixed this way: `FlashHold.cfg`, `FlashHoldOneShot.cfg`, and `FlashHoldOneShotGap.cfg` have `ScanInsideHold = TRUE`, and every row of `TRACES` in `check.mjs` expects `conforms`.

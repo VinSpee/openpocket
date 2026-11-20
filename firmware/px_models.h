@@ -52,7 +52,7 @@ static void nm_name_clean(char *d, const char *s)
     for (i = 0; i < 11u && s[i]; i++) d[i] = (s[i] >= 32 && s[i] <= 126) ? s[i] : '?';
     for (; i < 12u; i++) d[i] = 0;
 }
-/* boot (and after each write): the headers into nm_cache */
+/* boot (and after each write, inside its audio hold: these are SPI reads): the headers into nm_cache */
 static void nm_scan(void)
 {
     nm_hdr_t h;
@@ -125,8 +125,8 @@ static int nm_commit(uint32_t s)
             if (ota_fread(base + o, chk, m) || memcmp(chk, nm_stage + o, m)) rc = 2;
         }
     }
-    st_audio_hold(0);
     nm_scan();
+    st_audio_hold(0);
     return rc;
 }
 
@@ -138,7 +138,7 @@ static int nm_erase(uint32_t s)
     if (s >= PX_NAM_NUSER) return 1;
     st_audio_hold(1);
     if (fl_erase4k(NM_BASE + s * NM_SLOT, &k) || fl_erase4k(NM_BASE + s * NM_SLOT + 0x1000u, &k)) rc = 2;
-    st_audio_hold(0);
     nm_scan();
+    st_audio_hold(0);
     return rc;
 }

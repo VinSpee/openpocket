@@ -2,7 +2,7 @@
 
 ## Sub-features
 - The base (`firmware/base/`, `docs/BASE-FIRMWARE.md`): the code every image shares.
-- OpenPocket built on it: the same bytes as the pinned release (`tests/release.sha256`: v42 with the bass tuner fix, trails and the editor watch fix).
+- OpenPocket built on it: the same bytes as the pinned release (`tests/release.sha256`: v42 with the bass tuner fix, trails, the editor watch fix and the flash hold fix).
 - STARTER (`firmware/apps/starter`, `docs/ALT-FIRMWARE.md`): an alternative firmware, a product of its own.
   `build/apps/starter/starter.bin`, its two packages, its manifest.
 - PALETTE (`firmware/apps/palette`, `docs/PALETTE.md`): a four-module stereo instrument, an alternative firmware too.
