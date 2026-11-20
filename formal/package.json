@@ -1,0 +1,9 @@
+{
+  "name": "openpocket-formal",
+  "private": true,
+  "description": "The model checker formal/check.mjs runs (everystate: TLA+, no Java). Nothing else in the repository needs it.",
+  "license": "GPL-3.0-only",
+  "devDependencies": {
+    "everystate": "0.4.1"
+  }
+}
