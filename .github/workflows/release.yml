@@ -1,0 +1,37 @@
+name: release
+# Release notes with changesets (docs/RELEASING.md). On every push to main:
+#   - changesets are waiting: open or update the "Version Packages" pull request (versions, changelogs);
+#   - none are waiting: create the tag v<version> and a draft GitHub release from the changelogs, when they are missing.
+# It publishes nothing to npm and it never publishes the release: that stays a person's act.
+on:
+  push:
+    branches: [main]
+permissions: {}
+concurrency:
+  group: release-${{ github.ref }}
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write        # the version commit on changeset-release/main, the tag, the draft release
+      pull-requests: write   # the Version Packages pull request
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}   # set only by the run that created the draft release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0               # a changelog entry links the commit and the pull request that added its changeset
+          persist-credentials: false   # every write goes through the GitHub API with the job's token
+      - run: npm ci
+      - name: Changesets waiting or not
+        id: mode
+        uses: changesets/action/select-mode@v2
+      - name: Open or update the Version Packages pull request
+        if: steps.mode.outputs.mode == 'version'
+        uses: changesets/action/version@v2
+      - name: Create the tag and the draft release of a version that has none
+        id: release
+        if: steps.mode.outputs.mode != 'version'
+        run: node .github/scripts/release.mjs --create
+        env:
+          GH_TOKEN: ${{ github.token }}

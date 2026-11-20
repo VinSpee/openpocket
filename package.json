@@ -1,0 +1,13 @@
+{
+  "name": "openpocket-release",
+  "private": true,
+  "description": "Release tooling: changesets keep the version and the changelog of each release unit in changelog/ (docs/RELEASING.md). The build and the tests do not need it.",
+  "license": "GPL-3.0-only",
+  "workspaces": [
+    "changelog/*"
+  ],
+  "devDependencies": {
+    "@changesets/changelog-github": "1.0.1",
+    "@changesets/cli": "3.0.3"
+  }
+}
