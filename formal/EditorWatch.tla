@@ -5,7 +5,8 @@
 \* While the editor watches, the pedal pushes a STATE frame when its sound changes by its own controls, at most
 \* one every 40 ms (firmware/px_editor.h ed_service). It knows what the editor has by a hash of the state
 \* (ed_w.hash), and it does not push back a change the editor made itself: ed_handle ends with
-\* ed_w.hash = ed_state_hash(). The editor (docs/pxedit.js, docs/editor.js, docs/edsound.js) sends one request
+\* ed_w.hash = ed_state_hash(), unless a change of the pedal's still waits for its push and the reply is not the
+\* state (ed_w.owed). The editor (docs/pxedit.js, docs/editor.js, docs/edsound.js) sends one request
 \* at a time, a PING every second, and asks for the state after each change of its own.
 \*
 \* Promise: once nothing is in flight and no push is owed, the editor shows the pedal's sound.
@@ -20,12 +21,13 @@ CONSTANTS
   MaxKnobs,      \* changes made on the pedal itself (a knob, a footswitch, a MIDI message)
   MaxPings,      \* PINGs the editor sends (docs/editor.js: one a second)
   MaxSets,       \* changes made in the editor
-  KeepPending    \* FALSE: the code (every command the pedal answers sets ed_w.hash to the state now);
-                 \* TRUE: the suggested fix (a command that does not send the state keeps a push that is owed)
+  KeepPending    \* TRUE: the code (a command that does not send the state keeps a push that is owed, ed_w.owed);
+                 \* FALSE: the code before the fix of finding F2 (every command the pedal answers sets ed_w.hash
+                 \* to the state now)
 
 VARIABLES
   pedal,    \* the setting on the pedal (PRESET)
-  hash,     \* ed_w.hash: the state the editor is taken to have (Stale: none, the next push is owed)
+  hash,     \* ed_w.hash: the state the editor is taken to have (Stale: ed_w.owed is set, the next push is owed)
   window,   \* TRUE: 40 ms have passed since the last push (now - ed_w.push_ms >= 40)
   inbox,    \* the request received and not handled yet (firmware/bsp/chip/usb.c sx_frame holds one)
   wire,     \* the frames on their way from the pedal to the editor, in order
@@ -59,7 +61,8 @@ Elapse ==
   /\ ~window /\ window' = TRUE
   /\ UNCHANGED <<pedal, hash, inbox, wire, editor, waiting, knobs, pings, sets>>
 
-\* ed_service, first half: the state differs from the hash and the 40 ms are over: a STATE frame
+\* ed_service, first half: the state differs from the hash (a Stale hash always does) and the 40 ms are over: a
+\* STATE frame
 PushDue == window /\ pedal # hash
 Push ==
   /\ PushDue
@@ -68,8 +71,8 @@ Push ==
   /\ UNCHANGED <<pedal, inbox, editor, waiting, knobs, pings, sets>>
 
 \* ed_service, second half, in the same pass after the push check: ed_handle answers the request.
-\* A STATE reply carries the whole state, so the editor has it. Any other reply does not: with the fix, a change
-\* of the pedal's that has not been pushed yet stays owed.
+\* A STATE reply carries the whole state, so the editor has it. Any other reply does not: a change of the
+\* pedal's that has not been pushed yet stays owed (KeepPending).
 Handle ==
   /\ inbox.cmd # "none" /\ ~PushDue
   /\ LET now == IF inbox.cmd = "SET" THEN inbox.v ELSE pedal

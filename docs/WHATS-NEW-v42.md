@@ -93,6 +93,9 @@ new one**, with the settings they had, while the new preset's own delay and reve
 
 Not yet tried on this exact build:
 
+- the editor while it is busy (added after the v42 release: a request from the editor no longer cancels a change the
+  pedal still had to send it): turn a knob on the pedal while the editor uploads a model or reads the presets, and the
+  editor should end on the knob's last value;
 - trails: change preset on a held chord (SMOOTH LEAD to BRIT CRUNCH, AMBIENT SWELL to TIGHT METAL): the tail should
   ring out with no click; `DSP` in the corner while it rings, and no `BYP`, `LATE` or `CUT` on the heaviest presets;
 

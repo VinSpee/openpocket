@@ -40,7 +40,7 @@ enum { ED_INFO = 1, ED_CAT_BLOCK, ED_CAT_TYPE, ED_TEXTS, ED_STATE, ED_SET, ED_OR
 
 static uint8_t ed_out[1024];
 static uint32_t ed_n;
-static struct { uint8_t on; uint32_t last_ms, hash, push_ms; } ed_w;
+static struct { uint8_t on, owed; uint32_t last_ms, hash, push_ms; } ed_w;   /* owed: a push is due whatever the hash says */
 
 static void ed_begin(uint32_t cmd)
 {
@@ -112,6 +112,7 @@ static void ed_handle(const uint8_t *a, uint32_t n)   /* a: the args, after the 
 {
     uint32_t cmd = a[-1], i, k;
     int rc;
+    int owed = ed_w.on && (ed_w.owed || ed_state_hash() != ed_w.hash);   /* a change made on the pedal waits for its push */
     px_preset_t q;
     ed_begin(cmd);
     switch (cmd) {
@@ -321,7 +322,8 @@ static void ed_handle(const uint8_t *a, uint32_t n)   /* a: the args, after the 
     default:
         return;
     }
-    ed_w.hash = ed_state_hash();                       /* the editor's own change: no push back */
+    ed_w.owed = (uint8_t)(owed && cmd != ED_STATE);    /* a push that was owed stays owed, unless this reply is the state */
+    if (!ed_w.owed) ed_w.hash = ed_state_hash();       /* the editor's own change: no push back */
     ed_send();
 }
 
@@ -333,7 +335,7 @@ static void ed_service(uint32_t now)
     if (ed_w.on && now - ed_w.last_ms > 5000u) ed_w.on = 0;    /* the editor went away */
     if (ed_w.on && now - ed_w.push_ms >= 40u) {
         uint32_t h = ed_state_hash();
-        if (h != ed_w.hash) { ed_w.hash = h; ed_w.push_ms = now; ed_state_frame(); ed_send(); }
+        if (ed_w.owed || h != ed_w.hash) { ed_w.owed = 0; ed_w.hash = h; ed_w.push_ms = now; ed_state_frame(); ed_send(); }
     }
     if (!ota_frame_get(&p, &n) || n < 4u || p[0] != ED_H0 || p[1] != ED_H1 || p[2] != ED_H2)
         return;

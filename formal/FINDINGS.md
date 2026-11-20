@@ -1,13 +1,13 @@
 # Findings
 
 The models in this folder were checked with everystate 0.4.1 against the code at commit `5fce8f5`.
-Two findings are real in the code. One note describes a promise the store does not make. Three models passed.
-Nothing in the firmware was changed. A fix changes the firmware's bytes, and the release pin allows that only in a release.
+Two findings were real in the code at that commit. One note describes a promise the store does not make. Three models passed.
+F2 has since been fixed, and the release pin (`tests/release.sha256`) moved with the fix. F1 is open.
 
 | Id | What | Verdict | Found by |
 |---|---|---|---|
 | F1 | Saving or erasing a NAM model or an IR reads the flash after the audio hold is released | Real in the code. The effect on a pedal is not tested. | `FlashHold.cfg`, `FlashHoldOneShotGap.cfg` |
-| F2 | A request from the editor makes the pedal drop a push it owes | Real in the code. Reproduced on the firmware's editor code. | `EditorWatch.cfg` |
+| F2 | A request from the editor made the pedal drop a push it owed | Fixed. It was real in the code and reproduced on the firmware's editor code. | `EditorWatchNoOwed.cfg`, which was `EditorWatch.cfg` |
 | N1 | A save that returned an error can be the one the next start loads | True of the code. Not a loss. | `PresetStoreStrict.cfg` |
 
 ## F1: the model and IR scans read the flash while CPU1 runs a job
@@ -63,11 +63,15 @@ A fault on CPU1 retires it, and the pedal runs on one core until it is switched 
 `FlashHoldFixed.cfg` models that order and passes, with both ways of using CPU1 and with the gap between the two callbacks.
 After the fix, the four recorded runs conform to `FlashHoldFixed.cfg`, and `check.mjs` reports it. Change the four `mismatch` rows in `check.mjs` to `conforms` in the same change.
 
-## F2: a request from the editor makes the pedal drop a push it owes
+## F2 (fixed): a request from the editor made the pedal drop a push it owed
+
+**Fixed** by the commit `fix(editor): keep a push the pedal owes when it answers a request`, the first change to `firmware/px_editor.h` after commit `7189376`.
+The rest of this section describes the code before that commit, and its line numbers are those of commit `5fce8f5`.
+The trace below is now the trace of `EditorWatchNoOwed.cfg`, which keeps the old rule as a mutation.
 
 **The promise.** Once nothing is in flight and no push is owed, the editor shows the sound the pedal has.
 
-**The shortest trace.** `EditorWatch.cfg` stops after 8 states.
+**The shortest trace.** `EditorWatchNoOwed.cfg` stops after 8 states.
 
 | Step | Model action | In the code |
 |---|---|---|
@@ -95,7 +99,7 @@ a PING in the 40 ms: the pedal then sent [PING]; the editor shows 30, the pedal 
 no request in the 40 ms: the pedal then sent [STATE]; the editor shows 77, the pedal has 77: the same
 ```
 
-It gave these two lines on each of three runs on this Mac.
+It gave these two lines on each of three runs on this Mac. Since the fix, the first line reads `the pedal then sent [PING, STATE]` and ends with `the same`.
 
 **When it happens.** The last step of a knob turned on the pedal must fall within 40 ms of a push, and a request must arrive before those 40 ms end.
 With one PING a second that is rare for one turn. During a model upload or while the editor reads the bank, requests arrive all the time and most changes made on the pedal are dropped.
@@ -104,11 +108,14 @@ With one PING a second that is rare for one turn. During a model upload or while
 The sound and a save on the pedal are right, because `SAVE` stores the pedal's own preset.
 What the editor does with its own copy is wrong meanwhile. An export of the current sound writes the old value to the file (`docs/edpresets.js`, `exportOne`).
 
-**Suggested fix.** In `ed_handle`, note before the command whether a push is owed, which is `ed_state_hash() != ed_w.hash`.
-After the command, set `ed_w.hash` to the state only when no push was owed or the reply is a STATE frame, which carries the whole state.
-Otherwise mark the push as owed, with a flag that `ed_service` also tests, so that the next push carries both changes.
+**The fix.** `ed_handle` notes before the command whether a push is owed. One is owed when the editor watches and either `ed_state_hash() != ed_w.hash` or the new flag `ed_w.owed` is set.
+After the command it sets `ed_w.hash` to the state only when no push was owed or the reply is a STATE frame, which carries the whole state.
+Otherwise it sets `ed_w.owed`, which `ed_service` also tests, so that the next push carries both changes.
+A command answered while the editor does not watch sets the hash as before.
 
-`EditorWatchFixed.cfg` models that rule and passes, with the property that the editor ends up showing the pedal's sound.
+`EditorWatch.cfg` models that rule and passes, with the property that the editor ends up showing the pedal's sound.
+`tests/test_editor.mjs` has the trace as a case on the simulated pedal: a change and a PING sent as a push arrives. The case failed on each of three runs before the fix and passed on each of three after it.
+No pedal was used. The simulated pedal runs the same `px_editor.h`, so what is left for a pedal is the timing over real USB: turn a knob while the editor uploads a model or reads the bank, and the editor should follow it.
 The model also refuted a simpler rule, which leaves the hash alone for every command, a STATE request included, while a push is owed. With that rule the hash can stay at a value the editor no longer shows, and a change on the pedal back to that value is never sent.
 
 ## N1: a save that returned an error can be the one the next start loads
@@ -126,5 +133,6 @@ The user is told the save failed and finds it saved. Nothing is lost, and the ne
 | `KnobHandoff.cfg` | `a_kp`, the cabinet store, and the engine's preset are never read while written, and `px_engine_set` runs alone. | 124 | `audio_apply` without `a_wait` (`KnobHandoffNoWait.cfg`). |
 | `LayerSplit.cfg` | Each ring of the NAM network belongs to one core at a time, and every layer runs every block once, in order. | 5975 | `pxn_lp_a` taking layers without reading `ld` (`LayerSplitNoCheck.cfg`). |
 | `FlashHoldFixed.cfg` | F1's fix keeps the SFC rule, and `a_collect` always ends. | 250 | A hold without `a_collect` (`FlashHoldNoCollect.cfg`). |
+| `EditorWatch.cfg` | F2's fix: the editor ends up showing the pedal's sound. | 39015 | Every answered command resets the hash (`EditorWatchNoOwed.cfg`). |
 
 A pass covers the model at its bounds. `formal/README.md` lists the bounds and what each model leaves out.

@@ -4,6 +4,7 @@
 //   cc -O1 -o build/edsim tests/edsim.c engine/px_dsp.c firmware/px_math.c -lm
 // Two runs. In each a setting is changed on the pedal twice, the second time within 40 ms of the first change's push.
 // In the first run the editor's PING arrives in those 40 ms; in the second no request does.
+// Since the fix of F2 both runs end the same; tests/test_editor.mjs holds the case as a test.
 import { spawn } from "node:child_process";
 
 const edsim = process.argv[2];
