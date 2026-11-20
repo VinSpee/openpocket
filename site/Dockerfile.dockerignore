@@ -1,0 +1,6 @@
+# The build context of site/Dockerfile: the pages and this folder. docs/firmware/ is where a local build leaves its
+# packages; the site's packages come from the pinned release (site/RELEASE).
+*
+!docs
+!site
+docs/firmware

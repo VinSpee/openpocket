@@ -1,0 +1,4 @@
+# The files the site serves from the release that site/RELEASE names (site/README.md). One line per file:
+#   <SHA-256>  <path on the site>  <name of the release asset>
+# The build downloads each asset, stops when its SHA-256 is not the one written here, and never replaces a page.
+# No release is pinned yet (site/RELEASE says none), so there is no line.
