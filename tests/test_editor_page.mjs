@@ -3,6 +3,7 @@
 // pedal (tests/edsim.c: the pedal's real editor code and preset store), through a fake Web MIDI access with the pedal
 // and a second device (a foot controller). TONE3000 is simulated (its pop-up, its sign-in, its lists and files).
 //   node tests/test_editor_page.mjs [OUT_DIR]     (screenshots in OUT_DIR, default build/editor)
+// With SITE_URL set, the page is the one a server already serves there (the site container, tests/test_site.mjs).
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { createHash } from "node:crypto";
@@ -20,14 +21,14 @@ const TMP = mkdtempSync(join(tmpdir(), "opedpage-"));
 mkdirSync(OUT, { recursive: true });
 const SITE = join(ROOT, "docs");
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".css": "text/css", ".wav": "audio/wav" };
-const server = createServer((req, res) => {
+const server = process.env.SITE_URL ? null : createServer((req, res) => {
   try {
     const p = join(SITE, decodeURIComponent(req.url.split("?")[0]).replace(/\/$/, "/index.html"));
     res.writeHead(200, { "content-type": TYPES[extname(p)] || "application/octet-stream" });
     res.end(readFileSync(p));
   } catch (_) { res.writeHead(404); res.end(); }
 }).listen(0);
-const url = `http://127.0.0.1:${server.address().port}/editor.html`;
+const url = (process.env.SITE_URL || `http://127.0.0.1:${server.address().port}/`) + "editor.html";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = 0;
 const ok = (c, what) => { console.log(`${what.padEnd(78)} ${c ? "ok" : "FAIL"}`); if (!c) failed++; };
@@ -708,6 +709,6 @@ ok(tw.width >= 44 && tw.height >= 24, `phone: a block's switch is ${Math.round(t
 
 await browser.close();
 sim.stdin.end();
-server.close();
+if (server) server.close();
 console.log(failed ? `\n${failed} FAILED` : "\neditor page test passed");
 process.exit(failed ? 1 : 0);
