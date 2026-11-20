@@ -291,10 +291,27 @@ int         px_nam_lp_b(px_engine *e);                /* v40.2: the other core's
 
 void px_engine_init(px_engine *e, float sr);
 void px_engine_set(px_engine *e, const px_preset_t *p);
+/* trails: a change made while the sound plays.
+ * px_engine_switch: px_engine_set, with the outgoing preset's delay and reverb left to ring out. A delay or a reverb
+ *   that sounds and that p switches off or sets otherwise goes on with its old settings and nothing sent to it; its
+ *   sound comes into the output over 6 ms and stays until it has died away (after 20 s it is faded out). p's own delay
+ *   and reverb start empty beside it. One with the same type and settings in p plays on as it is. Trails use the part of the
+ *   delay memory that the delay which plays does not reach: when the two delays' times come to more than about 1.3 s
+ *   there is no room for the reverb's trail and both delays, and to more than 2 s for the delay's trail; that block
+ *   then changes as px_engine_set changes it. The caller fades the output round the call, as for px_engine_set.
+ * px_trail_due: 1 = going to p now would leave a trail (a change px_engine_change calls PX_CH_KNOBS may: a preset loaded
+ *   then goes through px_engine_switch, a knob turned never does).
+ * px_trails: bit 0 the delay's trail rings, bit 1 the reverb's.
+ * px_trails_stop: they fade out over 6 ms (now: end at once), as when the DSP load is too high.
+ * px_engine_set ends them at once; px_engine_knobs leaves them alone. One engine's trails ring at a time. */
+void px_engine_switch(px_engine *e, const px_preset_t *p);
+int  px_trail_due(const px_engine *e, const px_preset_t *p);
+int  px_trails(const px_engine *e);
+void px_trails_stop(px_engine *e, int now);
 /* v38: changes without clicks.
  * px_engine_change: what going from the engine's preset to p takes: PX_CH_NONE; PX_CH_KNOBS (settings and blocks on or
  *   off only: px_engine_knobs, between two blocks, no stop); PX_CH_FULL (another type, order or NAM model: px_engine_set,
- *   the caller fading the output out and back in round it).
+ *   the caller fading the output out and back in round it; also a delay time its line cannot hold while trails ring).
  * px_engine_knobs: the new settings glide in over ~23 ms, blocks switched on or off fade. Light (only the blocks whose
  *   settings changed are recomputed), so the audio side can call it at the start of a block.
  * px_engine_prepare: the heavy part of px_engine_knobs (the cabinet's normalisation) made ahead, from any thread: it reads

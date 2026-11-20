@@ -21,6 +21,7 @@ static px_engine g_eng __attribute__((section(".pool"), aligned(8)));   /* ~250 
 static px_preset_t a_kp;
 static volatile uint8_t a_kpend;
 static uint8_t a_full;                                 /* the next apply must be a full one (a user model rewritten) */
+static uint8_t a_pload;                                /* the change being applied is a preset loaded (audio_poll) */
 static void a_commit(void) { if (a_kpend) { px_engine_knobs(&g_eng, &a_kp); a_kpend = 0; } }
 /* v38: where the time goes, per block, over the last second: % of an audio block's time (index PX_NBLK: the NAM network;
  * with a NAM amp the blocks after it run on the second core, beside the ones before it) */
@@ -40,6 +41,7 @@ static void dsp_block(void)
     }
     dsp_out();
     dsp_load(t0, 85u);
+    if (a_over >= 4u) px_trails_stop(&g_eng, 0);       /* trails: over the limit 4 blocks running, they fade out (the bypass: 8) */
 }
 /* --- second core: block N goes to CPU1 at the end of IRQ N; IRQ N+1 collects the result before
  * sending it out. Same latency as before (processing already had to finish before the next block), but CPU0
@@ -299,6 +301,7 @@ static void dsp_pipe(uint32_t t_irq)
         }
     } else { dsp_pipe_run(!a_bypass && !a_hold); t0 -= a_uat; }   /* (USB audio's time in a_dec: CPU0's too) */
     dsp_load(t0, 93u);                                 /* (CPU0's whole block here, the UI gets the rest) */
+    if (a_over >= 4u) px_trails_stop(&g_eng, 0);       /* (as dsp_block) */
 }
 #endif
 static void a_collect(void)                            /* collects the block in progress on CPU1 */
@@ -390,7 +393,9 @@ static void audio_apply(void)                          /* the preset to the engi
     if (live && !a_full) {
         const int ch = px_engine_change(&g_eng, &pp);
         if (ch == PX_CH_NONE) return;
-        if (ch == PX_CH_KNOBS) {
+        /* trails: a preset loaded whose delay or reverb is to ring out goes the full way, where the trails are made
+         * (a knob turned never does: it glides) */
+        if (ch == PX_CH_KNOBS && !(a_pload && px_trail_due(&g_eng, &pp))) {
             px_engine_prepare(&g_eng, &pp);            /* the cabinet's heavy part, here, while the audio plays */
             a_kp = pp;
             __asm__ volatile("" ::: "memory");          /* (a_kp and the cabinet store written before the flag) */
@@ -401,7 +406,8 @@ static void audio_apply(void)                          /* the preset to the engi
     a_full = 0;
     a_swc = a_sw0;
     /* anything else: the output fades out, the engine is set (the interrupt held off meanwhile: a late block now only
-     * repeats silence), and the output fades back in */
+     * repeats silence), and the output fades back in. Trails: the delay and the reverb that sounded ring out through
+     * and after it (px_engine_switch) */
     if (live) { a_xft = 0; for (uint32_t t = 0; a_xf != 0.0f && t < 400u; t++) fm1_delay_us(100); }   /* (40 ms at most) */
     const uint32_t t0 = fm1_ticks();
     if (a_running) fm1_irq_mask(FM1_IRQ_ALNK0);
@@ -409,7 +415,7 @@ static void audio_apply(void)                          /* the preset to the engi
 #if DSP_CPU1
     while (px_nam_lp_b(&g_eng)) { }                    /* v40.2: the layer split's blocks in flight, finished */
 #endif
-    px_engine_set(&g_eng, &pp);
+    px_engine_switch(&g_eng, &pp);
 #if DSP_CPU1
     px_nam_lp(&g_eng, a_c1 && OP_NAM_LP && px_nam_dual(&g_eng));
 #endif
@@ -630,7 +636,10 @@ static void audio_poll(uint32_t now, int at_once)
     /* 40 ms after the last change; v38: while a knob turns, every 40 ms too (it glides: no need to wait for the end) */
     if (pending && (at_once || now - t_change >= 40u ||
                     (now - t_apply >= 40u && !a_kpend && px_engine_change(&g_eng, &PRESET) == PX_CH_KNOBS))) {
-        pending = 0; t_apply = now; audio_apply();
+        pending = 0; t_apply = now;
+        a_pload = (uint8_t)(at_once != 0);
+        audio_apply();
+        a_pload = 0;
     }
     if (a_ld && !pending && now - t_ld >= 300u && (!a_swin || now - t_ld >= 1000u)) { a_ld = 0; a_ldms = now - t_ld; }
     if (master_vol != vol_shown) { vol_shown = master_vol; audio_volume(master_vol); }

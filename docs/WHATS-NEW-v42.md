@@ -4,7 +4,8 @@ v42 brings together four pull requests from the community. Thank you, **Vince Sp
 ([VinSpee](https://github.com/VinSpee))**, for #23, #24 and #25, and **Ivan Shevchuk
 ([Testing7B](https://github.com/Testing7B))**, for #26.
 
-The sound engine is unchanged from v41: every output sample is the same.
+The sound engine is unchanged from v41 while a preset plays: every output sample is the same. Since section 5, a
+change of preset lets the delay and the reverb ring out.
 
 ## 1. The pedal's controls and screens (pull request #24)
 
@@ -67,9 +68,33 @@ flash where the stock sound bank lives. After going back to V21, the installer c
 all 20 amps, 20 cabinets and 80 presets, over MIDI. If they are missing, [RESCUE.md](RESCUE.md#blackbox-v21-factory-sounds)
 has a recovery tool for macOS that restores only the sound bank from the M-EFCS app's own files, after a full flash backup.
 
+## 5. Trails: the delay and the reverb ring out over the new preset (added after the v42 release)
+
+Until now a change of preset cut the echoes and the reverb: a delay switched off stopped at once, and a reverb of
+another type started from an empty memory. Now the delay and the reverb of the preset you leave **ring out over the
+new one**, with the settings they had, while the new preset's own delay and reverb start empty beside them.
+[SOUNDS-AND-CONTROLS.md](SOUNDS-AND-CONTROLS.md) has the rules.
+
+- No new memory: the pedal has none left (40 bytes free in the engine's region). A trail lives in the part of the
+  delay's 2 s of memory that the delay does not reach. The outgoing delay keeps the stretch its taps read, the
+  outgoing reverb's memory is copied into a free stretch, and the new delay takes the rest and grows back as they end.
+- When the stretches do not fit (the two delay times together above about 1.3 s for both trails, above 2 s for the
+  delay's alone), that block changes as it did before.
+- A trail is that effect's own tail: against a pedal that stays on the old preset it is the same sound, sample for
+  sample, for every delay and reverb type except SHIMMER, whose trail adds no new octaves
+  (`tests/engine/trail_test.c`).
+- A trail costs what its effect cost, for as long as it rings (not measured on a pedal yet: in v38 a reverb took
+  about 7 % of a block and a delay 5 %, before the delays went to half rate). If the load stays over its limit for
+  four blocks, the trails fade out; the safety bypass still needs eight.
+- A preset whose delay and reverb are the same as the last one's, a knob turned and a block switched off sound as
+  before.
+
 ## Please try on the pedal
 
 Not yet tried on this exact build:
+
+- trails: change preset on a held chord (SMOOTH LEAD to BRIT CRUNCH, AMBIENT SWELL to TIGHT METAL): the tail should
+  ring out with no click; `DSP` in the corner while it rings, and no `BYP`, `LATE` or `CUT` on the heaviest presets;
 
 - the new gestures: both footswitches for the tuner, PUSH opening at once, the double click for MOVE, holding HOME;
 - the preset list, the kept edit, the diagnostics pages on the real screen;
@@ -84,3 +109,7 @@ Not yet tried on this exact build:
   `pxmidi.js`, `pxlib.js`), with `tests/test_editor_logic.mjs`.
 - The Bluetooth test image (`node tools/op.mjs ble`) does not link: it was already about 1.2 KB over its flash region in
   v41, and the new screens add about 6 KB. The release image is not affected.
+- Trails: `px_engine_switch()` is `px_engine_set()` for a change made while the sound plays; `px_trail_due()`,
+  `px_trails()` and `px_trails_stop()` go with it (`engine/px_dsp.h`). The delay's and the reverb's state are structs
+  of their own (`px_dly`, `px_rev`). The image grows by 5.1 KB, the RAM code by 2.4 KB (12.5 KB free), the low RAM by
+  1.9 KB; the engine's region has 24 bytes left. [AUDIO-SDK.md](AUDIO-SDK.md) has the design.

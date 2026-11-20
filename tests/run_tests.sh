@@ -10,6 +10,8 @@
 #  - changes without clicks (v38): knob changes glide to exactly where a full set goes, blocks on / off fade, fewer clicks
 #  - USER IR (v38): the partitioned FFT convolution against the direct FIR, slots, names
 #  - wet lanes (v39): the delay through its lane as inline bit for bit, the reverb's tail lag frames later, the pipeline
+#  - trails: after px_engine_switch the outgoing delay and reverb are their own tails, sample for sample, on every type;
+#    they end; the stretches of the delay memory never overlap through changes at random (under the sanitizers)
 #  - NAM: engine/px_nam.c against tools/nam_a2.py with every factory model (needs numpy)
 #  - MIDI: the musical-MIDI code (firmware/px_midi.h) on a PC: decoder, CC map, messages sent, settings byte, clock
 #  - preset store: save / reload / power cut at every step of a save (firmware/px_store.h on a simulated flash)
@@ -74,6 +76,7 @@ if python3 tests/test_post5.py "r6 = [sp+40]" "r6 = [sp+44]" > /dev/null 2>&1; t
 $CC -O2 -Iengine -Ifirmware tests/engine/change_test.c firmware/px_math.c -lm -o build/change_test && build/change_test | tail -1
 $CC -O2 -Iengine -Ifirmware tests/engine/ir_test.c firmware/px_math.c -lm -o build/ir_test && build/ir_test | tail -1
 $CC -O2 -Iengine tests/engine/wet_test.c engine/px_dsp.c firmware/px_math.c -lm -o build/wet_test && build/wet_test | tail -1
+$CC -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -Iengine -Ifirmware tests/engine/trail_test.c firmware/px_math.c -lm -o build/trail_test && build/trail_test | tail -1
 echo "== NAM (fixed point against the float reference, every factory model)"
 $CC -O2 -DPXN_EMUVEC -Iengine tests/engine/nam_test.c engine/px_nam.c -o build/nam_test
 if python3 -c "import numpy" 2>/dev/null; then mkdir -p build/nam; python3 tests/test_nam.py build/nam_test > build/nam/log.txt || { cat build/nam/log.txt; exit 1; }; tail -1 build/nam/log.txt; else echo "(numpy not installed: NAM comparison skipped)"; fi

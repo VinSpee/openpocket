@@ -14,7 +14,7 @@ This document is the reference for the base. To start an alternative firmware, r
 [ALT-FIRMWARE.md](ALT-FIRMWARE.md) first. It also covers the install, the way back and the recovery.
 
 OpenPocket itself does not change when the base changes. `firmware/openpocket.bin` and both packages are the same
-bytes as the pinned release, upstream's published v42 with the bass tuner fix, and the build fails when they are not
+bytes as the pinned release, upstream's published v42 with the bass tuner fix and trails, and the build fails when they are not
 (section 9).
 
 ## 1. What the base holds
@@ -261,7 +261,7 @@ never offers an app.
 
 **The release pin.** `tests/release.sha256` holds the SHA-256 of OpenPocket's image, both packages, and the
 manifest. They are the sums of upstream's published v42 packages with the bass tuner fix (the tuner reads a bass's
-low strings). `package` ends with `tests/release_pin.sh`, which fails when a sum differs. The build is deterministic: CI and a local build give the same bytes.
+low strings) and trails (the delay and the reverb ring out over a new preset). `package` ends with `tests/release_pin.sh`, which fails when a sum differs. The build is deterministic: CI and a local build give the same bytes.
 
 The same sums mean that nothing in OpenPocket needs a check on a pedal. A change to a base file changes every app,
 so run `package` after one. A change that only moves code, or that adds lines for a case OpenPocket does not
@@ -269,7 +269,7 @@ compile, leaves the image the same bytes.
 
 To pin a new OpenPocket release after a merge of upstream's next version, compare the packages with upstream's
 published ones, then copy `build/SHA256SUMS` over `tests/release.sha256` in the same commit. A change made to
-OpenPocket on purpose, such as the bass tuner fix, is pinned the same way once its own tests pass.
+OpenPocket on purpose, such as the bass tuner fix or trails, is pinned the same way once its own tests pass.
 
 ## 10. Which product an image is
 

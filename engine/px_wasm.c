@@ -29,8 +29,12 @@ EXPORT(px_factory) void px_factory(int idx) { px_preset_factory(&preset, idx); }
 EXPORT(px_apply) void px_apply(void)                  /* v38: as the pedal: knobs glide, anything else is set */
 {
     const int ch = px_engine_change(&g_eng, &preset);
-    if (ch == PX_CH_KNOBS) { px_engine_prepare(&g_eng, &preset); px_engine_knobs(&g_eng, &preset); }
-    else if (ch == PX_CH_FULL) px_engine_set(&g_eng, &preset);
+    /* trails: as audio_apply, with another name than the last one applied standing for the pedal's "a preset was loaded" */
+    static char name[sizeof preset.name];
+    const int load = memcmp(preset.name, name, sizeof name) != 0;
+    memcpy(name, preset.name, sizeof name);
+    if (ch == PX_CH_KNOBS && !(load && px_trail_due(&g_eng, &preset))) { px_engine_prepare(&g_eng, &preset); px_engine_knobs(&g_eng, &preset); }
+    else if (ch != PX_CH_NONE) px_engine_switch(&g_eng, &preset);
 }
 EXPORT(px_reset) void px_reset(void) { px_engine_init(&g_eng, 44100.0f); px_engine_set(&g_eng, &preset); a_nan = 0; }
 EXPORT(px_volume) void px_volume(int vol) { float v = (float)vol * 0.01f; a_gain = v * v; }

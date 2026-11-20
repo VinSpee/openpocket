@@ -2066,8 +2066,218 @@ static void px_recalc(px_engine *e)
     e->patch_g = powf(10.0f, ((float)p->p[PX_B_GATE][PX_PATCH_LEVEL] - 50.0f) * 0.3f * 0.05f);
 }
 
+/* ---- trails (px_dsp.h): the outgoing preset's delay and reverb ring out after px_engine_switch ----
+ * A second delay and a second reverb run the outgoing settings with nothing sent to them, and their sound is added to
+ * the output. They have no memory of their own (the pedal has none left). The delay memory is rarely all in use, as a
+ * delay's taps reach back by its time and 2 s is the longest, so it is shared out in stretches: the outgoing delay
+ * keeps the ticks its taps reach, the outgoing reverb's ring is copied into a free stretch, and the delay that plays
+ * takes the largest stretch left and grows again as they end (dly_wrap). Free ticks are always zero. When the
+ * stretches do not fit, that block changes as it did before trails: the delay keeps its memory under the new settings,
+ * a reverb of another type starts empty.
+ * One engine's trails at a time (px_tr.own), as the pedal has one engine: their state is here, out of the pool. */
+enum { TR_DLY, TR_REV };
+enum { TR_OFF, TR_RING, TR_FADE };
+#define TR_MIN 1024                                    /* a delay's line is never shorter than this (ticks) */
+#define TR_CLR 8192                                    /* ticks zeroed a call while a stretch is freed (16 KB) */
+#define TR_DLY_QUIET 2e-4f                             /* the levels below which the delay and the reverb let their */
+#define TR_REV_QUIET 5e-4f                             /* memories die out (dly_loop, rv_loop): nothing to ring out */
+#define TR_QUIET 3e-5f                                 /* a trail's sound below this (-90 dB) for TR_HOLD_S, and for a */
+#define TR_HOLD_S 0.25f                                /* delay a turn of its line as well, has ended */
+#define TR_MAX_S 20.0f                                 /* a trail still ringing after this long (a delay that feeds */
+#define TR_END_S 2.0f                                  /* itself for ever) fades out over this */
+#define TR_FADE_FR 256                                 /* frames a trail takes to come in, and to go when stopped */
+typedef struct {
+    px_engine *own;
+    uint8_t st[2];                                     /* [TR_DLY], [TR_REV]: TR_OFF, TR_RING, TR_FADE */
+    volatile uint8_t stop;                             /* asked to fade out (px_trails_stop) */
+    float g[2], gs[2], lvl[2];                         /* its gain now, its step a frame while it fades; its level */
+    uint32_t age, quiet[2];                            /* frames since the change; frames its sound has been quiet */
+    px_dly d; px_rev r;
+    int r_at;                                          /* the reverb's ring: where in the delay memory */
+    int clr[2][2];                                     /* an ended trail's stretch, lo to hi, zeroed before it is free */
+    uint8_t l_w[2]; uint16_t l_n[2], l_rd, l_p;        /* with the wet lanes on: their lane (as wl_w, wl_n, wl_rd, wl_p) */
+} px_trail_st;
+static px_trail_st px_tr PX_LO(px_tr);
+static float px_twl[2][PX_WL_N] PX_LO(px_twl);         /* that lane's two buffers */
+
+static void dly_zero(px_engine *e, int lo, int hi) { if (hi > lo) memset(e->dly_buf + lo, 0, (size_t)(hi - lo) * sizeof e->dly_buf[0]); }
+/* the ticks behind its write index that a delay's taps reach (rc_delay's times and depths, a margin for the reads
+ * between ticks); REVERSE reads a time back from where it started, a time ago */
+static int dly_reach(const px_dly *e)
+{
+    const float len = e->dly_len > e->dly_tgt ? e->dly_len : e->dly_tgt;
+    const float r = e->dly_type == PX_DLY_REVERSE ? 2.0f * len : len + 2.0f * (e->dly_wow + e->dly_mod + e->dly_flut);
+    return (int)r + 16;
+}
+/* its trails end at once and their stretches are free */
+static void tr_free(px_engine *e)
+{
+    if (px_tr.own != e) return;
+    if (px_tr.st[TR_DLY]) dly_zero(e, px_tr.d.dly_lo, px_tr.d.dly_hi);
+    if (px_tr.st[TR_REV]) dly_zero(e, px_tr.r_at, px_tr.r_at + PX_RV_M);
+    for (int i = 0; i < 2; i++) dly_zero(e, px_tr.clr[i][0], px_tr.clr[i][1]);
+    memset(&px_tr, 0, sizeof px_tr);
+    px_tr.own = e;
+}
+/* the delay that plays has the whole memory again, empty (after tr_free: the rest is zero) */
+static void dly_whole(px_engine *e)
+{
+    px_dly *d = &e->dly;
+    if (d->dly_lo == 0 && d->dly_hi == PX_DLY_N) return;
+    dly_zero(e, d->dly_lo, d->dly_hi);
+    d->dly_lo = 0; d->dly_hi = PX_DLY_N;
+    d->dly_w = d->rev_start = d->rev_cnt = 0;
+}
+/* what a change to p does with the delay and the reverb: dm[0] and rm[0], or dm[1] and rm[1] when the memory has no
+ * room for a trail. need: the ticks the delay must reach under p with what it holds now (0: not asked) */
+enum { DM_KEEP, DM_TRAIL, DM_CARRY, DM_FRESH };        /* as it is; a trail and an empty line; its memory under p; empty */
+enum { RM_KEEP, RM_TRAIL, RM_FRESH };
+static int tr_same(const px_engine *e, const px_preset_t *p, int b)
+{
+    return e->cur.type[b] == p->type[b] && !memcmp(e->cur.p[b], p->p[b], PX_NPAR);
+}
+static void tr_modes(const px_engine *e, const px_preset_t *p, int need, int *dm, int *rm)
+{
+    int was = e->run.on[PX_B_DELAY], on = p->on[PX_B_DELAY];
+    if (was && on && tr_same(e, p, PX_B_DELAY)) dm[0] = dm[1] = DM_KEEP;
+    else if (was && e->dly.dly_env >= TR_DLY_QUIET) {
+        dm[0] = DM_TRAIL;
+        dm[1] = on && need <= e->dly.dly_hi - e->dly.dly_lo ? DM_CARRY : DM_FRESH;
+    } else dm[0] = dm[1] = DM_FRESH;
+    was = e->run.on[PX_B_REVERB]; on = p->on[PX_B_REVERB];
+    const int keep = was && on && e->cur.type[PX_B_REVERB] == p->type[PX_B_REVERB] ? RM_KEEP : RM_FRESH;
+    if (was && on && tr_same(e, p, PX_B_REVERB)) rm[0] = rm[1] = RM_KEEP;
+    else if (was && e->rv.rv_lay && e->rv.rv_env >= TR_REV_QUIET) { rm[0] = RM_TRAIL; rm[1] = keep; }
+    else rm[0] = rm[1] = keep;
+}
+int px_trail_due(const px_engine *e, const px_preset_t *p)
+{
+    int dm[2], rm[2];
+    tr_modes(e, p, 0, dm, rm);
+    return dm[0] == DM_TRAIL || rm[0] == RM_TRAIL;
+}
+/* where everything goes for one choice of dm and rm. slo..shi: the stretch of its line the outgoing delay keeps (its
+ * last ticks: where they are, or with the older part moved down next to the newer: mv_n ticks from mv_src to head, the
+ * write index); g_at: the reverb's ring (-1: none); flo..fhi: an empty line for the delay that plays */
+typedef struct { int dm, rm, slo, shi, head, mv_src, mv_n, g_at, flo, fhi; } tr_plan;
+static int tr_place(const px_engine *e, int need, tr_plan *q)
+{
+    const px_dly *d = &e->dly;
+    const int lo = d->dly_lo, hi = d->dly_hi, w = d->dly_w, cap = hi - lo, guest = q->rm == RM_TRAIL;
+    q->slo = lo; q->shi = hi; q->head = w; q->mv_n = 0; q->g_at = -1; q->flo = q->fhi = 0;
+    if (need < TR_MIN) need = TR_MIN;
+    if (q->dm == DM_FRESH) {                           /* nothing kept: the ring at the top, the line below it */
+        q->fhi = guest ? PX_DLY_N - PX_RV_M : PX_DLY_N;
+        if (guest) q->g_at = q->fhi;
+        return q->fhi >= need;
+    }
+    if (q->dm == DM_CARRY && need > cap) return 0;
+    if (q->dm != DM_TRAIL && !guest) return 1;         /* (nothing to make room for: the line as it is) */
+    int rs = dly_reach(d);
+    if (rs < (q->dm == DM_CARRY ? need : TR_MIN)) rs = q->dm == DM_CARRY ? need : TR_MIN;   /* (p's reach when it stays) */
+    if (rs > cap) rs = cap;
+    if (w - lo >= rs) { q->slo = w - rs; q->shi = w; q->head = q->slo; }
+    else { q->shi = lo + rs; q->mv_n = rs - (w - lo); q->mv_src = hi - q->mv_n; }
+    /* the ring at an end of the free ticks below or above that stretch: where it leaves the delay that plays the most
+     * (a new line: the largest free piece; the stretch itself: the free ticks next to it) */
+    int best = -1;
+    for (int c = 0; c < (guest ? 4 : 1); c++) {
+        int g = -1, below = q->slo, above = PX_DLY_N - q->shi, far = 0;   /* free next to the stretch; a piece beyond the ring */
+        if (guest) {
+            g = c == 0 ? PX_DLY_N - PX_RV_M : c == 1 ? 0 : c == 2 ? q->slo - PX_RV_M : q->shi;
+            if (g < 0 || g + PX_RV_M > PX_DLY_N || (g < q->shi && g + PX_RV_M > q->slo)) continue;
+            if (g < q->slo) { below = q->slo - (g + PX_RV_M); far = g; }
+            else { above = g - q->shi; far = PX_DLY_N - (g + PX_RV_M); }
+        }
+        int score = below + above, flo = 0, fhi = 0;
+        if (q->dm == DM_TRAIL) {
+            const int gb = guest && g < q->slo;
+            if (below >= above && below >= far) { fhi = q->slo; flo = fhi - below; }
+            else if (above >= far) { flo = q->shi; fhi = flo + above; }
+            else if (gb) fhi = far;
+            else { fhi = PX_DLY_N; flo = fhi - far; }
+            score = fhi - flo;
+        }
+        if (score > best) { best = score; q->g_at = g; q->flo = flo; q->fhi = fhi; }
+    }
+    if (best < 0) return 0;
+    return q->dm != DM_TRAIL || best >= need;
+}
+/* the outgoing chain's gain on a block's wet sound from that block on: its level trim, the delay and the reverb after
+ * it (their trims, the reverb's dry gain), the preset level (blocks of other kinds after it are left out) */
+static float tr_level(const px_engine *e, int blk)
+{
+    float g = e->patch_g * e->bf[blk];
+    int after = 0;
+    for (int i = 0; i < PX_NBLK; i++) {
+        const int b = e->ord[i];
+        if (b == blk) { after = 1; g *= e->btr[b]; }
+        else if (after && e->run.on[b] && (b == PX_B_DELAY || b == PX_B_REVERB))
+            g *= e->btr[b] * (b == PX_B_REVERB ? 1.0f - 0.4f * e->rv.rv_mix : 1.0f);
+    }
+    return g;
+}
+/* before the engine is set to p: the trails made and the memory shared out. Tried in turn: both blocks as tr_modes says;
+ * the delay without its trail; the reverb without its trail; neither (always possible) */
+static void tr_switch(px_engine *e, const px_preset_t *p)
+{
+    if (px_tr.own != e && px_tr.own) { tr_free(px_tr.own); dly_whole(px_tr.own); }
+    px_tr.own = e;
+    tr_free(e);                                        /* (trails still ringing from the change before: over) */
+    px_dly *d = &e->dly;
+    px_rev *r = &e->rv;
+    int need_new = 0, need_carry = 0, dm[2], rm[2], o;
+    if (p->on[PX_B_DELAY]) {                           /* the ticks p's delay reaches: from empty, with this memory */
+        px_dly t;
+        memset(&t, 0, sizeof t); t.dly_type = -1;
+        rc_delay(&t, p, e->sr); need_new = dly_reach(&t);
+        t = *d;
+        rc_delay(&t, p, e->sr); need_carry = dly_reach(&t);
+    }
+    tr_modes(e, p, need_carry, dm, rm);
+    tr_plan q;
+    for (o = 0; o < 4; o++) {
+        q.dm = dm[o & 1]; q.rm = rm[o >> 1];
+        if (tr_place(e, q.dm == DM_KEEP ? 0 : q.dm == DM_CARRY ? need_carry : need_new, &q)) break;
+    }
+    const float lvl_d = tr_level(e, PX_B_DELAY), lvl_r = tr_level(e, PX_B_REVERB);
+    const int lo = d->dly_lo, hi = d->dly_hi;
+    if (q.dm == DM_FRESH) {
+        if (d->dly_env != 0.0f) dly_zero(e, lo, hi);   /* (0: nothing written since it was last emptied) */
+    } else {
+        if (q.mv_n) {
+            for (int i = 0; i < q.mv_n; i++) e->dly_buf[q.head + i] = e->dly_buf[q.mv_src + i];   /* (down: they may overlap) */
+            if (d->rev_start >= q.mv_src) d->rev_start -= q.mv_src - q.head;
+        }
+        dly_zero(e, lo, q.slo); dly_zero(e, q.shi, hi);
+        d->dly_lo = q.slo; d->dly_hi = q.shi; d->dly_w = q.head;
+        if (d->rev_start < q.slo || d->rev_start > q.shi) { d->rev_start = q.head; d->rev_cnt = 0; }
+        if (q.dm == DM_TRAIL) {
+            px_tr.d = *d;
+            px_tr.st[TR_DLY] = TR_RING; px_tr.lvl[TR_DLY] = lvl_d;
+        }
+    }
+    if (q.dm == DM_FRESH || q.dm == DM_TRAIL) {
+        memset(d, 0, sizeof *d);
+        d->dly_type = -1;
+        d->dly_lo = d->dly_w = q.flo; d->dly_hi = q.fhi;
+    }
+    if (q.rm == RM_TRAIL) {
+        px_tr.r_at = q.g_at;
+        memcpy(e->dly_buf + q.g_at, e->rv_m, sizeof e->rv_m);
+        px_tr.r = *r;
+        px_tr.r.rv_shim = px_tr.r.sh_out = 0.0f;       /* (a shimmer's trail makes no new octaves: the shifter's */
+        px_tr.st[TR_REV] = TR_RING; px_tr.lvl[TR_REV] = lvl_r;   /* memory is the engine's) */
+    }
+    if (q.rm != RM_KEEP && r->rv_env != 0.0f) {        /* empty: rv_lay 0, so rc_reverb lays it out and clears its ring */
+        memset(r, 0, sizeof *r);
+        memset(e->sh_buf, 0, sizeof e->sh_buf);
+    }
+}
+
 void px_engine_init(px_engine *e, float sr)
 {
+    if (px_tr.own == e) memset(&px_tr, 0, sizeof px_tr);
     memset(e, 0, sizeof(*e));
     e->sr = sr;
     e->oct_ff = 1.0f; e->oct_ff2 = 1.0f;
@@ -2081,7 +2291,7 @@ void px_engine_init(px_engine *e, float sr)
     px_engine_set(e, &p);
 }
 static void wl_clear(px_engine *e);
-void px_engine_set(px_engine *e, const px_preset_t *p)
+static void eng_set(px_engine *e, const px_preset_t *p)
 {
     e->cur = *p;
     if (px_order_valid(p->order)) for (int i = 0; i < PX_NBLK; i++) e->ord[i] = p->order[i];
@@ -2091,6 +2301,25 @@ void px_engine_set(px_engine *e, const px_preset_t *p)
     wl_clear(e);                                       /* v39: the lanes start empty (the output fades in) */
     e->gl_left = 0;
     for (int b = 0; b < PX_NBLK; b++) { e->bf[b] = e->bfa[b] = p->on[b] ? 1.0f : 0.0f; e->bfd[b] = 0; }
+}
+void px_engine_set(px_engine *e, const px_preset_t *p)
+{
+    tr_free(e); dly_whole(e);                          /* (no trails this way: any still ringing end here) */
+    eng_set(e, p);
+}
+void px_engine_switch(px_engine *e, const px_preset_t *p)
+{
+    tr_switch(e, p);
+    eng_set(e, p);
+}
+int px_trails(const px_engine *e)
+{
+    return px_tr.own == e ? (px_tr.st[TR_DLY] != TR_OFF) | (px_tr.st[TR_REV] != TR_OFF) << 1 : 0;
+}
+void px_trails_stop(px_engine *e, int now)
+{
+    if (px_tr.own != e) return;
+    if (now) tr_free(e); else px_tr.stop = 1;
 }
 
 /* ---- v38: changes without clicks (px_dsp.h) ---- */
@@ -2141,6 +2370,11 @@ int px_engine_change(const px_engine *e, const px_preset_t *p)
             k = 1;
         }
     }
+    if (k && p->on[PX_B_DELAY] && e->dly.dly_hi - e->dly.dly_lo < PX_DLY_N) {
+        px_dly t = e->dly;                             /* trails: its line is a stretch of the memory while they ring; */
+        rc_delay(&t, p, e->sr);                        /* a time it cannot hold needs the memory shared out again */
+        if (dly_reach(&t) > t.dly_hi - t.dly_lo) return PX_CH_FULL;
+    }
     return k ? PX_CH_KNOBS : PX_CH_NONE;
 }
 void px_engine_prepare(const px_engine *e, const px_preset_t *p)
@@ -2176,6 +2410,9 @@ void px_engine_knobs(px_engine *e, const px_preset_t *p)
         }
     }
     px_may_load = 1;
+    /* trails: a delay time past the end of its line (px_engine_change, not asked, would have said PX_CH_FULL): the trails
+     * end and the delay starts empty, with the whole memory */
+    if (dly_reach(&e->dly) > e->dly.dly_hi - e->dly.dly_lo) { tr_free(e); dly_whole(e); }
     e->patch_g = powf(10.0f, ((float)p->p[PX_B_GATE][PX_PATCH_LEVEL] - 50.0f) * 0.3f * 0.05f);
     int any = 0;
     for (int i = 0; i < GL_N; i++) {                   /* from where they were (mid-glide too) to the new values */
@@ -2408,6 +2645,7 @@ static inline int16_t dl_q(float v, float rq)
     if (v > 32767.0f) v = 32767.0f; else if (v < -32767.0f) v = -32767.0f;
     return (int16_t)v;
 }
+static void dly_wrap(px_dly *e);                       /* its write index at the end of its line (trails, below) */
 static inline float dly_read(const int16_t *buf, int lo, int hi, int i, float f)   /* between i and i + 1 (i in lo..hi-1) */
 {
     int a = i - 1, b = i + 1, c = i + 2;
@@ -3224,7 +3462,7 @@ PX_AINL static inline void dly_loop(px_dly *e, int16_t *buf, float lag, const fl
             e->dly_env = av > e->dly_env ? av : e->dly_env * 0.9999f;   /* (0.99995 a sample before) */
             e->dly_rq = e->dly_env < 2e-4f ? 0.0f : 0.5f;
             buf[e->dly_w] = dl_q(wv, e->dly_rq);
-            if (++e->dly_w >= e->dly_hi) e->dly_w = e->dly_lo;
+            if (++e->dly_w >= e->dly_hi) dly_wrap(e);
         {   /* v40: a gentle lift of the top (+1 dB at 5 kHz), for what the pair's average and the interpolation take off */
             const float dl = 1.15f * d - 0.15f * e->dly_dp;
             e->dly_dp = d; d = dl;
@@ -3308,6 +3546,104 @@ static void rv_block(px_rev *e, int16_t *m, float *shb, const float *xb, float *
     else rv_loop(e, m, shb, xb, wo, n, alg, sp, sh, gt);                                 /* shimmer, gated (and anything else) */
 }
 
+/* ---- trails, as they run (their making: tr_switch, above) ---- */
+/* a delay's write index at the end of its line: back to its start. The delay that plays first takes the free ticks next
+ * to its line, above it and then below: they are zero, the silence before what it holds */
+static __attribute__((noinline)) void dly_wrap(px_dly *e)
+{
+    if (px_tr.own && e == &px_tr.own->dly) {
+        const int t[4][2] = {{px_tr.d.dly_lo, px_tr.st[TR_DLY] ? px_tr.d.dly_hi : px_tr.d.dly_lo},
+                             {px_tr.r_at, px_tr.st[TR_REV] ? px_tr.r_at + PX_RV_M : px_tr.r_at},
+                             {px_tr.clr[0][0], px_tr.clr[0][1]}, {px_tr.clr[1][0], px_tr.clr[1][1]}};
+        int lo = 0, hi = PX_DLY_N;
+        for (int i = 0; i < 4; i++) {
+            if (t[i][1] <= t[i][0]) continue;
+            if (t[i][1] <= e->dly_lo) { if (t[i][1] > lo) lo = t[i][1]; }
+            else if (t[i][0] < hi) hi = t[i][0];
+        }
+        if (hi > e->dly_hi) { e->dly_hi = hi; return; }    /* (it goes on writing upwards) */
+        e->dly_lo = lo;
+    }
+    e->dly_w = e->dly_lo;
+}
+static int tr_busy(void)
+{
+    return px_tr.st[TR_DLY] | px_tr.st[TR_REV] | (px_tr.clr[0][1] > px_tr.clr[0][0]) | (px_tr.clr[1][1] > px_tr.clr[1][0]);
+}
+/* n frames of the trails added to out (PX_MAX_BLOCK at most); 0 = none sounds. A trail comes in over TR_FADE_FR frames
+ * (with the wet lanes it starts after the output's own fade). It ends when its sound has gone quiet, when asked
+ * (px_trails_stop) or after TR_MAX_S, each time through a fade; its stretch is then zeroed, TR_CLR ticks a call, and
+ * free. pf: the time each took */
+static __attribute__((noinline)) int tr_run(px_engine *e, float *out, int n, uint32_t *pf)
+{
+    float z[PX_MAX_BLOCK];
+    int any = 0;
+    px_tr.age += (uint32_t)n;
+    for (int v = 0; v < 2; v++) {
+        if (px_tr.st[v] == TR_OFF) continue;
+        const uint32_t t0 = px_clock ? px_clock() : 0u;
+        if (px_tr.st[v] == TR_RING) {
+            const uint32_t hold = (uint32_t)(TR_HOLD_S * e->sr) + (v == TR_DLY ? 2u * (uint32_t)(px_tr.d.dly_hi - px_tr.d.dly_lo) : 0u);
+            float gs = 0.0f;
+            if (px_tr.stop) gs = 1.0f / (float)TR_FADE_FR;
+            else if (px_tr.quiet[v] >= hold) gs = 1.0f / (float)n;
+            else if ((float)px_tr.age >= TR_MAX_S * e->sr) gs = 1.0f / (TR_END_S * e->sr);
+            if (gs > 0.0f) { px_tr.st[v] = TR_FADE; px_tr.gs[v] = gs; }
+        }
+        for (int k = 0; k < n; k++) z[k] = 0.0f;
+        if (v == TR_DLY) dly_block(&px_tr.d, e->dly_buf, e->wl_dlag, z, z, n, px_tr.d.dly_type);
+        else rv_block(&px_tr.r, e->dly_buf + px_tr.r_at, 0, z, z, n);
+        float g = px_tr.g[v], pk = 0.0f;
+        const float gs = px_tr.st[v] == TR_FADE ? -px_tr.gs[v] : g < 1.0f ? 1.0f / (float)TR_FADE_FR : 0.0f, lvl = px_tr.lvl[v];
+        for (int k = 0; k < n; k++) {
+            const float a = px_abs(z[k]);
+            if (a > pk) pk = a;
+            g += gs;
+            g = g > 1.0f ? 1.0f : g < 0.0f ? 0.0f : g;
+            out[k] += z[k] * g * lvl;
+        }
+        px_tr.g[v] = g;
+        px_tr.quiet[v] = pk * lvl < TR_QUIET ? px_tr.quiet[v] + (uint32_t)n : 0u;
+        any = 1;
+        if (px_tr.st[v] == TR_FADE && g <= 0.0f) {     /* over: its stretch to be zeroed */
+            px_tr.st[v] = TR_OFF;
+            px_tr.clr[v][0] = v == TR_DLY ? px_tr.d.dly_lo : px_tr.r_at;
+            px_tr.clr[v][1] = v == TR_DLY ? px_tr.d.dly_hi : px_tr.r_at + PX_RV_M;
+        }
+        if (px_clock) pf[v] += px_clock() - t0;
+    }
+    for (int i = 0; i < 2; i++) {
+        const int lo = px_tr.clr[i][0], hi = px_tr.clr[i][1];
+        if (hi <= lo) continue;
+        dly_zero(e, lo, hi - lo > TR_CLR ? lo + TR_CLR : hi);
+        px_tr.clr[i][0] = hi - lo > TR_CLR ? lo + TR_CLR : hi;
+        break;
+    }
+    if (!px_tr.st[TR_DLY] && !px_tr.st[TR_REV]) px_tr.stop = 0;
+    if (!tr_busy() && e->dly.dly_env == 0.0f) {        /* all over, and the delay that plays is empty (it grows only as */
+        e->dly.dly_lo = e->dly.dly_w = e->dly.rev_start = 0;   /* it writes): it has the whole memory again */
+        e->dly.dly_hi = PX_DLY_N;
+    }
+    return any;
+}
+/* the trails into the chain's output, n frames. With the wet lanes on they are made beside the chain, as the delay's and
+ * the reverb's wet sound (px_wet_run), and heard two blocks later; otherwise they are made here */
+static inline void tr_mix(px_engine *e, float *out, int n)
+{
+    if (e->wl_on && px_tr.l_p + n <= PX_WL_N) {
+        const float *bw = px_twl[e->wl_b] + px_tr.l_p;
+        const int rd = (int)px_tr.l_rd - (int)px_tr.l_p;
+        for (int k = 0; k < n && k < rd; k++) out[k] += bw[k];
+        px_tr.l_p = (uint16_t)(px_tr.l_p + n);
+        px_tr.l_n[e->wl_b] = px_tr.l_p;
+        return;
+    }
+    if (!tr_busy()) return;
+    uint32_t t[2] = {0u, 0u};
+    tr_run(e, out, n, t);
+    e->pf[PX_B_DELAY] += t[TR_DLY]; e->pf[PX_B_REVERB] += t[TR_REV];
+}
+
 /* ---- v39: the wet lanes (px_dsp.h). [lane][buffer][frame]: 2 KB of RAM ---- */
 static float px_wl[2][2][PX_WL_N] PX_LO(px_wl);
 static void wl_clear(px_engine *e)
@@ -3317,6 +3653,7 @@ static void wl_clear(px_engine *e)
         e->wl_rd[L] = e->wl_p[L] = 0;
         for (int b = 0; b < 2; b++) { e->wl_n[L][b] = 0; e->wl_w[L][b] = 0; }
     }
+    if (px_tr.own == e) px_tr.l_w[0] = px_tr.l_w[1] = 0, px_tr.l_n[0] = px_tr.l_n[1] = px_tr.l_rd = px_tr.l_p = 0;
 }
 void px_wet_mode(px_engine *e, int on, int lag)
 {
@@ -3332,6 +3669,10 @@ void px_wet_swap(px_engine *e)
     for (int L = 0; L < 2; L++) {
         e->wl_rd[L] = e->wl_w[L][b] ? e->wl_n[L][b] : 0;
         e->wl_w[L][b] = 0; e->wl_n[L][b] = 0; e->wl_p[L] = 0;
+    }
+    if (px_tr.own == e) {                              /* the trails' lane, the same way */
+        px_tr.l_rd = px_tr.l_w[b] ? px_tr.l_n[b] : 0;
+        px_tr.l_w[b] = 0; px_tr.l_n[b] = 0; px_tr.l_p = 0;
     }
 }
 int px_wet_run(px_engine *e, uint32_t deadline, volatile const uint8_t *stop)
@@ -3349,6 +3690,7 @@ int px_wet_run(px_engine *e, uint32_t deadline, volatile const uint8_t *stop)
                 e->wl_w[L][b] = 1;
                 e->wl_late++;
                 if (px_clock) e->wl_pf[L] += px_clock() - t0;
+                if (px_tr.own == e) px_tr.stop = 1;    /* (no time to spare: the trails end) */
                 return 0;
             }
             const int m = n - o < 16 ? n - o : 16;
@@ -3357,6 +3699,19 @@ int px_wet_run(px_engine *e, uint32_t deadline, volatile const uint8_t *stop)
         }
         e->wl_w[L][b] = 1;
         if (px_clock) e->wl_pf[L] += px_clock() - t0;
+    }
+    if (px_tr.own == e && px_tr.l_n[b] && !px_tr.l_w[b] && tr_busy()) {   /* the trails, last: cut first when time is short */
+        if ((stop && *stop) || (deadline && px_clock && (int32_t)(px_clock() - deadline) > 0)) {
+            px_tr.stop = 1;
+            e->wl_late++;
+            return 0;
+        }
+        const int n = px_tr.l_n[b];
+        for (int o = 0; o < n; o += PX_MAX_BLOCK) {
+            const int m = n - o < PX_MAX_BLOCK ? n - o : PX_MAX_BLOCK;
+            for (int k = 0; k < m; k++) px_twl[b][o + k] = 0.0f;
+            if (tr_run(e, px_twl[b] + o, m, e->wl_pf)) px_tr.l_w[b] = 1;
+        }
     }
     return 1;
 }
@@ -3835,6 +4190,7 @@ PX_HOT void px_engine_part(px_engine *e, const float *in, float *out, int n, int
         }
         out[k] = x;
     }
+    if (px_tr.own == e) tr_mix(e, out, n);             /* trails: the outgoing preset's delay and reverb, ringing out */
     }
 }
 void px_engine_process(px_engine *e, const float *in, float *out, int n) { px_engine_part(e, in, out, n, PX_PART_ALL); }
