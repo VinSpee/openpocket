@@ -13,6 +13,14 @@
  *   in   "#wait MS"              MS milliseconds of the pedal's time pass at once (the main loop runs MS passes). "#wait ok"
  *   in   "#sound HZ"             a sine of HZ at a quarter of full scale as the guitar (0: silence); after 0.4 s:
  *                                "#sound L R", the two outputs' RMS over the last 0.1 s, in 1/10000 of full scale
+ *   in   "#clock N MS"           N MIDI clocks, MS + 1 milliseconds apart (24 a quarter note): a host's clock, with the
+ *                                even timing a test needs. "#clock ok" after the last
+ *   in   "#loop PATH"            a WAV file (mono, 16 bits, 44.1 kHz) as the guitar, around and around, in the tone's
+ *                                place ("#loop -": none). "#loop ok" / "#loop err REASON"
+ *   in   "#audio MS"             MS milliseconds of the pedal's time pass at once, and its two outputs come back:
+ *                                "#audio " + the frames, left then right, 16 bits each, little-endian, in hex. From
+ *                                the first one on, the audio's interrupt runs only inside these requests, so that one
+ *                                request's sound continues the one before ("#audio 0", or 3 s without one: as before)
  *   in   "#status"               one JSON line: the product (its INFO descriptor), the screen's frame count, the volume,
  *                                the load, safe mode, whether every flash write was inside the app's own range, the
  *                                boot stage reached and the boot guard's "start not finished yet" mark
@@ -44,12 +52,19 @@ void iis_irq_handler(uint8_t index) { (void)index; }
 /* ---- time and the audio's interrupt ---- */
 static uint32_t h_aud_us, h_tone_hz, h_tone_at, h_lv_n, h_nan;
 static double h_lv[2];
+#define H_LOOP_LEVEL 0.30f                      /* a loop's full scale at the converter: 0.15 in a_in, as tools/sim/px-engine.js */
+#define H_LOOP_MAX (60u * 44100u)
+static int16_t h_loop[H_LOOP_MAX];              /* #loop: the guitar (h_loop_n samples; 0: none) */
+static uint32_t h_loop_n, h_loop_at;
+static int16_t h_rec[2u * (2000u * 45u + 4u * A_FR)];   /* #audio: the outputs of one request, 2 s at most */
+static uint32_t h_rec_n, h_stream, h_pull, h_stream_idle;
 static void h_audio_block(void)                 /* a guitar block from the converter, its output block to it */
 {
     static uint32_t in[2 * A_FR];
     static int32_t out[2 * A_FR];
     for (uint32_t i = 0; i < A_FR; i++, h_tone_at++) {
-        const float v = h_tone_hz ? 0.25f * 8388607.0f * sinf(6.2831853f * (float)(h_tone_at % 44100u) * (float)h_tone_hz / 44100.0f) : 0.0f;
+        float v = h_tone_hz ? 0.25f * 8388607.0f * sinf(6.2831853f * (float)(h_tone_at % 44100u) * (float)h_tone_hz / 44100.0f) : 0.0f;
+        if (h_loop_n) { v = (float)h_loop[h_loop_at] * 256.0f * H_LOOP_LEVEL; if (++h_loop_at >= h_loop_n) h_loop_at = 0; }
         in[2u * i] = (uint32_t)(int32_t)v & 0x00FFFFFFu;
         in[2u * i + 1u] = 0;
     }
@@ -59,6 +74,7 @@ static void h_audio_block(void)                 /* a guitar block from the conve
     for (uint32_t i = 0; i < A_FR; i++) {
         const double l = out[2u * i] / 8388608.0, r = out[2u * i + 1u] / 8388608.0;
         h_lv[0] += l * l; h_lv[1] += r * r;
+        if (h_pull && h_rec_n + 2u <= sizeof h_rec / sizeof h_rec[0]) { h_rec[h_rec_n++] = (int16_t)(out[2u * i] >> 8); h_rec[h_rec_n++] = (int16_t)(out[2u * i + 1u] >> 8); }
     }
     h_lv_n += A_FR;
 }
@@ -67,11 +83,12 @@ static void h_tick(void)
     h_ms++;
     h_ticks += 1000u * FM1_TICKS_PER_US;
     if (!a_running || h_irq_held) return;       /* (a held interrupt makes no block) */
+    if (h_stream && !h_pull) { if (++h_stream_idle > 3000u) h_stream = 0; return; }   /* (#audio: blocks only inside a request) */
     for (h_aud_us += 1000u; h_aud_us >= 2902u; h_aud_us -= 2902u) h_audio_block();
 }
 
 /* ---- the host's commands: what a hand does, as steps in time ---- */
-enum { H_PIN, H_ENC, H_WAIT, H_SAY, H_LEVEL0, H_LEVEL };
+enum { H_PIN, H_ENC, H_WAIT, H_SAY, H_LEVEL0, H_LEVEL, H_AUDIO0, H_AUDIO, H_CLOCK };
 typedef struct { uint8_t kind; int32_t a, b; const char *say; } h_step_t;
 #define H_Q 1024u
 static h_step_t h_q[H_Q];
@@ -94,6 +111,30 @@ static void h_save_flash(const char *path)
 {
     FILE *f = fopen(path, "wb");
     if (f) { fwrite(h_nor, 1, sizeof h_nor, f); fclose(f); }
+}
+/* a WAV file as the guitar: mono, 16 bits, 44.1 kHz. 0 = loaded, else why not */
+static const char *h_loop_load(const char *path)
+{
+    uint8_t h[12], c[8], fmt[16];
+    uint32_t n = 0, got = 0;
+    FILE *f = fopen(path, "rb");
+    if (!f) return "not found";
+    if (fread(h, 1, 12, f) != 12 || memcmp(h, "RIFF", 4) || memcmp(h + 8, "WAVE", 4)) { fclose(f); return "not a WAV file"; }
+    h_loop_n = 0;
+    while (!n && fread(c, 1, 8, f) == 8) {
+        const uint32_t len = (uint32_t)c[4] | (uint32_t)c[5] << 8 | (uint32_t)c[6] << 16 | (uint32_t)c[7] << 24;
+        if (!memcmp(c, "fmt ", 4) && len >= 16u) {
+            if (fread(fmt, 1, 16, f) != 16 || fseek(f, (long)(len - 16u + (len & 1u)), SEEK_CUR)) break;
+            got = fmt[0] == 1 && fmt[1] == 0 && fmt[2] == 1 && fmt[3] == 0 && fmt[4] == 0x44 && fmt[5] == 0xAC && fmt[6] == 0 && fmt[7] == 0 && fmt[14] == 16;
+        } else if (!memcmp(c, "data", 4)) {
+            n = len / 2u;
+            if (!got || !n || n > H_LOOP_MAX || fread(h_loop, 2, n, f) != n) { n = 0; break; }
+        } else if (fseek(f, (long)(len + (len & 1u)), SEEK_CUR)) break;
+    }
+    fclose(f);
+    if (!n) return "need mono, 16 bits, 44.1 kHz, a minute at most";
+    h_loop_n = n; h_loop_at = 0;
+    return 0;
 }
 static int h_button(const char *name)
 {
@@ -135,6 +176,19 @@ static void h_command(char *l)
     } else if (sscanf(l, "#sound %d", &n) == 1) {
         h_tone_hz = (uint32_t)(n < 0 ? 0 : n);
         h_do(H_WAIT, 300, 0, 0); h_do(H_LEVEL0, 0, 0, 0); h_do(H_WAIT, 100, 0, 0); h_do(H_LEVEL, 0, 0, 0);
+    } else if (sscanf(l, "#clock %d %d", &n, &b) == 2) {
+        if (n < 1 || n > 400 || b < 1 || b > 200) { fputs("#clock err 1..400 clocks, 1..200 ms\n", stdout); return; }
+        for (int i = 0; i < n; i++) { h_do(H_CLOCK, 0, 0, 0); h_do(H_WAIT, b, 0, 0); }
+        h_do(H_SAY, 0, 0, "#clock ok");
+    } else if (!strncmp(l, "#loop ", 6)) {
+        const char *why = 0;
+        if (!strcmp(l + 6, "-")) h_loop_n = 0;
+        else why = h_loop_load(l + 6);
+        if (why) fprintf(stdout, "#loop err %s\n", why); else fputs("#loop ok\n", stdout);
+    } else if (sscanf(l, "#audio %d", &n) == 1) {
+        if (n < 0 || n > 2000) { fputs("#audio err 0..2000\n", stdout); return; }
+        if (n == 0) { h_stream = 0; fputs("#audio\n", stdout); }
+        else { h_do(H_AUDIO0, 0, 0, 0); h_do(H_WAIT, n, 0, 0); h_do(H_AUDIO, 0, 0, 0); }
     } else if (!strcmp(l, "#status")) {
         fprintf(stdout, "#status {\"app\":\"%s\",\"name\":\"%s\",\"version\":\"%s\",\"caps\":%u,\"editor\":%u,\"identity\":\"%s\","
                 "\"frame\":%u,\"volume\":%u,\"load\":%u,\"bypass\":%u,\"safe\":%d,\"hold\":%u,\"blocks\":%u,\"writes_ok\":%s,\"ms\":%u,"
@@ -192,6 +246,17 @@ static void h_host(void)                        /* once a main-loop pass (tests/
             const double n = h_lv_n ? (double)h_lv_n : 1.0;
             fprintf(stdout, "#sound %d %d\n", (int)(sqrt(h_lv[0] / n) * 10000.0 + 0.5), (int)(sqrt(h_lv[1] / n) * 10000.0 + 0.5));
             fflush(stdout);
+        } else if (s.kind == H_CLOCK) {          /* (as usb.c queues it: one USB-MIDI event packet) */
+            if (mi_w - mi_r < MQ) { midi_in_q[mi_w % MQ] = 0xFu | 0xF8u << 8; midi_in_ms[mi_w % MQ] = h_ms; mi_w++; }
+        } else if (s.kind == H_AUDIO0) { h_stream = h_pull = 1; h_stream_idle = 0; h_rec_n = 0; }
+        else if (s.kind == H_AUDIO) {
+            static char hex[4u * sizeof h_rec / sizeof h_rec[0] + 16u];
+            static const char H[] = "0123456789abcdef";
+            char *p = hex;
+            for (uint32_t i = 0; i < h_rec_n; i++) { const uint16_t v = (uint16_t)h_rec[i]; *p++ = H[v >> 4 & 15]; *p++ = H[v & 15]; *p++ = H[v >> 12]; *p++ = H[v >> 8 & 15]; }
+            *p = 0;
+            h_pull = 0;
+            fputs("#audio ", stdout); fputs(hex, stdout); fputs("\n", stdout); fflush(stdout);
         } else if (s.kind == H_WAIT) { h_wait = (uint32_t)s.a; return; }
     }
     {   /* nothing in progress: a line from the host, if one comes within a millisecond */

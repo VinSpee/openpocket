@@ -258,6 +258,18 @@ export async function startSim(opts = {}) {
     if (what === "volume") return json(res, await ok(`#vol ${Math.trunc(num(a, 0, 100, "volume"))}`));
     if (what === "nan" && kind === "app") return json(res, await ok("#nan"));
     if (what === "wait" && kind === "app") return json(res, await ok(`#wait ${Math.trunc(num(a, 0, 600000, "milliseconds"))}`));
+    if (what === "clock" && kind === "app") return json(res, await ok(`#clock ${Math.trunc(num(a, 1, 400, "clocks"))} ${Math.trunc(num(b, 1, 200, "milliseconds"))}`));
+    if (what === "loop" && kind === "app") {          // a bundled guitar loop as the guitar, in the tone's place; "none": the tone again
+      const wav = a === "none" ? "-" : within(LOOPS, `${a}.wav`);
+      if (wav !== "-" && !existsSync(wav)) throw new HttpError(404, `no loop ${a} in assets/loops`);
+      return json(res, await ok(`#loop ${wav}`));
+    }
+    if (what === "audio" && kind === "app") {         // the pedal's time passes, and its two outputs come back: 16-bit stereo frames at 44.1 kHz
+      const h = await reply(`#audio ${Math.trunc(num(a, 0, 2000, "milliseconds"))}`);
+      if (h.startsWith("err")) throw new HttpError(400, h);
+      res.writeHead(200, { "content-type": "application/octet-stream", "cache-control": "no-store", ...cors });
+      return res.end(Buffer.from(h, "hex"));
+    }
     if (what === "sound" && kind === "app") {         // a sine as the guitar: the two outputs' level, from the pedal's own audio code
       const [left, right] = (await reply(`#sound ${Math.trunc(num(a, 0, 20000, "frequency in Hz"))}`)).split(" ").map((v) => Number(v) / 10000);
       return json(res, { left, right });

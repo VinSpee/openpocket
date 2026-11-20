@@ -39,5 +39,15 @@ jobs:
             build/apps/starter/*.fwsc
             build/apps/starter/manifest.json
             build/apps/starter/SHA256SUMS
+      - name: Build PALETTE, the four-module stereo alternative firmware (docs/PALETTE.md)
+        run: node tools/op.mjs app palette
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openpocket-app-palette
+          path: |
+            build/apps/palette/palette.bin
+            build/apps/palette/*.fwsc
+            build/apps/palette/manifest.json
+            build/apps/palette/SHA256SUMS
       - name: Host tests, also with the packages of both products built above
         run: node tools/op.mjs test --built

@@ -5,10 +5,10 @@
 // being installed for OpenPocket, the way back (also for a pedal that restarts in a loop), what the flash keeps through
 // both installs (OpenPocket's presets, models and IRs; the alternative firmware's own data), and what it does not.
 //   cc -O1 -o build/devsim tests/devsim.c && node tests/test_products.mjs [--built]
-// --built: also with the packages the build made (build/apps/starter, docs/firmware); they must exist
+// --built: also with the packages the build made (build/apps/NAME for each app of firmware/apps, docs/firmware); they must exist
 // (`node tools/op.mjs all` runs it so). Without it only the made-up packages of tests/fixtures.py are used.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -159,28 +159,31 @@ ok(r.code === 0 && /PocketX_942 \(OpenPocket v42\) -> PocketX_942 \(STARTER v01,
   ok(err && err.code === "mismatch" && /runs OpenPocket v42/.test(err.message), "an install that ends on another product than the one asked for is reported, though the number is right");
 }
 
-// ---- the packages the build made
+// ---- the packages the build made: each app of firmware/apps over OpenPocket, and OpenPocket back over it
+const APPS = readdirSync(join(ROOT, "firmware/apps")).filter((n) => existsSync(join(ROOT, "firmware/apps", n, "app.sh"))).sort();
 if (process.argv.includes("--built")) {
-  const app = join(ROOT, "build/apps/starter"), rel = join(ROOT, "docs/firmware");
-  const relMan = JSON.parse(readFileSync(join(rel, "manifest.json"), "utf8")), appMan = JSON.parse(readFileSync(join(app, "manifest.json"), "utf8"));
-  const relId = relMan.packages.find((p) => p.model === "PocketX").product, appId = appMan.packages.find((p) => p.model === "PocketX").product;
-  ok(!relMan.app && appMan.app && appMan.app.id === "starter" && appMan.packages.every((p) => p.file.startsWith("starter-")),
-    "built: OpenPocket's manifest names no app; the starter's names it, and its packages carry its name");
-  r = await flasher(start, ["--confirm-flash", "--app", "starter"]);
-  const a1 = join(TMP, "app1.bin"), w1 = join(TMP, "want1.bin");
-  ok(r.code === 0 && appIn(r.dump, a1) === `${appId} starter CRC-OK`, `built: the starter's package installs over OpenPocket (node tools/op.mjs flash --app starter)${r.code ? "\n" + r.out : ""}`);
-  patched(join(app, "starter.bin"), appId, w1);
-  ok(same(a1, w1) && kept(r.dump).length === 0, "built: the flash holds build/apps/starter/starter.bin byte for byte; OpenPocket's data and the app's own are kept");
-  d = await runs(r.dump);
-  ok(d && d.product && d.product.app === "starter" && d.product.name === appMan.app.name && d.product.version === appMan.app.version && d.product.caps.join() === appMan.app.caps.join(),
-    "built: what the pedal says it runs is what the manifest says the package is");
-  const built = r.dump;
-  r = await flasher(built, ["--confirm-flash"]);
-  const a2 = join(TMP, "app2.bin"), w2 = join(TMP, "want2.bin");
-  ok(r.code === 0 && appIn(r.dump, a2) === `${relId} openpocket CRC-OK`, `built: OpenPocket's release package installs back over the starter (node tools/op.mjs flash)${r.code ? "\n" + r.out : ""}`);
-  patched(join(ROOT, "firmware/openpocket.bin"), relId, w2);
-  ok(same(a2, w2) && kept(r.dump).length === 0, "built: the flash holds firmware/openpocket.bin byte for byte; OpenPocket's data and the app's own are still as they were");
-} else if (!existsSync(join(ROOT, "build/apps/starter/manifest.json"))) console.log("(the build's own packages: not built, not checked here; `node tools/op.mjs all` checks them)");
+  for (const name of APPS) {
+    const app = join(ROOT, "build/apps", name), rel = join(ROOT, "docs/firmware");
+    const relMan = JSON.parse(readFileSync(join(rel, "manifest.json"), "utf8")), appMan = JSON.parse(readFileSync(join(app, "manifest.json"), "utf8"));
+    const relId = relMan.packages.find((p) => p.model === "PocketX").product, appId = appMan.packages.find((p) => p.model === "PocketX").product;
+    ok(!relMan.app && appMan.app && appMan.app.id === name && appMan.packages.every((p) => p.file.startsWith(`${name}-`)),
+      `built: OpenPocket's manifest names no app; ${name}'s names it, and its packages carry its name`);
+    r = await flasher(start, ["--confirm-flash", "--app", name]);
+    const a1 = join(TMP, `${name}1.bin`), w1 = join(TMP, `${name}-want1.bin`);
+    ok(r.code === 0 && appIn(r.dump, a1) === `${appId} ${name} CRC-OK`, `built: ${name}'s package installs over OpenPocket (node tools/op.mjs flash --app ${name})${r.code ? "\n" + r.out : ""}`);
+    patched(join(app, `${name}.bin`), appId, w1);
+    ok(same(a1, w1) && kept(r.dump).length === 0, `built: the flash holds build/apps/${name}/${name}.bin byte for byte; OpenPocket's data and the app's own are kept`);
+    d = await runs(r.dump);
+    ok(d && d.product && d.product.app === name && d.product.name === appMan.app.name && d.product.version === appMan.app.version && d.product.caps.join() === appMan.app.caps.join(),
+      `built: what the pedal says it runs (${appMan.app.name} ${appMan.app.version}) is what the manifest says the package is`);
+    const built = r.dump;
+    r = await flasher(built, ["--confirm-flash"]);
+    const a2 = join(TMP, `${name}2.bin`), w2 = join(TMP, `${name}-want2.bin`);
+    ok(r.code === 0 && appIn(r.dump, a2) === `${relId} openpocket CRC-OK`, `built: OpenPocket's release package installs back over ${name} (node tools/op.mjs flash)${r.code ? "\n" + r.out : ""}`);
+    patched(join(ROOT, "firmware/openpocket.bin"), relId, w2);
+    ok(same(a2, w2) && kept(r.dump).length === 0, "built: the flash holds firmware/openpocket.bin byte for byte; OpenPocket's data and the app's own are still as they were");
+  }
+} else if (!APPS.every((n) => existsSync(join(ROOT, "build/apps", n, "manifest.json")))) console.log("(the build's own packages: not built, not checked here; `node tools/op.mjs all` checks them)");
 
 console.log(failed ? `\n${failed} FAILED` : "\nall product tests passed");
 process.exit(failed ? 1 : 0);

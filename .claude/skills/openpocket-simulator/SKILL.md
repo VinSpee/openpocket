@@ -51,7 +51,7 @@ footswitches, drag or wheel the knobs, click PARA for PUSH, or use the keys list
 
 An alternative firmware (an app of `firmware/apps`, `docs/ALT-FIRMWARE.md`) runs with `node tools/op.mjs sim --app starter`:
 its own C files, compiled for this computer. `/api/state` then gives the product, and `/api/wait/MS`, `/api/sound/HZ` and
-`NAME_long` presses exist (`docs/SIMULATOR.md`, "An app on the base firmware"). Its sound is measured, not played.
+`NAME_long` presses exist (`docs/SIMULATOR.md`, "An app on the base firmware"). Its sound is played by the page's Listen button, from the app's own C code (`/api/loop/NAME`, `/api/audio/MS`), and `/api/sound/HZ` measures it.
 
 ## Sound
 
