@@ -100,6 +100,16 @@ ok(pushes.length === 0, "WATCH: the editor's own change is not echoed back");
 s.pedal("preset 7");
 for (let i = 0; i < 40 && !pushes.length; i++) await sleep(10);
 ok(pushes.length >= 1 && pushes.at(-1).slot === 7, "WATCH: a footswitch (slot 8) is pushed");
+// a request in the 40 ms after a push must not cancel the push of a change made in them (formal/FINDINGS.md, F2):
+// the second change and a PING go to the pedal as its push of the first arrives
+const was = pushes.at(-1).preset.p[amp][2], twice = [(was + 1) % 101, (was + 2) % 101];
+let pinged = null;
+pushes.length = 0;
+ed.onState = (x) => { pushes.push(x); if (!pinged) { s.pedal(`set ${amp} 2 ${twice[1]}`); pinged = ed.ping(); } };
+s.pedal(`set ${amp} 2 ${twice[0]}`);
+for (let i = 0; i < 40 && pushes.length < 2; i++) await sleep(10);
+await pinged;
+ok(pushes.length === 2 && pushes.every((x, i) => x.preset.p[amp][2] === twice[i]), "WATCH: a PING just after a push does not cancel the next push");
 
 // ---- 4. saving, slots ----
 await ed.select(2);
