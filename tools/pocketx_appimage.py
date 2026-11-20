@@ -14,24 +14,25 @@ def build(dump_path, app_path, out_path):
         raise SystemExit(f"dump must be 1 MB, not {len(raw)}")
     dec = bytearray(fw.flash_decrypt(bytes(raw)))
     dec_orig = bytes(dec)
+    base = fw.app_base(dec)
     ents = fw.flash_parse(dec)
     app = ents[1]
     if app['name'] != 'app.bin':
         raise SystemExit(f"2nd JLFS entry != app.bin ({app['name']})")
-    lo, ln, o = 0x4000 + app['addr'], app['len'], app['o']
+    lo, ln, o = base + app['addr'], app['len'], app['o']
     newapp = open(app_path, 'rb').read()
     if len(newapp) > ln:
         raise SystemExit(f"app too big: {len(newapp)} > {ln}")
     dec[lo:lo+ln] = newapp + b'\xff' * (ln - len(newapp))
     struct.pack_into("<H", dec, o + 2, fw.crc16(dec[lo:lo+ln]))        # app.bin data crc
     struct.pack_into("<H", dec, o, fw.crc16(dec[o+2:o+32]))            # app.bin entry crc
-    hl = struct.unpack_from("<I", dec, 0x4008)[0]
-    struct.pack_into("<H", dec, 0x4002, fw.crc16(dec[0x4020:0x4000+hl]))   # app_area_head data crc
-    struct.pack_into("<H", dec, 0x4000, fw.crc16(dec[0x4002:0x4020]))      # app_area_head entry crc
+    hl = struct.unpack_from("<I", dec, base + 8)[0]
+    struct.pack_into("<H", dec, base + 2, fw.crc16(dec[base+0x20:base+hl]))   # app_area_head data crc
+    struct.pack_into("<H", dec, base, fw.crc16(dec[base+2:base+0x20]))        # app_area_head entry crc
     nblk = 0
-    for b in range(0x4000, len(dec), 32):
+    for b in range(base, len(dec), 32):
         if dec[b:b+32] != dec_orig[b:b+32]:
-            raw[b:b+32] = fw.sfc_block(bytes(dec[b:b+32]), b - 0x4000)
+            raw[b:b+32] = fw.sfc_block(bytes(dec[b:b+32]), b - base)
             nblk += 1
     open(out_path, 'wb').write(raw)
     return nblk, len(newapp), ln
