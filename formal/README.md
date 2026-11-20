@@ -61,8 +61,8 @@ The table below lists every configuration. A row that starts with "The code" mod
 | `FlashHoldOneShot.cfg` | The code without the NAM layer split, assuming that the main loop never runs between `a_enc` and `a_dec` | Passes |
 | `FlashHoldOneShotGap.cfg` | The code without the NAM layer split, without that assumption | `XipExclusion` fails (F1) |
 | `FlashHoldNoCollect.cfg` | Mutation: a hold without `a_collect` | `XipExclusion` fails |
-| `EditorWatch.cfg` | The code: every answered command resets `ed_w.hash` | `InSync` fails (F2) |
-| `EditorWatchFixed.cfg` | A command other than STATE keeps a push that is owed | Passes |
+| `EditorWatch.cfg` | The code: a command other than STATE keeps a push that is owed (`ed_w.owed`) | Passes |
+| `EditorWatchNoOwed.cfg` | Mutation: every answered command resets `ed_w.hash`, as the code did before the fix of F2 | `InSync` fails |
 | `PresetStore.cfg` | The code | Passes |
 | `PresetStoreStrict.cfg` | The code, against a stricter promise | `OnlyConfirmedOrInProgress` fails (N1) |
 | `PresetStoreOverwrite.cfg` | Mutation: a save writes over the copy in use | `NoLostSave` fails |
@@ -78,7 +78,7 @@ It records each mask, each `a_collect`, each flash access, and each unmask of `s
 `everystate conform` then checks that each recorded run is a behaviour of `FlashHold.tla`.
 All five are behaviours of `FlashHold.cfg`. Only `st_save` is a behaviour of `FlashHoldFixed.cfg`, which is finding F1 seen from the code's side.
 
-`repro/editor_watch.mjs` reproduces finding F2 on the simulated pedal of the editor tests. `FINDINGS.md` gives the command. It depends on timing, so `check.mjs` does not run it.
+`repro/editor_watch.mjs` reproduced finding F2 on the simulated pedal of the editor tests. `FINDINGS.md` gives the command. Since the fix both of its runs end the same, and `tests/test_editor.mjs` holds the case as a test. It depends on timing, so `check.mjs` does not run it.
 
 ## Why these parts
 
@@ -106,7 +106,7 @@ These parts are left out.
 | Model | Bounds | Assumed, or left out |
 |---|---|---|
 | `FlashHold.tla` | One commit, any number of blocks | A job on CPU1 may read the flash at any time. CPU1 never fails. USB's interrupt is off with the others. Whether the main loop runs between `a_enc` and `a_dec` is a constant, `Gap`. |
-| `EditorWatch.tla` | 3 values of one setting. `EditorWatch.cfg` has 2 changes on the pedal, 1 PING, and 1 change in the editor. `EditorWatchFixed.cfg` has 3, 2, and 2. | One setting stands for the preset. The USB link loses nothing and keeps the order. The editor's timeout and retry are left out. |
+| `EditorWatch.tla` | 3 values of one setting. `EditorWatch.cfg` has 3 changes on the pedal, 2 PINGs, and 2 changes in the editor. `EditorWatchNoOwed.cfg` has 2, 1, and 1. | One setting stands for the preset. The editor watches all the time (WATCH and its 5 s limit are left out). The USB link loses nothing and keeps the order. The editor's timeout and retry are left out. |
 | `PresetStore.tla` | 4 saves, any number of power cuts and flash errors | A cut erase or program leaves junk that fails the CRC. A header cut in its program is taken as no header, although the CRC covers the slots and not the header. |
 | `KnobHandoff.tla` | 3 calls of `audio_apply` | CPU1 runs the whole chain (`dsp_job`). With a NAM amp on two cores `a_commit` runs only on CPU0, and that case is not modelled. The fade around a full change is left out. |
 | `LayerSplit.tla` | 4 layers, 4 blocks, a queue of 2 (the pedal has 23 layers and a queue of 6) | CPU1 never stops. The wait that gives up (`pxn_lp_late`) is left out. |
@@ -115,7 +115,7 @@ Every model takes a write by one core as seen by the other in the order it was m
 
 ## Keep the models true to the code
 
-The models were last confirmed against the code at commit `5fce8f5`.
+The models were last confirmed against the code at commit `5fce8f5`. `EditorWatch.tla` was read again against the fix of F2.
 
 When you change one of the files below, read the model's actions against the new code and run `node formal/check.mjs`.
 
