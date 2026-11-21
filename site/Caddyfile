@@ -1,0 +1,16 @@
+# The site's file server (site/Dockerfile). Plain HTTP on port 80: the proxy in front of it provides HTTPS.
+{
+	admin off
+	auto_https off
+}
+
+:80 {
+	root * /srv
+	encode zstd gzip
+	# A browser and a cache in front of the site ask again before they reuse a file, so that a page of one deploy never
+	# runs with a script or a package of another.
+	header Cache-Control no-cache
+	@package path *.fwsc
+	header @package Content-Type application/octet-stream
+	file_server
+}

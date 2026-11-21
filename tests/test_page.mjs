@@ -2,6 +2,8 @@
 // OpenPocket — the install page (docs/index.html) in a real browser (headless Chromium, Playwright), its Web MIDI
 // bridged to the simulated pedal (tests/devsim.c): Connect, then Install, as a user would; screenshots in OUTDIR.
 //   node tests/test_page.mjs OUTDIR
+// With SITE_URL and SITE_FIRMWARE set, the page is the one a server already serves at SITE_URL (the site container,
+// tests/test_site.mjs), and SITE_FIRMWARE is the folder that server serves as firmware/: the fixture packages go there.
 import { spawn, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtempSync, cpSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -15,15 +17,17 @@ const { chromium } = require("playwright");
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OUT = process.argv[2] || mkdtempSync(join(tmpdir(), "oppage-"));
-const SITE = mkdtempSync(join(tmpdir(), "opsite-"));
+const SITE_URL = process.env.SITE_URL;
+const SITE = SITE_URL ? null : mkdtempSync(join(tmpdir(), "opsite-"));
+const FW = SITE_URL ? process.env.SITE_FIRMWARE : join(SITE, "firmware");
 const FIX = mkdtempSync(join(tmpdir(), "opfix-"));
 execFileSync("python3", [join(ROOT, "tests", "fixtures.py"), join(FIX, "firmware")], { stdio: "inherit" });
-cpSync(join(ROOT, "docs"), SITE, { recursive: true });
-cpSync(join(FIX, "firmware"), join(SITE, "firmware"), { recursive: true });
-execFileSync("python3", [join(ROOT, "rescue", "build_kit.py"), join(SITE, "rescue")], { stdio: "inherit" });
+if (!SITE_URL) cpSync(join(ROOT, "docs"), SITE, { recursive: true });
+cpSync(join(FIX, "firmware"), FW, { recursive: true });
+if (!SITE_URL) execFileSync("python3", [join(ROOT, "rescue", "build_kit.py"), join(SITE, "rescue")], { stdio: "inherit" });
 
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".fwsc": "application/octet-stream", ".zip": "application/zip" };
-const server = createServer((req, res) => {
+const server = SITE_URL ? null : createServer((req, res) => {
   try {
     const p = join(SITE, decodeURIComponent(req.url.split("?")[0]).replace(/\/$/, "/index.html"));
     const body = readFileSync(p);
@@ -31,7 +35,7 @@ const server = createServer((req, res) => {
     res.end(body);
   } catch (_) { res.writeHead(404); res.end(); }
 }).listen(0);
-const url = `http://127.0.0.1:${server.address().port}/`;
+const url = SITE_URL || `http://127.0.0.1:${server.address().port}/`;
 
 let sim = null;
 const simLog = [];
@@ -152,7 +156,7 @@ ok(simLog.some((l) => /step2 rc=0/.test(l)), "official PocketX_017, confirmed: t
 // a package that is not the manifest's (one byte changed on the site): refused by its SHA-256, before the pedal is asked
 sim.stdin.end(); sim = null; simLog.length = 0; buf = "";
 {
-  const f = join(SITE, "firmware", "PocketX_924.fwsc"), good = readFileSync(f), bad = Buffer.from(good);
+  const f = join(FW, "PocketX_924.fwsc"), good = readFileSync(f), bad = Buffer.from(good);
   bad[bad.length >> 1] ^= 1;
   writeFileSync(f, bad);
   await page.reload();
@@ -175,7 +179,7 @@ sim.stdin.end(); sim = null; simLog.length = 0; buf = "";
   ok(/read-only/.test(await page.textContent("[data-t=rescueusb]")) && /rescue kit below/.test(await page.textContent("[data-t=rescueon]")) &&
      /Resume/.test(await page.textContent("[data-t=rescuenote]")), "Rescue card: the kit is read-only first, rescue mode points to it, update mode points to Resume");
   await page.waitForSelector("#kit:not([hidden])", { timeout: 5000 });
-  const kit = JSON.parse(readFileSync(join(SITE, "rescue", "manifest.json"), "utf8"));
+  const kit = await (await fetch(new URL("rescue/manifest.json", url))).json();
   const href = await page.getAttribute("#kit", "href");
   const got = await (await fetch(new URL(href, url))).arrayBuffer();
   ok(href === "rescue/" + kit.file && (await page.getAttribute("#kit", "download")) === kit.file && /^OpenPocket-rescue-kit-\d+\.zip$/.test(kit.file),
@@ -205,21 +209,24 @@ sim.stdin.end(); sim = null; simLog.length = 0; buf = "";
   await page.setViewportSize({ width: 820, height: 1100 });
   ok(!(await page.isVisible("#uboot")), "the UBOOT soft key sits in the advanced section, folded");
   // a copy of the page without the kit, or with a manifest that names a file outside its folder: no download is offered
-  const no = await browser.newPage({ viewport: { width: 820, height: 900 } });
-  writeFileSync(join(SITE, "rescue", "manifest.json"), JSON.stringify({ ...kit, file: "../firmware/x.zip" }));
-  await no.goto(url);
-  await no.waitForSelector("#kitnone:not([hidden])", { timeout: 5000 });
-  ok(!(await no.isVisible("#kit")) && !(await no.isVisible("#kitinfo")), "a kit manifest that names a path: no download is offered");
-  renameSync(join(SITE, "rescue", "manifest.json"), join(SITE, "rescue", "manifest.off"));
-  await no.reload();
-  await no.waitForSelector("#kitnone:not([hidden])", { timeout: 5000 });
-  ok(!(await no.isVisible("#kit")) && (await no.getAttribute("#kitnone a", "href")) === "RESCUE.md#the-rescue-kit", "a copy of the page without the kit: says so and links how to get it");
-  writeFileSync(join(SITE, "rescue", "manifest.json"), JSON.stringify(kit));
-  await no.close();
+  // (served from here only: the container's rescue/ is the kit its build made, which this test does not change)
+  if (!SITE_URL) {
+    const no = await browser.newPage({ viewport: { width: 820, height: 900 } });
+    writeFileSync(join(SITE, "rescue", "manifest.json"), JSON.stringify({ ...kit, file: "../firmware/x.zip" }));
+    await no.goto(url);
+    await no.waitForSelector("#kitnone:not([hidden])", { timeout: 5000 });
+    ok(!(await no.isVisible("#kit")) && !(await no.isVisible("#kitinfo")), "a kit manifest that names a path: no download is offered");
+    renameSync(join(SITE, "rescue", "manifest.json"), join(SITE, "rescue", "manifest.off"));
+    await no.reload();
+    await no.waitForSelector("#kitnone:not([hidden])", { timeout: 5000 });
+    ok(!(await no.isVisible("#kit")) && (await no.getAttribute("#kitnone a", "href")) === "RESCUE.md#the-rescue-kit", "a copy of the page without the kit: says so and links how to get it");
+    writeFileSync(join(SITE, "rescue", "manifest.json"), JSON.stringify(kit));
+    await no.close();
+  }
 }
 
 // a test channel: only through ?channel=NAME, from its own folder, with its banner; the normal page has none
-cpSync(join(FIX, "firmware"), join(SITE, "firmware", "midi-test"), { recursive: true });
+cpSync(join(FIX, "firmware"), join(FW, "midi-test"), { recursive: true });
 {
   const ch = await browser.newPage({ viewport: { width: 820, height: 900 } });
   await ch.goto(url + "?channel=midi-test");
@@ -237,7 +244,7 @@ cpSync(join(FIX, "firmware"), join(SITE, "firmware", "midi-test"), { recursive: 
 
 // an alternative firmware (an app on the base firmware): only through ?app=NAME, in a card of its own, beside OpenPocket;
 // the page says which product the pedal runs, and step 2 is the way back
-cpSync(join(FIX, "firmware", "alt"), join(SITE, "firmware", "apps", "starter"), { recursive: true });
+cpSync(join(FIX, "firmware", "alt"), join(FW, "apps", "starter"), { recursive: true });
 sim.stdin.end(); sim = null; simLog.length = 0; buf = "";
 await page.goto(url + "?app=starter");
 await page.waitForFunction(() => /STARTER v01/.test(document.getElementById("altname").textContent), null, { timeout: 5000 });
@@ -282,6 +289,6 @@ await page.screenshot({ path: join(OUT, "page_8_back_on_openpocket.png"), fullPa
 }
 await browser.close();
 if (sim) sim.stdin.end();
-server.close();
+if (server) server.close();
 console.log(failed ? `${failed} FAILED` : "page test passed", "| screenshots:", OUT);
 process.exit(failed ? 1 : 0);

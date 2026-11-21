@@ -68,3 +68,23 @@ jobs:
       - uses: actions/checkout@v4
       - name: Model-check the TLA+ specifications and the firmware's recorded flash order (formal/README.md)
         run: npm ci --prefix formal && node formal/check.mjs
+  site:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Playwright and Chromium with its system libraries, outside the repository
+        run: |
+          mkdir -p "$RUNNER_TEMP/pw" && cd "$RUNNER_TEMP/pw"
+          npm init -y >/dev/null && npm i playwright
+          npx playwright install --with-deps chromium
+      - name: Build the site container as it will be deployed, check its release step, and run the installer and editor page tests against it (site/README.md)
+        run: PW_DIR="$RUNNER_TEMP/pw" sh .claude/skills/verify/scripts/pages.sh site
+      - uses: actions/upload-artifact@v4
+        if: ${{ failure() }}
+        with:
+          name: site-screenshots
+          path: build/site/

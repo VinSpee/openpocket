@@ -1,0 +1,14 @@
+# The build context of site/Dockerfile: the pages, this folder and the sources of the rescue kit. docs/firmware/ and
+# docs/rescue/ are where a local build leaves its packages and its kit; the site's packages come from the pinned release
+# (site/RELEASE), and its kit from the build.
+*
+!docs
+!site
+!rescue
+!tools/uboot_rescue.py
+!tools/pocketx_fw.py
+!RESCUE.bat
+!LICENSE
+docs/firmware
+docs/rescue
+**/__pycache__
