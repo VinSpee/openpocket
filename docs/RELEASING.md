@@ -76,6 +76,11 @@ The draft release has no files yet. Attaching them is a second job in `.github/w
 It has to be a job of this workflow. A tag created with the workflow's token does not start a workflow that waits for
 `push: tags`.
 
+## Putting a release on the site
+
+The site serves the files of one pinned release beside the pages of `main`. Publishing a release does not change the
+site. A pull request that moves the pin does: [site/README.md](../site/README.md).
+
 ## Repository settings
 
 - **Settings, Actions, General: "Allow GitHub Actions to create and approve pull requests"** must be on. Without it
